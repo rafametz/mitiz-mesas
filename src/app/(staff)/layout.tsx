@@ -11,6 +11,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   const user = await requireUser();
   const isAdmin = hasPermission(user.permissions, PERMISSIONS.ADMIN_MANAGE);
   const canProduction = hasPermission(user.permissions, PERMISSIONS.PRODUCTION_STATUS_UPDATE);
+  const canPrintJobs = hasPermission(user.permissions, PERMISSIONS.PRINT_JOBS_MANAGE);
 
   return (
     <div className="flex min-h-screen flex-col pb-20">
@@ -19,7 +20,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         <span className="font-display text-sm font-semibold italic text-bg">MITIZ Mesas</span>
       </header>
       <main className="flex-1">{children}</main>
-      <BottomNav isAdmin={isAdmin} canProduction={canProduction} />
+      <BottomNav isAdmin={isAdmin} canProduction={canProduction} canPrintJobs={canPrintJobs} />
     </div>
   );
 }

@@ -27,5 +27,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // `api/` fica de fora: uma rota de API nunca deveria responder a um
+  // cliente sem sessão de navegador com um redirect HTML para /login —
+  // isso quebra qualquer chamador que não seja um browser (ex.: o agente
+  // local de impressão do Módulo 7, autenticado por token Bearer próprio,
+  // não por cookie do Supabase). Cada rota de API é responsável pela
+  // própria autenticação.
+  matcher: [
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

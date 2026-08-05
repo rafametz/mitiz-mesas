@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
 import { canTransitionOrderItem, deriveOrderStatus } from "@/domain/order/states";
+import { buildTicketContent } from "@/domain/printing/ticket";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
 
@@ -29,7 +30,13 @@ async function transitionItem(params: {
     const item = await tx.orderItem.findUniqueOrThrow({
       where: { id: params.orderItemId },
       include: {
-        order: { include: { serviceSession: { include: { table: true } } } },
+        order: {
+          include: {
+            serviceSession: { include: { table: { include: { restaurant: true } } } },
+            waiter: true,
+          },
+        },
+        guest: true,
       },
     });
 
@@ -77,6 +84,42 @@ async function transitionItem(params: {
 
     if (params.toStatus === "CANCELLED") {
       await recalculateSessionTotals(tx, item.order.serviceSessionId);
+
+      // Avisa quem está preparando/já preparou para parar — ticket de
+      // cancelamento só do item cancelado, para o setor dele (CLAUDE.md
+      // seção 20 — tipo "cancelamento"; docs/printing/architecture.md).
+      const sector = await tx.productionSector.findUnique({ where: { id: item.sectorId } });
+      const printer = await tx.printer.findFirst({
+        where: { restaurantId: item.order.serviceSession.table.restaurantId, active: true },
+      });
+      const content = buildTicketContent({
+        type: "CANCELLATION",
+        restaurantName: item.order.serviceSession.table.restaurant.name,
+        tableNumber: item.order.serviceSession.table.number,
+        waiterName: item.order.waiter.name,
+        sectorName: sector?.name ?? "Setor",
+        orderSequenceNumber: item.order.sequenceNumber,
+        items: [
+          {
+            productName: item.productNameAtOrder,
+            quantity: item.quantity,
+            meatPointLabel: null,
+            modifiers: [],
+            notes: item.notes,
+            guestName: item.guest?.name ?? null,
+          },
+        ],
+        cancelReason: reason,
+      });
+      await tx.printJob.create({
+        data: {
+          orderId: item.orderId,
+          sectorId: item.sectorId,
+          printerId: printer?.id,
+          type: "CANCELLATION",
+          contentSnapshot: content,
+        },
+      });
     }
 
     return {

@@ -1,4 +1,4 @@
-import type { OrderItemStatus, ServiceSessionStatus, TableStatus } from "@prisma/client";
+import type { OrderItemStatus, PrintJobStatus, ServiceSessionStatus, TableStatus } from "@prisma/client";
 
 // Mapeamento de status -> tom visual do Badge. Fica na camada de UI de
 // propósito (não em src/domain), que é sobre regra de negócio, não cor.
@@ -53,5 +53,13 @@ export const ORDER_ITEM_STATUS_TONE: Record<
   READY: "wine",
   DELIVERED: "neutral",
   CANCELLATION_REQUESTED: "muted",
+  CANCELLED: "muted",
+};
+
+export const PRINT_JOB_STATUS_TONE: Record<PrintJobStatus, "neutral" | "wine" | "gold" | "muted"> = {
+  PENDING: "gold",
+  PROCESSING: "gold",
+  PRINTED: "neutral",
+  FAILED: "wine",
   CANCELLED: "muted",
 };

@@ -250,6 +250,11 @@ model Printer {
   // Detalhe de conexão do agente local (host/porta/identificador) — definido
   // no Módulo 7, quando o agente físico for implementado.
   connectionInfo String?
+  // Hash (SHA-256) do token que o agente local usa para autenticar contra
+  // /api/print-jobs — nunca guardamos o token em texto puro (mesmo racional
+  // de senha). Nulo até alguém gerar um token pela tela /admin/impressoras;
+  // sem token, essa impressora não consegue puxar a fila.
+  agentTokenHash String?
   active         Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)

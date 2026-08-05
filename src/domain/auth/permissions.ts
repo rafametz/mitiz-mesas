@@ -21,6 +21,11 @@ export const PERMISSIONS = {
   ORDERS_CANCEL_REQUEST: "orders.cancel.request",
   ORDERS_CANCEL_AUTHORIZE: "orders.cancel.authorize",
   PRODUCTION_STATUS_UPDATE: "production.status.update",
+  // Ver a fila de impressão, reprocessar falha, reimprimir manualmente
+  // (CLAUDE.md seção 5 — Caixa "reimprime conferências e comprovantes",
+  // Produção "reimprime pedidos quando autorizado"; seção 10 — Impressoras
+  // no cadastro de Administração).
+  PRINT_JOBS_MANAGE: "print_jobs.manage",
   PAYMENTS_REGISTER: "payments.register",
   DISCOUNTS_APPLY: "discounts.apply",
   AUDIT_VIEW: "audit.view",
@@ -53,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     PERMISSIONS.DISCOUNTS_APPLY,
     PERMISSIONS.TABLES_CLOSE,
     PERMISSIONS.AUDIT_VIEW,
+    PERMISSIONS.PRINT_JOBS_MANAGE,
   ],
   WAITER: [
     PERMISSIONS.TABLES_OPEN,
@@ -61,7 +67,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     PERMISSIONS.ORDERS_SEND,
     PERMISSIONS.ORDERS_CANCEL_REQUEST,
   ],
-  KITCHEN: [PERMISSIONS.PRODUCTION_STATUS_UPDATE],
+  KITCHEN: [PERMISSIONS.PRODUCTION_STATUS_UPDATE, PERMISSIONS.PRINT_JOBS_MANAGE],
 };
 
 // Checagem pura: dado o conjunto de códigos que o usuário tem (carregado do

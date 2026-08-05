@@ -470,27 +470,76 @@ parte — ver `deriveOrderProgressStatus` em `src/domain/order/states.ts`.
   atualização em tempo real refletindo no salão/caixa (Módulo 5) e na
   própria tela de produção.
 
-## Módulo 7 — Impressão
+## Módulo 7 — Impressão ✅
 
-- `Printer` (um único registro ativo no MVP — confirmado, ADR 0001),
-  `PrintJob`;
-- Criação de `PrintJob` no envio do pedido (Módulo 4 revisitado), com o
-  setor de destino sempre destacado no ticket (todos os setores saem na
-  mesma impressora física);
-- Agente/serviço local, na rede do restaurante, consumindo a fila por
-  polling HTTP autenticado e imprimindo na impressora térmica única;
-- Reprocessamento de falha, reimpressão manual auditada;
-- Conteúdo impresso conforme seção 20 do `CLAUDE.md` (MITIZ, número do
-  pedido, mesa, horário, garçom, setor, itens, pessoa, observações em
-  destaque, tipo: novo/complemento/cancelamento/reimpressão).
-- Levantar modelo/driver físico da impressora e do computador local antes de
-  detalhar o agente;
-- Documentar em [printing/architecture.md](printing/architecture.md) antes
-  de implementar (o `CLAUDE.md` proíbe impressão improvisada sem essa
-  documentação).
-- **Testes**: falha de impressão fica disponível para reprocessamento;
-  reimpressão fica registrada; não duplica por reload.
-- **Saída**: pedido enviado imprime automaticamente no setor certo.
+Hardware confirmado com o usuário antes de implementar (CLAUDE.md exige
+isso): impressora térmica **Epson** (ESC/POS padrão), **USB**, num
+computador Windows do restaurante. Arquitetura completa em
+[printing/architecture.md](printing/architecture.md), escrita antes do
+código — decisão principal: agente local separado do app (Vercel é
+serverless, não fala com USB), autenticado por token próprio por
+impressora (nunca a service role key), consumindo a fila por polling HTTP
+(nunca WebSocket — o agente só precisa falar pra fora).
+
+- ✅ `Printer.agentTokenHash` (migration manual — shadow DB do `prisma
+  migrate dev` não funciona contra o pooler do Supabase, fluxo documentado
+  em `docs/database/schema.md` §7) — só o hash SHA-256 do token fica
+  gravado, o texto puro aparece uma vez só, na hora de gerar;
+- ✅ `src/domain/printing/ticket.ts` — formato do ticket via zod (schema +
+  tipo), validado tanto na criação quanto toda vez que é lido de volta do
+  banco (`PrintJob.contentSnapshot` é `Json`, não tipado — fronteira que
+  precisa de validação em tempo de execução);
+- ✅ `PrintJob` criado dentro da mesma transação de quem originou:
+  - Pedido enviado (`create-order.ts`) — um job por setor presente no
+    pedido (por isso "Setor" é campo único no ticket, não lista); primeiro
+    pedido do atendimento usa tipo `NEW_ORDER`, os seguintes na mesma mesa
+    usam `COMPLEMENT`;
+  - Item cancelado de fato (`cancel-order-item.ts`, só em
+    `authorizeCancelOrderItem`) — tipo `CANCELLATION`, avisa a produção
+    pra parar/não entregar;
+- ✅ `/api/print-jobs/pending` (GET) e `/api/print-jobs/[id]` (PATCH) —
+  rotas que o agente consome; **fora** do middleware de sessão do
+  navegador (rota de API não deveria responder a chamador sem cookie com
+  redirect HTML pro /login — isso quebraria qualquer cliente que não seja
+  browser); autenticação própria por token Bearer;
+- ✅ `/admin/impressoras` — cadastro da impressora + gerar/mostrar o token
+  uma vez (ADMIN_MANAGE, mora em `/admin` mesmo);
+- ✅ `/impressao` — fila/histórico (últimos 50), reprocessar `FAILED`,
+  reimprimir qualquer job — **fora** de `/admin` de propósito: Caixa e
+  Produção também reimprimem (CLAUDE.md seção 5), e `/admin` inteiro é
+  gated só pra Administrador; nova permissão `PRINT_JOBS_MANAGE` (Admin,
+  Caixa, Produção) e aba "Impressão" na navegação pra quem a tem;
+- ✅ [`printer-agent/`](../printer-agent/) — script Node standalone (fora
+  do app Next.js/Vercel de propósito), usando `node-thermal-printer`
+  (Epson via spooler do Windows), com README passo a passo de instalação;
+- **Testes**: unitários (`ticket.ts`, `states.ts` do PrintJob, geração/hash
+  de token) e integração completa (`tests/integration/print-jobs.test.ts`
+  — job criado por setor, `NEW_ORDER` vs `COMPLEMENT`, `CANCELLATION` com
+  motivo, autenticação por token aceita/rejeita, claim marca
+  `PROCESSING`, falha fica disponível pra reprocessar sem duplicar,
+  sucesso grava `printedAt`, reimpressão cria job novo preservando o
+  original). Verificado manualmente de ponta a ponta contra a API real:
+  gerei um token pela tela, enviei um pedido de verdade, consultei
+  `/api/print-jobs/pending` com o token (recebi o ticket completo já
+  validado), confirmei `PRINTED` via PATCH, testei reimprimir (criou job
+  novo, original intacto) e testei token errado (401). O que eu **não**
+  pude testar: impressão real em papel — não tenho acesso à rede local
+  nem à impressora física do usuário (registrado em
+  `printing/architecture.md` §"O que eu não pude validar"). `tsc
+  --noEmit`, `npm run lint`, `npm run build`, `npm test` (60/60) e `npm
+  run test:integration` (26/26) limpos.
+- **Ajuste de infra que essa mudança forçou**: `PrintJob` agora nasce
+  junto com `Order` em vários fluxos, então os testes de integração de
+  Módulos 4/6 que apagavam `Order` direto no `afterAll` passaram a violar
+  `onDelete: Restrict` — corrigido apagando `PrintJob` antes. `testTimeout`
+  global do Vitest subiu de 5s (padrão) pra 15s: transações maiores (agora
+  gravam `PrintJob` também) estavam estourando o teto em ambiente com a
+  latência de rede já documentada no projeto — não afeta os testes
+  unitários (sem I/O, sempre terminam bem antes).
+- **Saída**: pedido enviado, complementado ou cancelado gera ticket
+  automaticamente, separado por setor; falha de impressão nunca se perde
+  (fica na fila pra reprocessar); reimpressão manual sempre disponível pra
+  quem tem permissão.
 
 ## Módulo 8 — Caixa e pagamentos
 

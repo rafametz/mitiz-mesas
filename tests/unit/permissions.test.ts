@@ -63,7 +63,15 @@ describe("ROLE_PERMISSIONS — regras de negócio (CLAUDE.md seção 5 / busines
     expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.TABLES_OPEN)).toBe(false);
   });
 
-  it("Produção só atualiza status de produção", () => {
-    expect(ROLE_PERMISSIONS.KITCHEN).toEqual([PERMISSIONS.PRODUCTION_STATUS_UPDATE]);
+  it("Produção atualiza status de produção e reimprime quando autorizada (CLAUDE.md seção 5), mas não mexe em pedido/mesa/pagamento", () => {
+    expect(new Set(ROLE_PERMISSIONS.KITCHEN)).toEqual(
+      new Set([PERMISSIONS.PRODUCTION_STATUS_UPDATE, PERMISSIONS.PRINT_JOBS_MANAGE]),
+    );
+    expect(hasPermission(ROLE_PERMISSIONS.KITCHEN, PERMISSIONS.ORDERS_CREATE)).toBe(false);
+    expect(hasPermission(ROLE_PERMISSIONS.KITCHEN, PERMISSIONS.TABLES_OPEN)).toBe(false);
+  });
+
+  it("Caixa também reimprime conferências/comprovantes (CLAUDE.md seção 5)", () => {
+    expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.PRINT_JOBS_MANAGE)).toBe(true);
   });
 });

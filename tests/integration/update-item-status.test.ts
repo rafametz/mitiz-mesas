@@ -43,6 +43,11 @@ describe("updateOrderItemStatus (Módulo 6 — produção)", () => {
 
   afterAll(async () => {
     await prisma.orderItem.deleteMany({ where: { productId } });
+    // PrintJob (Módulo 7) nasce junto com o pedido — precisa sair antes do
+    // Order por causa do onDelete: Restrict.
+    await prisma.printJob.deleteMany({
+      where: { order: { serviceSession: { tableId: { in: createdTableIds } } } },
+    });
     await prisma.order.deleteMany({
       where: { serviceSession: { tableId: { in: createdTableIds } } },
     });

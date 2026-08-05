@@ -3,6 +3,7 @@ import { z } from "zod";
 import { MeatPoint, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
+import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, sectorChannel, tableChannel } from "@/lib/realtime/channels";
 
@@ -41,7 +42,9 @@ export type CreateOrderInput = {
   items: CreateOrderItemInput[];
 };
 
-const orderInclude = { items: { include: { modifiers: true } } } satisfies Prisma.OrderInclude;
+const orderInclude = {
+  items: { include: { modifiers: true, guest: true } },
+} satisfies Prisma.OrderInclude;
 
 async function runTransaction(data: z.infer<typeof createOrderSchema>) {
   return prisma.$transaction(
@@ -56,11 +59,13 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
 
       const session = await tx.serviceSession.findUniqueOrThrow({
         where: { id: data.serviceSessionId },
-        include: { table: true },
+        include: { table: { include: { restaurant: true } } },
       });
       if (session.status !== "OPEN") {
         throw new CreateOrderError("Esta mesa não está com atendimento aberto para novos pedidos.");
       }
+
+      const waiter = await tx.user.findUniqueOrThrow({ where: { id: data.waiterId } });
 
       const guestIds = [...new Set(data.items.map((i) => i.guestId).filter(Boolean))] as string[];
       if (guestIds.length > 0) {
@@ -190,6 +195,14 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
       });
 
       await recalculateSessionTotals(tx, data.serviceSessionId);
+
+      await createPrintJobsForOrder(tx, {
+        order,
+        restaurantId: session.table.restaurantId,
+        restaurantName: session.table.restaurant.name,
+        tableNumber: session.table.number,
+        waiterName: waiter.name,
+      });
 
       return {
         order,
