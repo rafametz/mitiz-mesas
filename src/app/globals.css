@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-line;
+  }
+
+  /* Foco visível sempre, em qualquer elemento interativo — acessibilidade
+     não é negociável (skill de design: "quality floor"). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-gold ring-offset-2 ring-offset-bg;
+  }
+
+  ::selection {
+    @apply bg-gold/30;
+  }
+}
+
+@layer components {
+  /* Números monetários/horários — alinhamento tabular para não "dançar"
+     em listas (CLAUDE.md: operação rápida). */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

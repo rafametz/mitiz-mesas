@@ -1,0 +1,68 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/application/auth/get-current-user";
+import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
+import { PERMISSIONS } from "@/domain/auth/permissions";
+
+// Preço como string (não number) até virar o Decimal do Prisma — evita
+// qualquer arredondamento de ponto flutuante no caminho (regra 20/21 do
+// CLAUDE.md). O próprio Decimal do Prisma valida a precisão no banco.
+const priceRegex = /^\d+(\.\d{1,2})?$/;
+
+const productSchema = z.object({
+  name: z.string().trim().min(1, "Nome é obrigatório").max(120),
+  description: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  price: z.string().trim().regex(priceRegex, "Preço inválido — use até 2 casas decimais"),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
+  defaultSectorId: z.string().min(1, "Setor é obrigatório"),
+  available: z.boolean(),
+  active: z.boolean(),
+});
+
+function parseProductForm(formData: FormData) {
+  return productSchema.parse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    price: formData.get("price"),
+    categoryId: formData.get("categoryId"),
+    defaultSectorId: formData.get("defaultSectorId"),
+    available: formData.get("available") === "on",
+    active: formData.get("active") === "on",
+  });
+}
+
+export async function createProduct(formData: FormData) {
+  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+  const data = parseProductForm(formData);
+  const restaurant = await getCurrentRestaurant();
+
+  await prisma.product.create({ data: { ...data, restaurantId: restaurant.id } });
+
+  revalidatePath("/admin/produtos");
+}
+
+export async function updateProduct(id: string, formData: FormData) {
+  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+  const data = parseProductForm(formData);
+
+  await prisma.product.update({ where: { id }, data });
+
+  revalidatePath("/admin/produtos");
+}
+
+// Ação rápida para a listagem: só liga/desliga disponibilidade, sem abrir
+// o formulário de edição completo (CLAUDE.md seção 4 — disponibilidade de
+// produto é uma ação frequente do dia a dia).
+export async function toggleAvailability(id: string, available: boolean) {
+  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+  await prisma.product.update({ where: { id }, data: { available } });
+  revalidatePath("/admin/produtos");
+}

@@ -1,0 +1,552 @@
+# Backlog — MITIZ Mesas
+
+Plano de implementação dividido em módulos pequenos, seguindo a ordem de
+prioridade da seção 23 do `CLAUDE.md`. Cada módulo deve, ao final, deixar o
+sistema executável (seção 16). Decisões técnicas (tempo real, hospedagem,
+impressão, banco, autenticação, multi-unidade) já estão confirmadas — ver
+[architecture/overview.md](architecture/overview.md#2-decisões-confirmadas),
+[ADR 0001](architecture/decisions/0001-decisoes-tecnicas-iniciais.md) e
+[ADR 0002](architecture/decisions/0002-adocao-supabase.md) (banco,
+autenticação e tempo real via Supabase).
+
+Critério de "concluído" por módulo: seção 22 do `CLAUDE.md` (regra de
+negócio atendida, validado, permissões respeitadas, funciona em mobile/desktop
+quando aplicável, erros tratados, testes adequados, não quebra fluxo
+existente, lint/typecheck ok, testado no fluxo real).
+
+## Módulo 0 — Fundação do projeto
+
+- Inicializar repositório Git e Next.js (TypeScript, App Router, Tailwind);
+- Configurar ESLint, Prettier, Vitest, Playwright (esqueleto sem testes ainda);
+- Configurar Prisma + Postgres local via Docker Compose;
+- `.env.example` com todas as variáveis necessárias, sem segredos reais;
+- CI mínimo (lint + typecheck + testes) — se houver plataforma de CI definida.
+- **Saída**: projeto roda localmente (`npm run dev`), lint/typecheck passam,
+  Postgres sobe via Docker.
+
+## Módulo 1 — Autenticação e permissões ✅
+
+- ✅ Projeto Supabase criado e RLS habilitado em todas as tabelas (Módulo 0);
+- ✅ Catálogo de permissões e mapeamento por perfil, regra pura testada
+  ([src/domain/auth/permissions.ts](../src/domain/auth/permissions.ts));
+- ✅ Seed de referência: `Restaurant`, 4 `Role`, `Permission`,
+  `RolePermission` (`prisma/seed.ts`, idempotente);
+- ✅ Login com e-mail/senha via Supabase Auth; ao autenticar, resolve o
+  `User` da aplicação a partir do `authUserId` da sessão
+  ([src/application/auth/get-current-user.ts](../src/application/auth/get-current-user.ts));
+- ✅ Middleware de proteção de rota — exige sessão válida em toda rota
+  exceto `/login` (`src/middleware.ts`). Restrição por perfil/permissão
+  específica é aplicada rota a rota conforme as telas de cada módulo forem
+  criadas — o mecanismo (`hasPermission`/`hasAnyPermission`) já existe;
+- ✅ Tela de login mobile-first (`src/app/login/`) + logout;
+- **Testes**: 9 testes unitários da regra de permissão por perfil
+  (`tests/unit/permissions.test.ts`); E2E de login válido/inválido e
+  logout (`tests/e2e/login.spec.ts`) — requer `E2E_TEST_USER_EMAIL`/
+  `E2E_TEST_USER_PASSWORD` no `.env` (impressos por `npm run prisma:seed`).
+- **Saída**: usuário autentica via Supabase e vê seu nome/perfil na home;
+  testado manualmente de ponta a ponta e via E2E automatizado.
+
+### Como usar
+
+- `npm run prisma:seed` — cria dados de referência + 1 usuário de teste
+  (credenciais impressas no terminal, perfil Admin, **não é conta real**);
+- `npm run auth:link-admin -- --email=voce@exemplo.com --name="Seu Nome"`
+  — depois de criar seu usuário real em
+  _Supabase → Authentication → Users → Add user_, vincula-o ao perfil
+  Administrador sem o script nunca ver sua senha.
+
+### Bloqueio de rota por perfil/permissão específica — ainda não testado
+
+O mecanismo (`hasPermission`) está pronto e testado isoladamente, mas só
+faz sentido testar "bloqueio de rota sem permissão" contra rotas reais, que
+ainda não existem (chegam nos Módulos 2+). Revisitar esse item do backlog
+quando a primeira rota com restrição por perfil for criada.
+
+## Módulo 2 — Cadastros básicos (Administração) ✅
+
+- ✅ Telas de administração (`/admin/*`), protegidas por
+  `requirePermission(ADMIN_MANAGE)` no layout — checagem no backend, não só
+  esconder link;
+- ✅ `ProductionSector`, `Category`, `Table`, `Product` — listar, criar,
+  editar (nunca exclusão definitiva: usa `active`/`status` em vez de
+  delete, consistente com o resto do projeto);
+- ✅ Disponibilidade de produto (`available`) com atalho de 1 clique na
+  listagem, sem precisar abrir o formulário completo;
+- ✅ `ProductModifierGroup`/`ProductModifier` — gerenciados dentro da edição
+  do produto (só fazem sentido no contexto de um produto). Migration extra:
+  `ProductModifierGroup.active` (não existia, adicionado por consistência
+  com `ProductModifier`);
+- Preço do produto congela no `OrderItem.unitPrice` no momento do
+  lançamento (regra 9/10) — já garantido pelo schema desde o Módulo 0; o
+  teste de ponta a ponta (alterar preço não muda pedido já lançado) só é
+  possível a partir do Módulo 4, quando `Order`/`OrderItem` existirem.
+- **Testes**: E2E cobrindo criação de setor, categoria, mesa e produto
+  (com categoria/setor reais, alternância de disponibilidade, criação de
+  grupo de adicionais e adicional) — `tests/e2e/admin.spec.ts`, 4 testes.
+- **Saída**: admin cadastra mesas, setores, categorias, produtos e
+  adicionais pelo navegador.
+
+### Bug real encontrado e corrigido durante os testes
+
+Os componentes de campo (`src/components/admin/field.tsx`) geravam
+`id={name}` diretamente. Como a página de edição de produto tem vários
+mini-formulários com campos de mesmo `name` (produto, grupo de
+adicionais, cada adicional — todos têm um campo "nome"), os `id`s
+colidiam e o `<label>` associava ao input errado (bug real de
+acessibilidade/HTML inválido, não só do teste). Corrigido trocando para
+`useId()` do React, que gera um id único por instância do componente.
+
+### Não coberto neste módulo (registrado, não esquecido)
+
+Bloqueio de `/admin` para um usuário sem permissão `admin.manage` (ex.:
+Garçom, Produção) não tem teste automatizado ainda — só existe um usuário
+de teste (perfil Admin). A lógica (`hasPermission`) está testada
+isoladamente; o teste de ponta a ponta do bloqueio fica para quando
+houver mais de um perfil de teste com necessidade real de login (ex.:
+telas de garçom/produção nos próximos módulos).
+
+## Módulo 3 — Mesas e atendimentos ✅
+
+- ✅ Domínio puro testado: máquina de estados de `ServiceSession`
+  (`src/domain/service-session/states.ts`) e regra "só abre mesa livre"
+  (`src/domain/table/states.ts`);
+- ✅ `openTable` transacional (`src/application/service-session/open-table.ts`)
+  — mesa, pessoas, responsável opcional, nomes opcionais, garçom
+  responsável; duas camadas de defesa da regra 1 (checagem de status dentro
+  da transação + índice único parcial do banco como rede de segurança);
+- ✅ Visão de mesas (`/mesas`) — cards com número, status, horário de
+  abertura, tempo decorrido, pessoas, garçom. Valor parcial / alerta de
+  pedido pronto / indicação de pagamento parcial ficam de fora até os
+  Módulos 4/6/8 existirem — sem dado inventado;
+- ✅ Tela da mesa (`/mesas/[id]`) — cabeçalho + abas (Comanda, Pessoas,
+  Pedidos, Pagamentos, Histórico). Comanda e Pessoas com dado real
+  (resumo financeiro é placeholder até os Módulos 4/8); Pedidos/Pagamentos
+  são placeholder textual claro; Histórico já funciona de verdade (lista
+  atendimentos encerrados da mesa, mesmo sem nenhum ainda existir).
+- **Testes**: 8 unitários (transições de estado + `canOpenTable`); 3 de
+  integração contra o Supabase real — abrir mesa com sucesso, rejeição
+  pela aplicação, rejeição pelo índice único do banco pulando a aplicação
+  de propósito (`tests/integration/open-table.test.ts`, `npm run
+test:integration`); E2E cobrindo abrir mesa pela UI, aba Pessoas e
+  confirmação de que a mesa fica ocupada (`tests/e2e/mesas.spec.ts`).
+- **Saída**: garçom abre mesa pela UI, vê o card refletir o estado (reload
+  manual — tempo real ainda não implementado, Módulo 5).
+
+### Infra de teste nova neste módulo
+
+- `npm run test:integration` — testes que batem no Postgres real (separado
+  de `npm test`, que só roda os unitários, sem I/O);
+- `vitest.setup.ts` carrega `.env` (Vitest não faz isso sozinho);
+- `tests/mocks/server-only.ts` — o pacote `server-only` só existe para
+  falhar dentro do bundler do Next; precisou de um shim para não quebrar
+  os testes de integração, que importam módulos de aplicação marcados com
+  ele.
+
+### Fora de escopo de propósito (fica para módulos seguintes)
+
+Fechar mesa, transferir mesa/item, juntar mesas, imprimir conferência —
+todos dependem de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
+(Módulo 7), que ainda não existem.
+
+## Módulo 4 — Pedidos ✅
+
+- ✅ Fluxo de novo pedido em `/mesas/[id]/pedidos/novo` — carrinho
+  client-side (produto → quantidade → pessoa → modificadores →
+  observação → ponto da carne → revisão), grava tudo de uma vez ao
+  "Enviar" (sem rascunho persistido — nada grava até o envio);
+- ✅ `createOrder` transacional (`src/application/order/create-order.ts`):
+  valida disponibilidade/preço/regras de grupo de modificador no servidor,
+  congela preço/nome/setor em cada `OrderItem`, separa por setor
+  (`sectorId` = `product.defaultSectorId` no momento do pedido), idempotente
+  de verdade (chave repetida devolve o mesmo pedido, inclusive sob corrida
+  concorrente), isolamento Serializable + retry para
+  `sequenceNumber`/deadlock;
+- ✅ Cancelamento de item em duas etapas
+  (`src/application/order/cancel-order-item.ts`) — Garçom solicita, Admin
+  autoriza (ou autoriza direto) — nunca apaga, sempre grava `AuditLog`,
+  atualiza o status do pedido (rollup) e recalcula a comanda;
+- ✅ `recalculateSessionTotals` — subtotal/total/saldo da comanda passam a
+  ser reais (não mais "—" do Módulo 3), com aritmética em `Decimal` (nunca
+  float, regra 20/21).
+- **Testes**: 11 unitários (transições de estado); 9 de integração contra
+  o Supabase real (`tests/integration/create-order.test.ts`,
+  `cancel-order-item.test.ts`) cobrindo todos os itens pedidos pelo
+  backlog: criar pedido, idempotência (inclusive sob corrida), rejeição de
+  produto indisponível, congelamento de preço, auditoria, nunca apagar,
+  fluxo de duas etapas, rollup do pedido; E2E completo
+  (`tests/e2e/pedidos.spec.ts`): cadastro → abrir mesa → montar carrinho
+  com adicional → enviar → conferir subtotal real na Comanda → cancelar →
+  conferir subtotal voltando a zero.
+- **Saída**: pedidos completos pela UI, com preço/setor congelados e
+  saldo real da comanda. Sem tempo real e sem impressão ainda — produção/
+  caixa precisam recarregar para ver (Módulos 5 e 7).
+
+### Dois bugs reais encontrados e corrigidos pelos testes
+
+1. `create-order.ts` não validava `minSelect`/`maxSelect`/`required` dos
+   grupos de modificadores — só validava que o modificador pertencia ao
+   produto. Corrigido antes mesmo de UI existir, ao notar a lacuna
+   revisando o próprio código.
+2. O formulário rápido de "novo adicional" (Módulo 2,
+   `src/app/admin/produtos/[id]/modifiers-actions.ts`) não tinha campo
+   "Ativo" — todo adicional criado por ali nascia com `active: false` e
+   nunca aparecia para pedidos. Só foi pego pelo E2E deste módulo, porque
+   foi o primeiro lugar que realmente filtra `active: true` ao listar
+   modificadores. Corrigido: criação sempre nasce ativa.
+
+### Observação de performance (não é bug, é acúmulo de dado de teste)
+
+Os testes E2E não limpam os dados que criam (setores/categorias/produtos/
+mesas com nomes com sufixo aleatório) — o banco de desenvolvimento já
+acumulou dezenas de linhas assim, o que deixa as consultas de listagem do
+admin visivelmente mais lentas e tornou os testes mais sensíveis a
+timeout. Funciona, mas vale uma limpeza manual do banco de dev em algum
+momento, ou adicionar rotina de limpeza aos specs de E2E.
+
+## Repaginação visual (fora da numeração de módulos) ✅
+
+Pedido explícito do usuário, após o Módulo 4: modernizar o layout de toda a
+aplicação (navegação inferior no mobile com ícones, menu lateral no admin,
+visual "de app grande"), sem alterar nenhuma regra de negócio. Baseado na
+skill `frontend-design` (`.claude/skills/frontend-design/SKILL.md`, cópia do
+arquivo fornecido pelo usuário) — token system de cor/tipografia/layout em
+vez de componentes soltos.
+
+- ✅ Tokens de marca em `tailwind.config.ts` (seção 11 do `CLAUDE.md`: "visual
+  premium e sóbrio, vermelho escuro, dourado/bege"): `bg`/`ink`/`muted`/
+  `line` (superfície clara de trabalho), `shell` (grafite escuro, só para
+  navegação), `wine` (ação primária) e `gold` (destaque/valores). Fontes
+  `Fraunces` (display) + `Manrope` (texto) via `next/font/google`;
+- ✅ Componentes de apresentação compartilhados novos:
+  `src/components/ui/card.tsx` (`Card`, `PageHeader`),
+  `src/components/ui/badge.tsx` + `status-tone.ts` (mapeia
+  `TableStatus`/`ServiceSessionStatus`/`OrderItemStatus` → cor do badge —
+  fica na camada de UI, não no domínio), `src/components/ui/table.tsx`
+  (`Table`/`Th`/`Td`/`Tr`);
+- ✅ Navegação: barra inferior fixa no mobile (`src/app/(staff)/bottom-nav.tsx`
+  — Mesas/Admin/Conta, ícones `lucide-react`) e menu lateral fixo no admin em
+  telas médias+ (`src/app/admin/sidebar-nav.tsx`);
+- ✅ Todas as telas existentes (login, Conta, Mesas, Mesa + 5 abas, Novo
+  pedido, e as 4 seções de admin) restilizadas com os tokens novos, sem
+  mudar nenhum texto/label testado pelos E2E (checklist de strings
+  protegidas revisado por grep antes de cada alteração);
+- ✅ Ajuste real de acessibilidade durante a repaginação: a página Conta
+  mostrava o perfil duas vezes (nome + linha "Perfil"), causando
+  ambiguidade de seletor; removida a linha redundante.
+- **Testes**: nenhum teste novo (repaginação visual, não funcionalidade
+  nova) — validado que a suíte E2E existente continua passando com o novo
+  HTML/CSS (ver nota de flakiness abaixo), `npm run lint`, `tsc --noEmit` e
+  `npm run build` limpos.
+- **Saída**: mesma funcionalidade de ponta a ponta, visual novo em toda a
+  aplicação, mobile e desktop.
+
+### Suíte E2E após a repaginação — 6/9 e 9/9 (variando por execução)
+
+Rodada com `--workers=1` (serializado, elimina disputa pelo compilador
+único do Turbopack): 6/9 passam de forma limpa, incluindo os 3 testes de
+login e os 3 primeiros de admin (criar setor/categoria/mesa). As 3 falhas
+restantes são todas timeout num clique de navegação (link "Editar", link
+de uma mesa na grade) — não falha de asserção de conteúdo. O
+`error-context.md` de cada falha mostra a página de admin renderizando
+uma tabela com **30+ linhas** de dado de teste acumulado (prefixos `E2E-`/
+`PED-`, ver nota já registrada no Módulo 4 acima) — o mesmo problema de
+acúmulo já havia sido identificado como responsável por deixar as
+listagens do admin visivelmente mais lentas. Não foi encontrada nenhuma
+falha ligada ao conteúdo/estilo novo (nenhum texto errado, nenhum
+seletor quebrado) — é a mesma classe de flakiness ambiental já registrada
+no Módulo 4, agravada pelo volume de dado acumulado desde então. Limpeza
+do banco de dev segue como pendência (ver seção acima), agora com
+evidência concreta de que também afeta os testes, não só a UX do admin.
+
+### Logotipo oficial e paleta final da marca ✅
+
+Pedido explícito do usuário, logo após a repaginação: usar o logotipo real
+da MITIZ (não mais o selo "M" provisório) e travar a paleta nos 5 tons
+oficiais informados (`#B58B57` dourado/bronze, `#AF2B1E` vermelho,
+`#494949` cinza, `#F2ECE6` bege claro, `#1A1A1A` quase-preto).
+
+- ✅ Pacote oficial de logo (`Logotipo Mitiz.zip`, fornecido pelo usuário)
+  copiado para `public/brand/` (SVG fonte + versões horizontal/reduzida);
+- ✅ `src/components/brand/mitiz-mark.tsx` e `mitiz-logo.tsx` — símbolo
+  (chama + boi) e logotipo completo como componentes React inline
+  (`fill="currentColor"`, sem cor própria), gerados a partir do SVG oficial
+  para poderem ser tingidos por classe de cor (`text-gold`, `text-ink`
+  etc.) em vez de ficarem presos a um PNG/JPG de cor fixa;
+- ✅ Substituído o selo circular "M" pelo símbolo oficial: hero do login,
+  cabeçalho da sidebar do admin, e nova barra de marca fina no topo do
+  shell do garçom/caixa (`src/app/(staff)/layout.tsx`) — cobertura de logo
+  em todas as áreas principais do app, não só numa tela;
+- ✅ Favicon (`src/app/icon.svg`, convenção do App Router) usando o símbolo
+  oficial;
+- ✅ `tailwind.config.ts`: os 5 tokens de cor da marca (`bg`, `ink`, `muted`,
+  `wine`, `gold`) passam a usar exatamente os hex fornecidos. Os tons
+  `light`/`dark` de `wine`/`gold` e os tokens auxiliares `line`/
+  `shell-line` (que não fazem parte da paleta oficial de 5 cores) são
+  derivados por clareamento/escurecimento programático dos tons oficiais,
+  documentado no próprio arquivo — não são cores inventadas soltas.
+- **Testes**: `tsc --noEmit`, `npm run lint` e `npm run build` limpos;
+  suíte E2E re-executada (6/9, mesma classe de flakiness ambiental já
+  registrada acima — nenhuma falha nova ligada ao logo/paleta).
+- **Saída**: logotipo oficial da MITIZ visível no login, no admin e no app
+  do garçom/caixa; paleta de cores igual à marca em todo o sistema.
+
+### Grid de mesas do garçom: faixa de status + alertas + valor ✅
+
+Pedido do usuário: o card de mesa do app do garçom (`/mesas`) deveria
+comunicar mais à distância — faixa colorida de status, alerta de pedido
+pronto, valor da comanda em andamento e indicação de pagamento parcial.
+
+- ✅ Faixa colorida no topo do card: verde para livre, vermelho/vinho para
+  ocupada, dourado para status que pedem atenção — nova cor `free` (verde)
+  adicionada ao `tailwind.config.ts` como exceção deliberada e documentada
+  (não é cor de marca, é convenção funcional de status, reconhecida à
+  distância; ver comentário no arquivo);
+- ✅ Sininho + contador de itens `READY` aguardando entrega naquela mesa
+  (seção 10 do CLAUDE.md, "alertas de pedidos prontos", que ainda faltava);
+- ✅ Valor da comanda em andamento e "Pago R$ X de R$ Y" quando há
+  pagamento parcial, usando os campos já calculados em `ServiceSession`
+  (nunca inventando valor).
+- **Testes**: `tsc --noEmit` e `npm run lint` limpos; cores conferidas por
+  inspeção computada no navegador (bateram exatamente com os hex); suíte
+  E2E de mesas rodada — falha isolada foi um timeout de clique na aba
+  "Pessoas" da tela de mesa individual, arquivo não tocado nesta mudança,
+  mesma classe de flakiness ambiental já documentada.
+
+### Painel "Mesas" do administrador: visão gerencial completa ✅
+
+Pedido do usuário, com referência visual de um app de mercado (dashboard
+escuro com cards de mesa, indicadores no topo, gráfico de rosca e alertas):
+uma visão bem mais completa que a do garçom, só para o Administrador — o
+garçom continua com o grid enxuto do módulo anterior.
+
+`/admin/mesas` deixou de ser só uma tabela de cadastro e virou um painel:
+
+- ✅ 4 indicadores no topo — Total de mesas, Livres, Ocupadas, Fechando —
+  com contagem e percentual. "Fechando" agrupa `WAITING_CLOSING` e
+  `PARTIALLY_PAID` (estados já modelados no CLAUDE.md seção 7, mas que
+  nenhum fluxo aciona ainda — ficam prontos para quando o Módulo 8/9,
+  caixa e pagamentos, existir; hoje sempre aparecem zerados, o que é
+  honesto, não um bug);
+- ✅ Card de mesa mais denso que o do garçom: capacidade, consumo, **relógio
+  ao vivo** (atualiza a cada segundo no navegador — não é tempo real
+  multiusuário, isso é Módulo 5; é só não deixar o tempo "congelado" na
+  tela do administrador), pessoas, garçom responsável e o mesmo alerta de
+  pedido pronto do grid do garçom;
+- ✅ Botão de ação por card varia com a regra de negócio de verdade: "Abrir
+  mesa" só aparece quando `canOpenTable()` permite (mesa `FREE`); mesa
+  ocupada mostra "Ver detalhes"; mesa `BLOCKED`/`RESERVED` mostra "Editar"
+  em vez de oferecer abrir uma mesa que o backend recusaria;
+- ✅ Painel lateral "Resumo do salão" — gráfico de rosca em SVG puro (sem
+  biblioteca nova) com a proporção livre/ocupada/fechando/outras;
+- ✅ Painel "Alertas" — mesa aberta há mais de 2h (limiar de tela, não regra
+  de negócio) e mesa aguardando fechamento, quando existir;
+- ✅ Formulário de criar mesa saiu do rodapé da página (não cabia mais no
+  layout de painel) e virou `/admin/mesas/nova`, com redirect de volta
+  para `/admin/mesas` após criar.
+- **Decisões tomadas sem bloquear em pergunta** (reversíveis, registradas
+  aqui): não adicionei filtro por "Área do salão" (não existe esse campo
+  no schema — seria preciso migration) nem busca/toggle grade-lista (não
+  foram pedidos explicitamente, só apareciam na imagem de referência);
+  ambos são fáceis de somar depois se fizerem falta.
+- **Testes**: `tsc --noEmit`, `npm run lint` e `npm run build` limpos;
+  criação de mesa testada de ponta a ponta no navegador (formulário →
+  redirect → aparece no painel com contagem atualizada) e depois removida;
+  status `BLOCKED` testado manualmente para confirmar que o card mostra
+  "Editar" em vez de "Abrir mesa".
+- **Saída**: `/admin/mesas` é agora um painel gerencial (indicadores,
+  gráfico, alertas, cards ao vivo); `/admin/mesas/nova` concentra o
+  cadastro; `/mesas` (garçom) continua enxuto, sem essas informações extras.
+
+**Bug real encontrado pelo usuário e corrigido**: o botão "Editar" só
+aparecia no card de mesa `BLOCKED`/`RESERVED` — mesa `FREE` ou `OCCUPIED`
+(ou seja, praticamente toda mesa no dia a dia) não tinha nenhum jeito de
+editar nome/capacidade a partir do painel. Corrigido com um ícone de lápis
+sempre visível no cabeçalho do card, independente do status. Aproveitado
+para restaurar, na própria tela de edição, o aviso que existia na versão
+antiga (tabela simples) e se perdeu na reforma: mesa nunca é apagada
+(histórico de atendimento preservado — CLAUDE.md regra 25), usar o status
+Bloqueada para tirar de operação. Testado no navegador: editar nome de
+verdade (ida e volta) e confirmar que persiste.
+
+## Módulo 5 — Tempo real ✅
+
+Decisão de arquitetura registrada em
+[ADR 0003](architecture/decisions/0003-tempo-real-broadcast.md): Supabase
+Realtime via **Broadcast público**, publicado pelo servidor (service role,
+API REST — sem WebSocket ficando aberto numa server action) depois que a
+transação de negócio já commitou, nunca via `postgres_changes` (exigiria
+abrir política de RLS nas tabelas, duplicando a regra de permissão que já
+existe no backend — CLAUDE.md regra 25).
+
+- ✅ `src/lib/realtime/channels.ts` — nomes de canal (`table:{id}`,
+  `restaurant:{id}:tables`, `sector:{id}` — este último pronto para o
+  Módulo 6, ainda sem assinante) e o nome do evento, puro/testável;
+- ✅ `src/lib/realtime/publish.ts` — publica via
+  `POST {SUPABASE_URL}/realtime/v1/api/broadcast`; payload só com um
+  `type` textual, nunca dado de negócio; nunca lança (falha de rede aqui
+  não pode derrubar uma mutação que já foi persistida — só loga);
+- ✅ `src/components/realtime/realtime-refresh.tsx` — client component que
+  assina os canais recebidos e chama `router.refresh()` ao receber
+  qualquer evento **ou** ao (re)conectar — cobre "reconexão dispara
+  refetch" sozinho, via o próprio reconnect automático do cliente Supabase;
+- ✅ Publicação plugada nas mutações que já existem, sempre depois da
+  transação commitar: abrir mesa (`open-table.ts`), criar pedido
+  (`create-order.ts` — só quando o pedido é criado de fato, não numa
+  repetição idempotente) e solicitar/autorizar cancelamento de item
+  (`cancel-order-item.ts`);
+- ✅ Assinatura plugada nas 3 telas que mostram estado ao vivo: grid do
+  garçom (`/mesas`), painel do admin (`/admin/mesas`) — ambos no canal do
+  restaurante — e a mesa individual (`/mesas/[id]/*`, todas as abas via o
+  layout compartilhado) no canal da própria mesa.
+- **Testes**: `tests/unit/realtime-channels.test.ts` (nomes de canal) e
+  `tests/unit/realtime-publish.test.ts` (publica no endpoint certo, não
+  publica sem canais/sem variável de ambiente, nunca lança em falha de
+  rede) — mock de `fetch`, sem rede real. O round-trip completo (mutação
+  real → broadcast → tela atualiza sozinha) foi verificado manualmente
+  contra o Supabase real: com a tela `/admin/mesas` aberta e parada, uma
+  mesa foi aberta por fora (mesma transação que `openTable` faz) e a tela
+  atualizou os indicadores e o card sem nenhum reload manual. Não foi
+  criado teste automatizado desse round-trip (exigiria jsdom/Testing
+  Library, dependência nova só para isso — não instalada, decisão
+  registrada na ADR 0003) nem suíte E2E nova (o Playwright já cobre os
+  fluxos de abrir mesa/criar pedido/cancelar item; tempo real é reforço de
+  tela sobre eles, não um fluxo novo a testar de ponta a ponta);
+  `tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (38/38) e
+  `npm run test:integration` (12/12) limpos.
+- **Saída**: garçom, caixa e admin veem mesa/pedido mudar de estado sem
+  recarregar a página, em qualquer tela que já mostra dado ao vivo hoje.
+- **Ponto de atenção para módulos futuros**: `publishChange` não é
+  automático — toda mutação nova que deveria refletir na tela em tempo
+  real (Módulo 8, pagamentos; Módulo 9, autorização de cancelamento pelo
+  admin) precisa lembrar de chamar `publishChange` depois de commitar, como
+  parte do "pronto" dessa mutação.
+
+## Módulo 6 — Produção ✅
+
+Hipótese de design registrada aqui (item de pedido não tem status
+"recebido" próprio — só `SENT → IN_PREPARATION → READY → DELIVERED`,
+CLAUDE.md seção 7): "marcar pedido como recebido" (seção 5) é tratado como
+efeito colateral de iniciar o preparo do primeiro item, não uma ação à
+parte — ver `deriveOrderProgressStatus` em `src/domain/order/states.ts`.
+
+- ✅ `deriveOrderProgressStatus` (domínio, puro) — deriva o status do
+  *pedido* a partir do conjunto de status dos seus itens não cancelados:
+  só avança de estágio quando **todos** os itens ativos já alcançaram
+  aquele estágio (reflete que um pedido só está "pronto" quando cada
+  setor envolvido terminou a sua parte), nunca regride;
+- ✅ `src/application/production/update-item-status.ts` — avança um item
+  na esteira (valida a transição com `canTransitionOrderItem`, já existente
+  desde o Módulo 4), recalcula o rollup do pedido e publica em tempo real
+  (canal da mesa, do restaurante e **do setor** — novo canal assinado
+  nesta tela); sem checagem de permissão aqui, mesmo padrão de
+  openTable/createOrder/cancelOrderItem (permissão é responsabilidade da
+  server action);
+- ✅ `create-order.ts` também passou a publicar no(s) canal(is) de setor
+  dos itens do pedido novo — a coluna "Novos" da produção atualiza sozinha
+  quando um pedido é enviado, sem precisar do refresh manual;
+- ✅ Tela `/producao` (redireciona para o primeiro setor ativo) e
+  `/producao/[sectorId]` — quadro com as 4 colunas da seção 10
+  (Novos/Em preparo/Prontos/Entregues), seletor de setor por abas, cada
+  card com mesa, item, ponto da carne, adicionais e observação em
+  destaque; botão de avançar por coluna (não aparece em "Entregues" —
+  status terminal); "Entregues" tem teto de 20 itens mais recentes (é
+  histórico recente, não fila — sem isso cresceria sem fim no turno);
+- ✅ Aba "Produção" na navegação do garçom/admin, visível só para quem tem
+  `PRODUCTION_STATUS_UPDATE` (Administrador e Produção, por definição do
+  papel — CLAUDE.md seção 5);
+- **Testes**: unitários para `deriveOrderProgressStatus` (nunca regride;
+  só avança IN_PREPARATION/READY/DELIVERED quando *todos* os itens ativos
+  chegaram lá; ignora item cancelado); integração para
+  `updateOrderItemStatus` (esteira completa, rejeita pular etapa, rejeita
+  avançar item já entregue, rollup do pedido observado com pedido de 2
+  itens, item de um setor não aparece numa consulta filtrada por outro
+  setor). Verificado manualmente no navegador: clique real em "Iniciar
+  preparo" moveu o item de coluna e o pedido foi para `IN_PREPARATION` no
+  banco; e — mudando um item por fora (sem clicar na aba aberta) — a
+  coluna atualizou sozinha via o novo canal de tempo real por setor.
+  `tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (46/46) e
+  `npm run test:integration` (18/18) limpos.
+- **Saída**: cozinha/parrilla/bar operam a fila pelo sistema, com
+  atualização em tempo real refletindo no salão/caixa (Módulo 5) e na
+  própria tela de produção.
+
+## Módulo 7 — Impressão
+
+- `Printer` (um único registro ativo no MVP — confirmado, ADR 0001),
+  `PrintJob`;
+- Criação de `PrintJob` no envio do pedido (Módulo 4 revisitado), com o
+  setor de destino sempre destacado no ticket (todos os setores saem na
+  mesma impressora física);
+- Agente/serviço local, na rede do restaurante, consumindo a fila por
+  polling HTTP autenticado e imprimindo na impressora térmica única;
+- Reprocessamento de falha, reimpressão manual auditada;
+- Conteúdo impresso conforme seção 20 do `CLAUDE.md` (MITIZ, número do
+  pedido, mesa, horário, garçom, setor, itens, pessoa, observações em
+  destaque, tipo: novo/complemento/cancelamento/reimpressão).
+- Levantar modelo/driver físico da impressora e do computador local antes de
+  detalhar o agente;
+- Documentar em [printing/architecture.md](printing/architecture.md) antes
+  de implementar (o `CLAUDE.md` proíbe impressão improvisada sem essa
+  documentação).
+- **Testes**: falha de impressão fica disponível para reprocessamento;
+  reimpressão fica registrada; não duplica por reload.
+- **Saída**: pedido enviado imprime automaticamente no setor certo.
+
+## Módulo 8 — Caixa e pagamentos
+
+- `Payment`, `PaymentMethod`, `Discount`, `ServiceCharge`;
+- Tela de caixa: mesas aguardando fechamento, conferência, divisão, taxa,
+  desconto, pagamentos, saldo, finalização;
+- Divisão por pessoa, item, valor, igualmente (com regra determinística de
+  arredondamento);
+- Múltiplas formas de pagamento por fechamento;
+- Bloqueio de fechamento com saldo diferente de zero;
+- Operações financeiras transacionais.
+- **Testes**: calcular taxa de serviço; aplicar desconto com auditoria;
+  registrar pagamento parcial; usar múltiplas formas de pagamento; impedir
+  fechamento com saldo; fechar e liberar mesa; valores exatos em todos os
+  casos acima.
+- **Saída**: fluxo de fechamento completo, ponta a ponta.
+
+## Módulo 9 — Cancelamentos e auditoria (consolidação)
+
+- `AuditLog` transversal, se ainda não cobrindo todos os módulos anteriores;
+- Tela de auditoria no admin (filtrar por usuário, mesa, tipo de ação, data);
+- Revisão de que todo cancelamento/desconto/reabertura já registrado nos
+  módulos anteriores aparece corretamente aqui.
+- **Testes**: cada ação crítica gera exatamente um registro de auditoria
+  coerente.
+
+## Módulo 10 — Histórico
+
+- Aba "Histórico" na tela da mesa (atendimentos anteriores);
+- Consulta de atendimentos encerrados (filtro por data/mesa/garçom).
+
+## Módulo 11 — Relatórios básicos
+
+- Relatórios simples de vendas por período/produto/setor (escopo a definir
+  com o usuário quando chegar a vez — não antecipar métricas não pedidas).
+
+## Módulo 12 — Integração futura com PDV (preparação)
+
+- Interfaces/serviços de sincronização de produto, preço, venda finalizada,
+  identificador externo e status de integração, **sem** implementar contra
+  um fornecedor real até a API oficial ser analisada (seção 21 do
+  `CLAUDE.md`).
+
+---
+
+## Ordem de execução recomendada
+
+0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
+
+Todas as decisões técnicas necessárias para os módulos 5 e 7 já foram
+confirmadas (ver ADR 0001). O único ponto ainda em aberto — modelo/driver
+físico da impressora e do computador local — só precisa ser levantado
+imediatamente antes do módulo 7, não bloqueia nada anterior.
+
+## Fora deste backlog
+
+Qualquer item listado em "Fora do MVP" em
+[product/mvp-scope.md](product/mvp-scope.md) não entra neste backlog sem
+solicitação explícita.
