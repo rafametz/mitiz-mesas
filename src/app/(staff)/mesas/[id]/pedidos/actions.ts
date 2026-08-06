@@ -64,7 +64,17 @@ export async function createOrderAction(
     // Confirmado 2026-08-05: falha intermitente (instância serverless fria/
     // conexão do pooler), não determinística — "tente de novo" resolve.
     console.error("[createOrderAction] erro inesperado ao criar pedido:", error);
-    return { error: "Não foi possível enviar o pedido. Tente de novo." };
+    // DIAGNÓSTICO TEMPORÁRIO — remover depois de achar a causa (aconteceu
+    // de novo especificamente na Mesa 2, investigando mais a fundo).
+    return {
+      error:
+        "[DEBUG] " +
+        (error instanceof Error
+          ? `${error.name}: ${error.message}${
+              "code" in error ? ` (code=${(error as { code?: unknown }).code})` : ""
+            }`
+          : String(error)),
+    };
   }
 
   revalidatePath(`/mesas/${tableId}/pedidos`);
