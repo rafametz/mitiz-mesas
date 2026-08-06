@@ -11,13 +11,14 @@ projeto principal.
 ## O que você precisa antes de começar
 
 1. A impressora Epson já instalada normalmente no Windows (o instalador que
-   veio com ela, ou o Windows já reconheceu como impressora USB). Anote o
-   **nome exato** dela: Painel de Controle → Dispositivos e Impressoras.
+   veio com ela, ou o Windows já reconheceu como impressora USB).
 2. [Node.js](https://nodejs.org) instalado nesse mesmo computador (baixe a
    versão "LTS").
 3. Um token gerado no app, em **Administração → Impressoras → (sua
    impressora) → Editar → Gerar novo token**. Ele só aparece em texto uma
    vez — copie na hora.
+4. O **alvo de impressão** (compartilhamento ou porta) — ver seção
+   "Descobrir o alvo da impressora" abaixo antes de preencher o `.env`.
 
 ## Instalação
 
@@ -38,8 +39,7 @@ projeto principal.
    Abra o `.env` num editor de texto e preencha:
    - `SERVER_URL` — o endereço do app (ex.: `https://mitiz-mesas.vercel.app`);
    - `PRINT_AGENT_TOKEN` — o token que você gerou;
-   - `PRINTER_INTERFACE` — `printer:` seguido do nome exato da impressora
-     (ex.: `printer:EPSON TM-T20`).
+   - `PRINTER_TARGET` — ver "Descobrir o alvo da impressora" logo abaixo.
 
 4. Rode:
 
@@ -51,12 +51,47 @@ projeto principal.
 
    ```
    Agente de impressão MITIZ — servidor: https://mitiz-mesas.vercel.app
-   Impressora: printer:EPSON TM-T20 — consultando a cada 5000ms
+   Impressora (copy /b): \\localhost\EPSON — consultando a cada 5000ms
    ```
 
    Se aparecer isso e não der erro, está funcionando — deixe essa janela
    aberta. Mande um pedido pelo app (de qualquer celular) e o ticket deve
    sair na impressora em até 5 segundos.
+
+## Descobrir o alvo da impressora (`PRINTER_TARGET`)
+
+O agente manda os bytes crus (ESC/POS) pra impressora com o comando nativo
+`copy /b` do Windows — **não instala nenhum driver de terceiro** (a
+primeira versão tentava um pacote chamado `printer`, que é antigo, mal
+mantido e não instala sem Visual Studio Build Tools; foi trocado por isso
+de propósito). Duas formas de apontar pra impressora certa, escolha uma:
+
+**Opção A — compartilhar a impressora (mais simples)**
+
+1. Painel de Controle → Dispositivos e Impressoras;
+2. Botão direito na Epson → Propriedades da impressora → aba
+   "Compartilhamento";
+3. Marcar "Compartilhar esta impressora" e anotar o **Nome do
+   compartilhamento** (ex.: `EPSON`);
+4. `PRINTER_TARGET="\\localhost\EPSON"` (troque `EPSON` pelo nome que você
+   deu).
+
+**Opção B — porta direta (sem compartilhar nada)**
+
+1. Painel de Controle → Dispositivos e Impressoras → botão direito na
+   Epson → Propriedades da impressora → aba "Portas";
+2. Anote a porta marcada (geralmente `USB001`, `USB002`...);
+3. `PRINTER_TARGET="USB001"` (o valor exato que você viu ali).
+
+Se depois de configurado o `npm start` conseguir escrever mas nada sair no
+papel, teste o mesmo `copy /b` direto no PowerShell com um arquivo de
+texto qualquer — se isso também não imprimir, o problema é o
+compartilhamento/porta escolhido, não o agente:
+
+```
+echo teste > teste.txt
+copy /b teste.txt \\localhost\EPSON
+```
 
 ## Deixar rodando sempre (sem precisar abrir o terminal manualmente)
 
@@ -75,12 +110,14 @@ configurar pra iniciar sozinho:
 
 ## Se não imprimir — checklist
 
-1. **A janela do agente mostra `[falha] job ... : Impressora não
-   respondeu`** — confira se a Epson está ligada, com papel, e o cabo USB
-   conectado. Teste imprimir uma página de teste direto pelo Windows
-   (Dispositivos e Impressoras → botão direito na impressora → Propriedades
-   → Imprimir página de teste) — se isso também falhar, o problema é
-   Windows/driver/cabo, não o agente.
+1. **A janela do agente mostra `[falha] job ...` com uma mensagem sobre
+   "não pode encontrar" ou "acesso negado"** — o `PRINTER_TARGET` no
+   `.env` está errado, ou (se for compartilhamento) o compartilhamento foi
+   desativado. Revise a seção "Descobrir o alvo da impressora" acima e
+   teste o `copy /b` manual sugerido lá. Se a Epson estiver desligada, sem
+   papel ou com o cabo solto, teste primeiro uma página de teste direto
+   pelo Windows (Dispositivos e Impressoras → botão direito → Propriedades
+   → Imprimir página de teste).
 2. **`Token inválido (401)`** — o token foi regenerado (isso invalida o
    anterior na hora) ou foi digitado errado no `.env`. Gere um novo em
    `/admin/impressoras` e atualize o `.env`.

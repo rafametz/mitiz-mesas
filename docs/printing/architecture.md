@@ -1,9 +1,11 @@
 # Arquitetura de impressão (Módulo 7)
 
-- **Status**: Implementada (MVP — impressora única).
+- **Status**: Implementada e **validada num ticket impresso de verdade**
+  (Epson TM-T20 real do usuário, 2026-08-05).
 - Decisão de hardware/topologia confirmada com o usuário em 2026-08-06:
   impressora térmica **Epson** (família ESC/POS padrão), conectada por
-  **USB** a um computador Windows na rede local do restaurante.
+  **USB** a um computador Windows na rede local do restaurante,
+  compartilhada (`\\localhost\NOME`) — ver README do agente.
 
 Complementa a decisão já registrada em
 [ADR 0001](../architecture/decisions/0001-decisoes-tecnicas-iniciais.md),
@@ -34,7 +36,7 @@ Garçom envia pedido / Admin cancela item / alguém pede reimpressão
      Agente local (Node.js, roda no PC ligado na Epson via USB)
                     │
                     ▼
-        node-thermal-printer → spooler do Windows → impressora
+    node-thermal-printer (bytes ESC/POS) → copy /b (Windows) → impressora
                     │
                     ▼
       Agente confirma PRINTED ou FAILED (com o erro) de volta
@@ -115,21 +117,46 @@ tipo do ticket.
 Node.js simples, sem framework — roda com `node agent.js`, configurado por
 `.env` (URL do servidor, token, intervalo de polling). Usa
 [`node-thermal-printer`](https://www.npmjs.com/package/node-thermal-printer)
-(driver ESC/POS maduro, com suporte nomeado a Epson) apontando para o
-compartilhamento da impressora no Windows (`interface: "printer:NOME"`,
-depois de a Epson já estar instalada normalmente como impressora do
-Windows — não precisa de driver adicional além do que o Windows já usa).
+só para montar os bytes ESC/POS (negrito, corte, layout) — não para
+mandar pra impressora. A tentativa inicial usava a interface `printer:`
+da biblioteca, que exige o pacote `printer` como driver nativo (native
+addon via `node-gyp`); esse pacote está sem manutenção há anos e falhou
+para instalar (conflito de dependência do próprio pacote, nem chega a
+tentar compilar). Trocado pelo caminho clássico e sem dependência nativa
+nenhuma: a biblioteca grava os bytes num arquivo temporário (interface de
+arquivo, não de impressora) e o agente manda esse arquivo pra impressora
+de verdade com `copy /b` — comando nativo do Windows para cópia binária,
+suficiente para RAW/ESC-POS numa impressora compartilhada ou numa porta
+direta (`USB001` etc.). Detalhado em
+[`printer-agent/README.md`](../../printer-agent/README.md) (seção
+"Descobrir o alvo da impressora").
 
-Detalhado em [`printer-agent/README.md`](../../printer-agent/README.md).
+## Validação num ticket real (2026-08-05)
 
-## O que eu não pude validar
+Rodado de ponta a ponta contra a impressora física do usuário (Epson
+TM-T20, compartilhada como `\\localhost\EPSON TM-T20`): pedido enviado
+pelo app → `PrintJob` criado → agente consultou a fila, autenticou,
+montou o ticket, gravou o arquivo temporário, mandou via `copy /b`,
+confirmou `PRINTED` → **saiu no papel, acentuação correta** (`PC860_
+PORTUGUESE`), sem erro. Dois problemas reais apareceram e foram
+corrigidos nesse processo:
 
-Não tenho acesso à rede local nem à impressora física do usuário — o
-agente foi escrito contra a documentação da `node-thermal-printer` e o
-funcionamento do ESC/POS padrão Epson, mas **não foi impresso em papel de
-verdade por mim**. Rodar e confirmar num ticket real é o próximo passo, do
-lado do usuário; ajustes finos de layout (largura de coluna, corte,
-gaveta) vêm depois desse primeiro teste.
+1. A tentativa inicial de driver (`printer`, pacote nativo via node-gyp)
+   nem chegou a instalar — trocado pelo mecanismo `copy /b` descrito acima
+   (sem dependência nativa nenhuma);
+2. Sem `characterSet` configurado, acento (`Porção`, `Não`...) falhava ao
+   codificar — a biblioteca engolia o erro internamente e reportava
+   sucesso mesmo assim, então o sintoma não era "erro na tela", era
+   "ticket saindo sem parte do texto". Corrigido fixando
+   `characterSet: CharacterSet.PC860_PORTUGUESE` na config da impressora.
+
+Fonte maior a pedido do usuário: `printer.setTextDoubleHeight()` logo no
+início do ticket (só altura, não largura — dobrar a largura também
+cortaria pela metade quantos caracteres cabem por linha). Um teste
+intermediário "não imprimiu" depois dessa mudança, mas a causa real era
+outra (um pedido de teste que não chegou a ser criado de verdade, não a
+fonte) — depois de confirmado isso, a fonte maior voltou e imprimiu
+normalmente.
 
 ## Fora do escopo desta versão (registrado, não esquecido)
 

@@ -541,6 +541,37 @@ impressora (nunca a service role key), consumindo a fila por polling HTTP
   (fica na fila pra reprocessar); reimpressão manual sempre disponível pra
   quem tem permissão.
 
+### Impressão validada em impressora real (2026-08-05) ✅
+
+Depois do deploy, o usuário cadastrou a impressora (Epson TM-T20, USB,
+compartilhada no Windows) e gerou o token pela tela. Dois problemas reais
+apareceram testando contra o hardware de verdade — ambos documentados em
+[printing/architecture.md](printing/architecture.md) e corrigidos:
+
+1. Build do Vercel falhou (`prisma generate` não rodou por causa do cache
+   de build restaurado) — corrigido com `postinstall` explícito no
+   `package.json` raiz;
+2. A primeira versão do agente dependia do pacote `printer` (driver nativo
+   via node-gyp) pra falar com a impressora — não instalou (pacote antigo,
+   mal mantido, conflito de dependência interna dele mesmo). Trocado pelo
+   mecanismo `copy /b` do Windows (a `node-thermal-printer` só monta os
+   bytes ESC/POS num arquivo temporário; quem entrega pra impressora é o
+   `copy /b`, comando nativo, sem dependência nenhuma).
+
+Depois disso: **ticket saiu impresso de verdade, com acentuação correta**
+(precisou fixar `characterSet: PC860_PORTUGUESE` — sem isso, a lib engolia
+o erro de encoding internamente e reportava sucesso mesmo com texto
+faltando, sintoma enganoso). Fonte aumentada a pedido do usuário
+(`setTextDoubleHeight()`, só altura pra não bagunçar a largura de coluna).
+
+Aprendizado de processo registrado aqui: a automação de navegador usada
+pra criar pedidos de teste ficou instável no meio da sessão de debug
+(clique não disparava o `useActionState`/form submit de forma confiável) —
+um "não imprimiu" foi erroneamente atribuído à fonte maior, quando na
+verdade o pedido de teste nunca tinha sido criado. Resolvido criando o
+pedido de teste direto no banco (mesmo shape que `createOrder` grava) pra
+isolar o teste do agente da instabilidade da automação do navegador.
+
 ## Módulo 8 — Caixa e pagamentos
 
 - `Payment`, `PaymentMethod`, `Discount`, `ServiceCharge`;
