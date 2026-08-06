@@ -61,13 +61,10 @@ export async function createOrderAction(
     // Erro inesperado (não é regra de negócio) — a mensagem pro usuário
     // fica genérica de propósito, mas o log completo precisa sobreviver
     // em algum lugar (Vercel > projeto > Logs) pra dar pra diagnosticar.
+    // Confirmado 2026-08-05: falha intermitente (instância serverless fria/
+    // conexão do pooler), não determinística — "tente de novo" resolve.
     console.error("[createOrderAction] erro inesperado ao criar pedido:", error);
-    // DIAGNÓSTICO TEMPORÁRIO — remover depois de achar a causa.
-    return {
-      error:
-        "[DEBUG] " +
-        (error instanceof Error ? `${error.name}: ${error.message}` : String(error)),
-    };
+    return { error: "Não foi possível enviar o pedido. Tente de novo." };
   }
 
   revalidatePath(`/mesas/${tableId}/pedidos`);
