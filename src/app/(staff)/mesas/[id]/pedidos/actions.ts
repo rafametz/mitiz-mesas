@@ -62,7 +62,12 @@ export async function createOrderAction(
     // fica genérica de propósito, mas o log completo precisa sobreviver
     // em algum lugar (Vercel > projeto > Logs) pra dar pra diagnosticar.
     console.error("[createOrderAction] erro inesperado ao criar pedido:", error);
-    return { error: "Não foi possível enviar o pedido. Tente de novo." };
+    // DIAGNÓSTICO TEMPORÁRIO — remover depois de achar a causa.
+    return {
+      error:
+        "[DEBUG] " +
+        (error instanceof Error ? `${error.name}: ${error.message}` : String(error)),
+    };
   }
 
   revalidatePath(`/mesas/${tableId}/pedidos`);
