@@ -212,11 +212,22 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
         sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
       };
     },
-    // Serializable: reduz a janela de corrida em sequenceNumber quando
-    // dois pedidos são enviados quase ao mesmo tempo para a mesma mesa
-    // (CLAUDE.md — "tratar concorrência"). Retry em runCreateOrder abaixo
-    // cobre o caso raro de falha de serialização.
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    {
+      // Serializable: reduz a janela de corrida em sequenceNumber quando
+      // dois pedidos são enviados quase ao mesmo tempo para a mesma mesa
+      // (CLAUDE.md — "tratar concorrência"). Retry em runCreateOrder abaixo
+      // cobre o caso raro de falha de serialização.
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      // Timeout maior que o padrão (5s): esta transação faz várias
+      // idas e vindas (validações + pedido + totais + print jobs) via
+      // pooler do Supabase (PgBouncer). Em produção (Vercel -> Supabase),
+      // a latência de rede real às vezes passa de 5s e o motor expira a
+      // transação, gerando P2028 ("Transaction not found") mesmo sem
+      // nenhum problema de dados (confirmado em produção 2026-08-06,
+      // Mesa 2, reproduzido com debug ligado).
+      maxWait: 5000,
+      timeout: 15000,
+    },
   );
 }
 
@@ -224,8 +235,11 @@ function isRetryableConflict(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     // P2002: unique constraint (ex.: sequenceNumber ou idempotencyKey em
     // corrida). P2034: conflito de escrita/deadlock sob isolamento
-    // Serializable — o próprio Prisma recomenda tentar de novo.
-    return error.code === "P2002" || error.code === "P2034";
+    // Serializable — o próprio Prisma recomenda tentar de novo. P2028:
+    // transação interativa expirou/perdeu a conexão no pooler — o timeout
+    // maior acima deve evitar a maioria dos casos, mas se acontecer vale
+    // tentar de novo (nada foi commitado).
+    return error.code === "P2002" || error.code === "P2034" || error.code === "P2028";
   }
   if (error instanceof Prisma.PrismaClientUnknownRequestError) {
     return /could not serialize|deadlock detected/i.test(error.message);

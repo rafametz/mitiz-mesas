@@ -61,20 +61,14 @@ export async function createOrderAction(
     // Erro inesperado (não é regra de negócio) — a mensagem pro usuário
     // fica genérica de propósito, mas o log completo precisa sobreviver
     // em algum lugar (Vercel > projeto > Logs) pra dar pra diagnosticar.
-    // Confirmado 2026-08-05: falha intermitente (instância serverless fria/
-    // conexão do pooler), não determinística — "tente de novo" resolve.
+    // Causa raiz confirmada 2026-08-06 (Mesa 2, com diagnóstico temporário
+    // ligado): P2028 "Transaction not found" — timeout padrão de 5s da
+    // transação interativa do Prisma estourando contra o pooler do
+    // Supabase em produção. Corrigido com timeout maior + retry em
+    // create-order.ts; mantendo o catch genérico aqui como rede de
+    // segurança para qualquer outra falha inesperada.
     console.error("[createOrderAction] erro inesperado ao criar pedido:", error);
-    // DIAGNÓSTICO TEMPORÁRIO — remover depois de achar a causa (aconteceu
-    // de novo especificamente na Mesa 2, investigando mais a fundo).
-    return {
-      error:
-        "[DEBUG] " +
-        (error instanceof Error
-          ? `${error.name}: ${error.message}${
-              "code" in error ? ` (code=${(error as { code?: unknown }).code})` : ""
-            }`
-          : String(error)),
-    };
+    return { error: "Não foi possível enviar o pedido. Tente de novo." };
   }
 
   revalidatePath(`/mesas/${tableId}/pedidos`);
