@@ -58,6 +58,10 @@ export async function createOrderAction(
     await createOrder({ serviceSessionId, waiterId: user.id, idempotencyKey, items });
   } catch (error) {
     if (error instanceof CreateOrderError) return { error: error.message };
+    // Erro inesperado (não é regra de negócio) — a mensagem pro usuário
+    // fica genérica de propósito, mas o log completo precisa sobreviver
+    // em algum lugar (Vercel > projeto > Logs) pra dar pra diagnosticar.
+    console.error("[createOrderAction] erro inesperado ao criar pedido:", error);
     return { error: "Não foi possível enviar o pedido. Tente de novo." };
   }
 
