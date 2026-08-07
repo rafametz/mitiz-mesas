@@ -12,7 +12,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Passthrough puro — sempre busca da rede, nunca serve nada do cache.
-self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
-});
+// Bug real em produção (2026-08-07): a versão anterior fazia
+// `event.respondWith(fetch(event.request))` — parecia um passthrough
+// inócuo, mas reencaminhar a MESMA requisição por dentro do Service
+// Worker não é transparente pra todo tipo de request. Quebrou o POST das
+// Server Actions do Next.js (ex.: salvar produto no admin virava erro
+// 500). Não existe motivo nenhum pra interceptar essas chamadas — o
+// listener continua registrado (alguns critérios de instalação mais
+// antigos checam isso), mas sem chamar respondWith() em lugar nenhum, o
+// que garante que o navegador segue com a requisição original,
+// exatamente como se este arquivo não existisse.
+self.addEventListener("fetch", () => {});
