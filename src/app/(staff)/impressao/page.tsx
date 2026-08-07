@@ -4,13 +4,20 @@ import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { PRINT_JOB_STATUS_LABELS, PRINT_JOB_TYPE_LABELS } from "@/domain/printing/labels";
+import { getAgentStatus, formatElapsedSince } from "@/domain/printing/agent-status";
 import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PRINT_JOB_STATUS_TONE } from "@/components/ui/status-tone";
+import { AGENT_STATUS_TONE, PRINT_JOB_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatDateTime } from "@/lib/datetime";
 import { reprintAction, reprocessAction } from "./actions";
 import { JobActionForm } from "./job-action-form";
+
+const AGENT_STATUS_LABEL = {
+  online: "Agente ativo",
+  offline: "Agente sem contato",
+  never_connected: "Agente nunca conectou",
+} as const;
 
 // Fila/histórico de impressão (Módulo 7) — acessível para quem tem
 // PRINT_JOBS_MANAGE (Admin, Caixa, Produção — CLAUDE.md seção 5), por isso
@@ -20,6 +27,11 @@ import { JobActionForm } from "./job-action-form";
 export default async function ImpressaoPage() {
   await requirePermission(PERMISSIONS.PRINT_JOBS_MANAGE);
   const restaurant = await getCurrentRestaurant();
+
+  const printers = await prisma.printer.findMany({
+    where: { restaurantId: restaurant.id, active: true },
+    orderBy: { name: "asc" },
+  });
 
   const jobs = await prisma.printJob.findMany({
     where: { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
@@ -37,6 +49,28 @@ export default async function ImpressaoPage() {
         title="Impressão"
         subtitle="Últimos 50 tickets — ver docs/printing/architecture.md"
       />
+
+      <div className="flex flex-col gap-2">
+        {printers.map((printer) => {
+          const status = getAgentStatus(printer.lastSeenAt);
+          return (
+            <Card key={printer.id} padding="sm" className="flex items-center justify-between text-sm">
+              <div>
+                <span className="font-display font-semibold text-ink">{printer.name}</span>
+                <span className="ml-2 text-xs text-muted">
+                  {printer.lastSeenAt
+                    ? `última consulta ${formatElapsedSince(printer.lastSeenAt)}`
+                    : "sem nenhum contato registrado"}
+                </span>
+              </div>
+              <StatusBadge tone={AGENT_STATUS_TONE[status]}>{AGENT_STATUS_LABEL[status]}</StatusBadge>
+            </Card>
+          );
+        })}
+        {printers.length === 0 && (
+          <p className="text-sm text-muted">Nenhuma impressora ativa cadastrada.</p>
+        )}
+      </div>
 
       <div className="flex flex-col gap-2">
         {jobs.map((job) => (

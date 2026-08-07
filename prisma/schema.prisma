@@ -256,6 +256,13 @@ model Printer {
   // sem token, essa impressora não consegue puxar a fila.
   agentTokenHash String?
   active         Boolean @default(true)
+  // Heartbeat do agente local — atualizado a cada chamada autenticada dele
+  // (GET /api/print-jobs/pending, PATCH /api/print-jobs/:id), não é
+  // "impressora existe", é "o processo node agent.js está vivo e
+  // conversando com o servidor agora". Nulo = nunca conectou. Usado na
+  // tela /impressao para mostrar se o agente está ativo ou parado, sem
+  // esperar um ticket sumir para alguém perceber.
+  lastSeenAt DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
