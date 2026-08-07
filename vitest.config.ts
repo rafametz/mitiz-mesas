@@ -1,17 +1,16 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
+// Config-padrão: só os unitários (sem I/O de propósito). Testes de
+// integração têm config própria (vitest.integration.config.ts) —
+// precisam de um globalSetup que este arquivo não deveria pagar toda vez
+// (desativa a impressora real antes da suíte rodar, ver o motivo em
+// tests/integration/global-setup.ts).
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.ts"],
     setupFiles: ["./vitest.setup.ts"],
-    // Testes de integração batem no Postgres real do Supabase (latência de
-    // rede documentada no projeto todo) e algumas transações agora também
-    // gravam PrintJob (Módulo 7) — o padrão de 5s do Vitest é apertado
-    // demais pra isso. Não afeta os testes unitários (não têm I/O, sempre
-    // terminam bem antes do teto).
-    testTimeout: 15000,
   },
   resolve: {
     alias: {
