@@ -15,6 +15,7 @@ import {
   CancelOrderItemError,
   requestCancelOrderItem,
 } from "@/application/order/cancel-order-item";
+import { setToastCookie } from "@/lib/toast-cookie";
 
 export type FormState = { error: string | null };
 
@@ -73,6 +74,14 @@ export async function createOrderAction(
 
   revalidatePath(`/mesas/${tableId}/pedidos`);
   revalidatePath(`/mesas/${tableId}`);
+  // createOrderAction redireciona em vez de devolver estado no sucesso,
+  // então o useActionState do formulário nunca vê um "sucesso" pra
+  // disparar toast (Fase 4 do plano de modernização). Em vez de marcar a
+  // URL de destino (quebraria os `toHaveURL(/\/pedidos$/)` do E2E), um
+  // cookie de vida curta avisa a página seguinte — lido e apagado
+  // inteiramente no cliente (OrderSentToast, em pedidos/page.tsx), nunca
+  // vira dado de negócio nem aparece em log.
+  await setToastCookie("Pedido enviado.");
   redirect(`/mesas/${tableId}/pedidos`);
 }
 

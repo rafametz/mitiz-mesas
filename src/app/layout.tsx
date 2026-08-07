@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 // Fraunces: display, usado com restrição (títulos, números de destaque).
@@ -29,7 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
-      <body className="bg-bg font-sans text-ink antialiased">{children}</body>
+      <body className="bg-bg font-sans text-ink antialiased">
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }
