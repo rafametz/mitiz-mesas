@@ -1,5 +1,13 @@
 # CLAUDE.md — MITIZ Mesas
 
+## 0. Idioma de comunicação
+
+O Claude Code deve **sempre responder em português do Brasil** no chat com o
+usuário, em qualquer sessão e independentemente do idioma da mensagem
+recebida. Isso é sobre a comunicação com o usuário — já era regra que a
+interface do sistema (textos, telas) fosse em português (seção 3); esta
+seção deixa explícito que a conversa também é.
+
 ## 1. Visão geral do projeto
 
 O **MITIZ Mesas** é um sistema web responsivo para gerenciamento de mesas, comandas, pedidos, produção e fechamento de contas da MITIZ Boutique de Carnes.
