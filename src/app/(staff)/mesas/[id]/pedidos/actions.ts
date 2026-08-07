@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePermission } from "@/application/auth/get-current-user";
@@ -15,9 +14,12 @@ import {
   CancelOrderItemError,
   requestCancelOrderItem,
 } from "@/application/order/cancel-order-item";
-import { setToastCookie } from "@/lib/toast-cookie";
 
-export type FormState = { error: string | null };
+// `success` só é usado por createOrderAction — as duas ações de
+// cancelamento não precisam distinguir "nunca enviado" de "enviado com
+// sucesso" (a UI delas já reage a `error === null` vindo de um envio de
+// verdade via o padrão wasPending, sem precisar de um campo à parte).
+export type FormState = { error: string | null; success?: boolean };
 
 const cartSchema = z.array(
   z.object({
@@ -72,17 +74,16 @@ export async function createOrderAction(
     return { error: "Não foi possível enviar o pedido. Tente de novo." };
   }
 
+  // Não redireciona mais no servidor — o pedido já está gravado e
+  // confirmado neste ponto (docs/performance/optimization-plan.md, Fase
+  // 4). revalidatePath ainda marca as rotas como desatualizadas, pra
+  // quando o cliente navegar buscar dado fresco, mas quem decide
+  // navegar — e mostra a confirmação — é o componente cliente,
+  // imediatamente ao ver este retorno, sem esperar uma navegação
+  // completa do servidor primeiro.
   revalidatePath(`/mesas/${tableId}/pedidos`);
   revalidatePath(`/mesas/${tableId}`);
-  // createOrderAction redireciona em vez de devolver estado no sucesso,
-  // então o useActionState do formulário nunca vê um "sucesso" pra
-  // disparar toast (Fase 4 do plano de modernização). Em vez de marcar a
-  // URL de destino (quebraria os `toHaveURL(/\/pedidos$/)` do E2E), um
-  // cookie de vida curta avisa a página seguinte — lido e apagado
-  // inteiramente no cliente (OrderSentToast, em pedidos/page.tsx), nunca
-  // vira dado de negócio nem aparece em log.
-  await setToastCookie("Pedido enviado.");
-  redirect(`/mesas/${tableId}/pedidos`);
+  return { error: null, success: true };
 }
 
 function firstZodMessage(error: unknown): string | null {

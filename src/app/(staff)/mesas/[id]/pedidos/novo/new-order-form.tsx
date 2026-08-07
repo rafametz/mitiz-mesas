@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
 import { SelectField, TextAreaField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
 import { createOrderAction, type FormState } from "../actions";
 
 type ModifierOption = { id: string; name: string; priceDelta: string };
@@ -68,9 +70,27 @@ export function NewOrderForm({
   products: ProductOption[];
   guests: GuestOption[];
 }) {
+  const router = useRouter();
+  const { showToast } = useToast();
   const action = createOrderAction.bind(null, tableId, serviceSessionId);
-  const [state, formAction] = useActionState(action, initialState);
+  const [state, formAction, isPending] = useActionState(action, initialState);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+
+  // A action não redireciona mais no servidor (docs/performance/
+  // optimization-plan.md, Fase 4) — o pedido já está confirmado assim
+  // que `state.success` chega aqui. Mostra a confirmação e navega na
+  // hora, em vez de esperar uma navegação completa vinda do servidor.
+  // `wasPending` distingue "acabou de enviar com sucesso" de "estado
+  // inicial" (que também tem success falsy).
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (wasPending.current && !isPending && state.success) {
+      showToast("Pedido enviado.");
+      router.push(`/mesas/${tableId}/pedidos`);
+    }
+    wasPending.current = isPending;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending, state.success]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");

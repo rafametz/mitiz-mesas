@@ -8,6 +8,7 @@ import { canTransitionOrderItem, deriveOrderStatus } from "@/domain/order/states
 import { buildTicketContent } from "@/domain/printing/ticket";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CancelOrderItemError extends Error {}
 
@@ -84,49 +85,36 @@ async function transitionItem(params: {
       }
 
       if (params.toStatus === "CANCELLED") {
-        await recalculateSessionTotals(tx, item.order.serviceSessionId);
-
-        // Avisa quem está preparando/já preparou para parar — ticket de
-        // cancelamento só do item cancelado, para o setor dele (CLAUDE.md
-        // seção 20 — tipo "cancelamento"; docs/printing/architecture.md).
-        const sector = await tx.productionSector.findUnique({ where: { id: item.sectorId } });
-        const printer = await tx.printer.findFirst({
-          where: { restaurantId: item.order.serviceSession.table.restaurantId, active: true },
-        });
-        const content = buildTicketContent({
-          type: "CANCELLATION",
-          restaurantName: item.order.serviceSession.table.restaurant.name,
-          tableNumber: item.order.serviceSession.table.number,
-          waiterName: item.order.waiter.name,
-          sectorName: sector?.name ?? "Setor",
-          orderSequenceNumber: item.order.sequenceNumber,
-          items: [
-            {
-              productName: item.productNameAtOrder,
-              quantity: item.quantity,
-              meatPointLabel: null,
-              modifiers: [],
-              notes: item.notes,
-              guestName: item.guest?.name ?? null,
-            },
-          ],
-          cancelReason: reason,
-        });
-        await tx.printJob.create({
-          data: {
-            orderId: item.orderId,
-            sectorId: item.sectorId,
-            printerId: printer?.id,
-            type: "CANCELLATION",
-            contentSnapshot: content,
-          },
-        });
+        await recalculateSessionTotals(tx, item.order.serviceSessionId, item.order.serviceSession);
       }
 
+      // Ticket de cancelamento e publicação de tempo real NÃO entram
+      // mais na transação — mesmo racional de create-order.ts (Fase 2,
+      // docs/performance/optimization-plan.md): o item já está
+      // cancelado e válido antes de qualquer um dos dois rodar. Só
+      // reúne aqui os dados que o after() (fora da transação) vai
+      // precisar pra montar o ticket, sem precisar buscar tudo de novo.
       return {
         updatedItem,
         tableId: item.order.serviceSession.tableId,
         restaurantId: item.order.serviceSession.table.restaurantId,
+        printTicket:
+          params.toStatus === "CANCELLED"
+            ? {
+                orderId: item.orderId,
+                sectorId: item.sectorId,
+                restaurantId: item.order.serviceSession.table.restaurantId,
+                restaurantName: item.order.serviceSession.table.restaurant.name,
+                tableNumber: item.order.serviceSession.table.number,
+                waiterName: item.order.waiter.name,
+                orderSequenceNumber: item.order.sequenceNumber,
+                productName: item.productNameAtOrder,
+                quantity: item.quantity,
+                notes: item.notes,
+                guestName: item.guest?.name ?? null,
+                cancelReason: reason,
+              }
+            : null,
       };
     },
     // Mesmo motivo do timeout maior em create-order.ts: transação com
@@ -135,10 +123,61 @@ async function transitionItem(params: {
     { maxWait: 5000, timeout: 15000 },
   );
 
-  await publishChange(
-    [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-    params.toStatus === "CANCELLED" ? "order_item.cancelled" : "order_item.cancellation_requested",
-  );
+  const channels = [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)];
+  const eventType =
+    params.toStatus === "CANCELLED" ? "order_item.cancelled" : "order_item.cancellation_requested";
+
+  await runAfterResponse(() => publishChange(channels, eventType));
+
+  if (result.printTicket) {
+    const printTicket = result.printTicket;
+    await runAfterResponse(async () => {
+      try {
+        // Avisa quem está preparando/já preparou para parar — ticket de
+        // cancelamento só do item cancelado, para o setor dele (CLAUDE.md
+        // seção 20 — tipo "cancelamento"; docs/printing/architecture.md).
+        const [sector, printer] = await Promise.all([
+          prisma.productionSector.findUnique({ where: { id: printTicket.sectorId } }),
+          prisma.printer.findFirst({
+            where: { restaurantId: printTicket.restaurantId, active: true },
+          }),
+        ]);
+        const content = buildTicketContent({
+          type: "CANCELLATION",
+          restaurantName: printTicket.restaurantName,
+          tableNumber: printTicket.tableNumber,
+          waiterName: printTicket.waiterName,
+          sectorName: sector?.name ?? "Setor",
+          orderSequenceNumber: printTicket.orderSequenceNumber,
+          items: [
+            {
+              productName: printTicket.productName,
+              quantity: printTicket.quantity,
+              meatPointLabel: null,
+              modifiers: [],
+              notes: printTicket.notes,
+              guestName: printTicket.guestName,
+            },
+          ],
+          cancelReason: printTicket.cancelReason,
+        });
+        await prisma.printJob.create({
+          data: {
+            orderId: printTicket.orderId,
+            sectorId: printTicket.sectorId,
+            printerId: printer?.id,
+            type: "CANCELLATION",
+            contentSnapshot: content,
+          },
+        });
+      } catch (error) {
+        console.error(
+          `[cancelOrderItem] falha ao criar PrintJob de cancelamento do item (pedido ${printTicket.orderId}):`,
+          error,
+        );
+      }
+    });
+  }
 
   return result.updatedItem;
 }

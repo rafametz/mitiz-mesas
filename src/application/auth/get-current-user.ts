@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
@@ -20,7 +21,14 @@ export type CurrentUser = {
 //   2. Autenticado no Supabase, mas sem `User` correspondente na aplicação
 //      (conta ainda não provisionada por um administrador — CLAUDE.md
 //      seção 5, cadastro de usuário é ação do admin, não auto-cadastro).
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+//
+// cache() do React deduplica dentro da mesma requisição — sem isso, um
+// layout e a página da aba ativa (ex.: mesas/[id]/layout.tsx +
+// pedidos/page.tsx, ambos chamando requireUser()) repetiam a ida e volta
+// de rede ao Supabase Auth + a consulta de User/Role/Permission duas
+// vezes seguidas pro mesmo dado (docs/performance/audit.md, achado #1).
+// Não muda nenhuma regra — só evita perguntar a mesma coisa de novo.
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
   const {
     data: { user: authUser },
@@ -49,7 +57,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     role: { code: appUser.role.name as RoleCode, label: appUser.role.label },
     permissions: appUser.role.permissions.map((rp) => rp.permission.code as PermissionCode),
   };
-}
+});
 
 // Para Server Components/páginas: garante usuário autenticado e provisionado
 // ou redireciona para /login. O middleware (src/middleware.ts) já cobre o

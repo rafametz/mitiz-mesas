@@ -6,6 +6,7 @@ import { recalculateSessionTotals } from "@/application/service-session/recalcul
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, sectorChannel, tableChannel } from "@/lib/realtime/channels";
+import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CreateOrderError extends Error {}
 
@@ -194,21 +195,23 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
         include: orderInclude,
       });
 
-      await recalculateSessionTotals(tx, data.serviceSessionId);
+      await recalculateSessionTotals(tx, data.serviceSessionId, session);
 
-      await createPrintJobsForOrder(tx, {
-        order,
-        restaurantId: session.table.restaurantId,
-        restaurantName: session.table.restaurant.name,
-        tableNumber: session.table.number,
-        waiterName: waiter.name,
-      });
-
+      // Fila de impressão e publicação de tempo real NÃO entram mais
+      // aqui dentro — são efeito colateral não crítico (mesmo racional
+      // já usado em open-table.ts para publishChange), e o garçom não
+      // deveria esperar nenhum dos dois pra saber que o pedido foi
+      // gravado (docs/performance/optimization-plan.md, Fase 2). Quem
+      // chama createOrder() agenda os dois via after() depois que esta
+      // transação já commitou.
       return {
         order,
         created: true as const,
         tableId: session.tableId,
         restaurantId: session.table.restaurantId,
+        restaurantName: session.table.restaurant.name,
+        tableNumber: session.table.number,
+        waiterName: waiter.name,
         sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
       };
     },
@@ -254,18 +257,46 @@ export async function createOrder(input: CreateOrderInput) {
     try {
       const result = await runTransaction(data);
 
-      // Só publica quando este pedido foi de fato criado agora — uma
-      // repetição idempotente (regra 18/19) não é uma mudança nova para
-      // avisar ninguém; quem criou de verdade já publicou.
+      // Só dispara os dois quando este pedido foi de fato criado agora —
+      // uma repetição idempotente (regra 18/19) não é uma mudança nova
+      // pra avisar ninguém nem pra imprimir de novo; quem criou de
+      // verdade já fez isso. runAfterResponse (ver src/lib/) garante que
+      // os dois rodem até o fim mesmo depois da resposta já ter sido
+      // entregue ao garçom, sem bloquear a resposta em si.
       if (result.created) {
-        await publishChange(
-          [
-            tableChannel(result.tableId),
-            restaurantTablesChannel(result.restaurantId),
-            ...result.sectorIds.map(sectorChannel),
-          ],
-          "order.created",
-        );
+        const printJobParams = {
+          order: result.order,
+          restaurantId: result.restaurantId,
+          restaurantName: result.restaurantName,
+          tableNumber: result.tableNumber,
+          waiterName: result.waiterName,
+        };
+        const channels = [
+          tableChannel(result.tableId),
+          restaurantTablesChannel(result.restaurantId),
+          ...result.sectorIds.map(sectorChannel),
+        ];
+
+        await runAfterResponse(async () => {
+          try {
+            await createPrintJobsForOrder(prisma, printJobParams);
+          } catch (error) {
+            // O pedido já está confirmado e válido — uma falha aqui
+            // significa que o setor não vai ter o ticket impresso desta
+            // vez. Fica registrado no log do servidor (Vercel > Logs)
+            // pra investigar; não existe hoje uma varredura automática
+            // de "pedido sem PrintJob" (CLAUDE.md seção 20 pede
+            // estratégia de reprocessamento — a fila de impressão já
+            // tem reprocessar/reimprimir manual em /impressao, mas isso
+            // exige o PrintJob existir primeiro).
+            console.error(
+              `[createOrder] falha ao criar PrintJob do pedido ${result.order.id}:`,
+              error,
+            );
+          }
+        });
+
+        await runAfterResponse(() => publishChange(channels, "order.created"));
       }
 
       return result.order;

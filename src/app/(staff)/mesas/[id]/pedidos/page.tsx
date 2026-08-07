@@ -15,7 +15,6 @@ import { formatDateTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
 import { authorizeCancelAction, requestCancelAction } from "./actions";
 import { CancelItemForm } from "./cancel-item-form";
-import { OrderSentToast } from "./order-sent-toast";
 
 export default async function PedidosPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -41,7 +40,6 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-6 py-4">
-      <OrderSentToast />
       {canCreate && (
         <Button href={`/mesas/${id}/pedidos/novo`} className="self-start">
           + Novo pedido

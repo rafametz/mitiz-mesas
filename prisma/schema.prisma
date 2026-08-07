@@ -339,6 +339,12 @@ model ServiceSession {
 
   @@index([tableId])
   @@index([status])
+  // getTableWithActiveSession (chamada em quase toda tela) filtra pelos
+  // dois juntos — índice composto cobre essa consulta específica melhor
+  // que os dois separados (docs/performance/optimization-plan.md, Fase
+  // 5). Sem impacto medido no volume atual (6-8 mesas); custo de manter é
+  // zero.
+  @@index([tableId, status])
   @@map("service_sessions")
 }
 

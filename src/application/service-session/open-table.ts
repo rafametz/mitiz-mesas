@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canOpenTable } from "@/domain/table/states";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { runAfterResponse } from "@/lib/run-after-response";
 
 // Erro de negócio (mesa não livre / corrida) — distinto de erro de
 // validação de formulário ou erro inesperado, para quem chama decidir a
@@ -70,10 +71,14 @@ export async function openTable(input: OpenTableInput) {
 
     // Fora da transação — só depois de confirmado que a mesa realmente
     // abriu (regra 17/CLAUDE.md: efeito colateral não crítico não entra na
-    // transação de negócio).
-    await publishChange(
-      [tableChannel(data.tableId), restaurantTablesChannel(session.restaurantId)],
-      "table.opened",
+    // transação de negócio). Via runAfterResponse (Fase 2 da otimização
+    // de performance): o garçom não precisa esperar essa chamada de rede
+    // extra pra ver a mesa aberta.
+    await runAfterResponse(() =>
+      publishChange(
+        [tableChannel(data.tableId), restaurantTablesChannel(session.restaurantId)],
+        "table.opened",
+      ),
     );
 
     return session;

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canTransitionOrderItem, deriveOrderProgressStatus } from "@/domain/order/states";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, sectorChannel, tableChannel } from "@/lib/realtime/channels";
+import { runAfterResponse } from "@/lib/run-after-response";
 
 // Erro de negócio (transição inválida — item já avançou/foi cancelado por
 // outra tela enquanto esta estava aberta) — distinto de erro inesperado,
@@ -55,14 +56,12 @@ export async function updateOrderItemStatus(orderItemId: string, toStatus: Order
     };
   });
 
-  await publishChange(
-    [
-      tableChannel(result.tableId),
-      restaurantTablesChannel(result.restaurantId),
-      sectorChannel(result.sectorId),
-    ],
-    "order_item.status_changed",
-  );
+  const channels = [
+    tableChannel(result.tableId),
+    restaurantTablesChannel(result.restaurantId),
+    sectorChannel(result.sectorId),
+  ];
+  await runAfterResponse(() => publishChange(channels, "order_item.status_changed"));
 
   return result.updatedItem;
 }
