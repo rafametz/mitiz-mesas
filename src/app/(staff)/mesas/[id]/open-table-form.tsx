@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { SelectField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
+import { Input } from "@/components/ui/input";
 import { openTableAction, type FormState } from "./actions";
 
 const initialState: FormState = { error: null };
@@ -55,13 +56,10 @@ export function OpenTableForm({
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-ink">Nomes das pessoas (opcional)</span>
         {Array.from({ length: guestNameCount }).map((_, index) => (
-          <input
-            key={index}
-            name="guestName"
-            placeholder={`Pessoa ${index + 1}`}
-            maxLength={80}
-            className="h-11 rounded-lg border border-line bg-surface px-3 text-base focus:outline-none focus:ring-2 focus:ring-gold"
-          />
+          <label key={index} className="flex flex-col gap-1.5">
+            <span className="sr-only">{`Nome da pessoa ${index + 1}`}</span>
+            <Input name="guestName" placeholder={`Pessoa ${index + 1}`} maxLength={80} />
+          </label>
         ))}
         <button
           type="button"

@@ -1,8 +1,12 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
+import { ShoppingCart } from "lucide-react";
 import { SelectField, TextAreaField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { createOrderAction, type FormState } from "../actions";
 
 type ModifierOption = { id: string; name: string; priceDelta: string };
@@ -151,7 +155,7 @@ export function NewOrderForm({
 
   return (
     <div className="flex flex-col gap-6 py-4">
-      <div className="flex flex-col gap-4 rounded-card border border-line bg-surface p-4">
+      <Card className="flex flex-col gap-4">
         <h2 className="font-display text-base font-semibold text-ink">Adicionar item</h2>
 
         <SelectField
@@ -247,46 +251,45 @@ export function NewOrderForm({
 
         {itemError && <p className="text-sm text-wine">{itemError}</p>}
 
-        <button
-          type="button"
-          onClick={addToCart}
-          className="h-11 rounded-lg border border-wine text-sm font-semibold text-wine hover:bg-wine/5"
-        >
+        <Button variant="secondary" onClick={addToCart}>
           Adicionar ao pedido
-        </button>
-      </div>
+        </Button>
+      </Card>
 
       <div className="flex flex-col gap-3">
         <h2 className="font-display text-base font-semibold text-ink">
           Pedido ({cart.length} item(ns))
         </h2>
-        {cart.length === 0 && <p className="text-sm text-muted">Nenhum item adicionado ainda.</p>}
+        {cart.length === 0 && (
+          <EmptyState icon={ShoppingCart} title="Nenhum item adicionado ainda." />
+        )}
         <ul className="flex flex-col gap-2">
           {cart.map((item) => (
-            <li
-              key={item.key}
-              className="flex items-start justify-between rounded-card border border-line bg-surface p-3 text-sm"
-            >
-              <div>
-                <div className="text-ink">
-                  {item.quantity}x {item.productName}
+            <li key={item.key}>
+              <Card padding="sm" className="flex items-start justify-between text-sm">
+                <div>
+                  <div className="text-ink">
+                    {item.quantity}x {item.productName}
+                  </div>
+                  {item.guestName && (
+                    <div className="text-xs text-muted">Para: {item.guestName}</div>
+                  )}
+                  {item.modifierNames.length > 0 && (
+                    <div className="text-xs text-muted">+ {item.modifierNames.join(", ")}</div>
+                  )}
+                  {item.notes && <div className="text-xs text-muted">Obs.: {item.notes}</div>}
+                  <div className="tabular text-xs text-muted">
+                    {formatBRLNumber(item.estimatedLineTotal)}
+                  </div>
                 </div>
-                {item.guestName && <div className="text-xs text-muted">Para: {item.guestName}</div>}
-                {item.modifierNames.length > 0 && (
-                  <div className="text-xs text-muted">+ {item.modifierNames.join(", ")}</div>
-                )}
-                {item.notes && <div className="text-xs text-muted">Obs.: {item.notes}</div>}
-                <div className="tabular text-xs text-muted">
-                  {formatBRLNumber(item.estimatedLineTotal)}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => removeFromCart(item.key)}
-                className="text-xs font-medium text-wine underline"
-              >
-                Remover
-              </button>
+                <button
+                  type="button"
+                  onClick={() => removeFromCart(item.key)}
+                  className="text-xs font-medium text-wine underline"
+                >
+                  Remover
+                </button>
+              </Card>
             </li>
           ))}
         </ul>

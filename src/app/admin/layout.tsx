@@ -18,6 +18,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen md:flex">
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-control-sm focus:bg-wine focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-bg"
+      >
+        Pular para o conteúdo
+      </a>
       <aside className="flex flex-col gap-6 border-b border-shell-line bg-shell p-4 md:min-h-screen md:w-64 md:shrink-0 md:border-b-0 md:border-r md:p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -44,7 +50,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </Link>
       </aside>
 
-      <main className="mx-auto w-full max-w-4xl p-4 md:p-8">{children}</main>
+      <main id="conteudo" className="mx-auto w-full max-w-4xl p-4 md:p-8">
+        {children}
+      </main>
     </div>
   );
 }

@@ -4,12 +4,13 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS } from "@/domain/auth/permissions";
+import { PageHeader } from "@/components/ui/card";
 import { NewOrderForm } from "./new-order-form";
 
 export default async function NovoPedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await requirePermission(PERMISSIONS.ORDERS_CREATE);
-  const { session } = await getTableWithActiveSession(id);
+  const { table, session } = await getTableWithActiveSession(id);
   if (!session) redirect(`/mesas/${id}`);
 
   const restaurant = await getCurrentRestaurant();
@@ -28,35 +29,41 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
 
   if (products.length === 0) {
     return (
-      <p className="py-4 text-sm text-muted">
-        Nenhum produto disponível — cadastre produtos em Administração antes de lançar pedidos.
-      </p>
+      <div className="flex flex-col gap-4 py-4">
+        <PageHeader title="Novo pedido" subtitle={`Mesa ${table.number}`} />
+        <p className="text-sm text-muted">
+          Nenhum produto disponível — cadastre produtos em Administração antes de lançar pedidos.
+        </p>
+      </div>
     );
   }
 
   return (
-    <NewOrderForm
-      tableId={id}
-      serviceSessionId={session.id}
-      guests={session.guests.map((guest) => ({ id: guest.id, name: guest.name ?? "(sem nome)" }))}
-      products={products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        price: product.price.toString(),
-        categoryName: product.category.name,
-        modifierGroups: product.modifierGroups.map((group) => ({
-          id: group.id,
-          name: group.name,
-          required: group.required,
-          minSelect: group.minSelect,
-          maxSelect: group.maxSelect,
-          modifiers: group.modifiers.map((modifier) => ({
-            id: modifier.id,
-            name: modifier.name,
-            priceDelta: modifier.priceDelta.toString(),
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Novo pedido" subtitle={`Mesa ${table.number}`} />
+      <NewOrderForm
+        tableId={id}
+        serviceSessionId={session.id}
+        guests={session.guests.map((guest) => ({ id: guest.id, name: guest.name ?? "(sem nome)" }))}
+        products={products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          price: product.price.toString(),
+          categoryName: product.category.name,
+          modifierGroups: product.modifierGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            required: group.required,
+            minSelect: group.minSelect,
+            maxSelect: group.maxSelect,
+            modifiers: group.modifiers.map((modifier) => ({
+              id: modifier.id,
+              name: modifier.name,
+              priceDelta: modifier.priceDelta.toString(),
+            })),
           })),
-        })),
-      }))}
-    />
+        }))}
+      />
+    </div>
   );
 }

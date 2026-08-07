@@ -1,5 +1,8 @@
+import { History } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateTime } from "@/lib/datetime";
 
 // Histórico não depende de haver atendimento ativo — mostra atendimentos
@@ -16,10 +19,10 @@ export default async function HistoricoPage({ params }: { params: Promise<{ id: 
   return (
     <div className="flex flex-col gap-2 py-4">
       {sessions.length === 0 && (
-        <p className="text-sm text-muted">Nenhum atendimento encerrado ainda.</p>
+        <EmptyState icon={History} title="Nenhum atendimento encerrado ainda." />
       )}
       {sessions.map((session) => (
-        <div key={session.id} className="rounded-card border border-line bg-surface p-3 text-sm">
+        <Card key={session.id} padding="sm" className="text-sm">
           <div className="font-medium text-ink">
             {SERVICE_SESSION_STATUS_LABELS[session.status]}
           </div>
@@ -28,7 +31,7 @@ export default async function HistoricoPage({ params }: { params: Promise<{ id: 
             {session.closedAt ? formatDateTime(session.closedAt) : "—"} · Garçom:{" "}
             {session.waiter.name} · {session.guestCount} pessoa(s)
           </div>
-        </div>
+        </Card>
       ))}
     </div>
   );

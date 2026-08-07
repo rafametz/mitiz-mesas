@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { AlertTriangle, CircleDot, DoorOpen, Table2, Timer } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
-import { PageHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, PageHeader } from "@/components/ui/card";
 import { DonutChart } from "@/components/ui/donut-chart";
+import { EmptyState } from "@/components/ui/empty-state";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { restaurantTablesChannel } from "@/lib/realtime/channels";
 import { formatElapsed } from "@/lib/datetime";
@@ -57,11 +58,15 @@ export default async function AdminMesasPage() {
   const total = rows.length;
   const counts = { free: 0, occupied: 0, closing: 0, other: 0 };
   for (const row of rows) counts[statusBucket(row.status)] += 1;
-  const pct = (n: number) => (total > 0 ? `${((n / total) * 100).toFixed(1).replace(".0", "")}%` : "—");
+  const pct = (n: number) =>
+    total > 0 ? `${((n / total) * 100).toFixed(1).replace(".0", "")}%` : "—";
 
   const longOpenAlerts = rows
     .filter((r) => r.session)
-    .map((r) => ({ row: r, minutes: Math.floor((Date.now() - new Date(r.session!.openedAt).getTime()) / 60000) }))
+    .map((r) => ({
+      row: r,
+      minutes: Math.floor((Date.now() - new Date(r.session!.openedAt).getTime()) / 60000),
+    }))
     .filter((r) => r.minutes >= LONG_SESSION_ALERT_MINUTES)
     .sort((a, b) => b.minutes - a.minutes);
 
@@ -73,19 +78,24 @@ export default async function AdminMesasPage() {
       <PageHeader
         title="Mesas"
         subtitle="Visualize e gerencie todas as mesas do salão."
-        action={
-          <Link
-            href="/admin/mesas/nova"
-            className="flex items-center gap-1.5 rounded-lg bg-wine px-4 py-2 text-sm font-semibold text-white hover:bg-wine-dark"
-          >
-            + Nova mesa
-          </Link>
-        }
+        action={<Button href="/admin/mesas/nova">+ Nova mesa</Button>}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard icon={Table2} label="Total de mesas" value={total} hint="Cadastradas" tone="neutral" />
-        <StatCard icon={DoorOpen} label="Livres" value={counts.free} hint={pct(counts.free)} tone="free" />
+        <StatCard
+          icon={Table2}
+          label="Total de mesas"
+          value={total}
+          hint="Cadastradas"
+          tone="neutral"
+        />
+        <StatCard
+          icon={DoorOpen}
+          label="Livres"
+          value={counts.free}
+          hint={pct(counts.free)}
+          tone="free"
+        />
         <StatCard
           icon={CircleDot}
           label="Ocupadas"
@@ -108,18 +118,17 @@ export default async function AdminMesasPage() {
             <TableCard key={row.id} table={row} />
           ))}
           {rows.length === 0 && (
-            <p className="col-span-full text-sm text-muted">
-              Nenhuma mesa cadastrada.{" "}
-              <Link href="/admin/mesas/nova" className="font-medium text-wine underline">
-                Cadastrar a primeira
-              </Link>
-              .
-            </p>
+            <EmptyState
+              icon={Table2}
+              title="Nenhuma mesa cadastrada."
+              className="col-span-full"
+              action={<Button href="/admin/mesas/nova">Cadastrar a primeira</Button>}
+            />
           )}
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-card border border-line bg-surface p-4">
+          <Card>
             <h2 className="font-display text-sm font-semibold text-ink">Resumo do salão</h2>
             <div className="mt-3 flex items-center justify-center">
               <DonutChart
@@ -136,15 +145,17 @@ export default async function AdminMesasPage() {
               <LegendRow colorClass="bg-free" label="Livres" value={counts.free} />
               <LegendRow colorClass="bg-wine" label="Ocupadas" value={counts.occupied} />
               <LegendRow colorClass="bg-gold" label="Fechando" value={counts.closing} />
-              {counts.other > 0 && <LegendRow colorClass="bg-muted" label="Outras" value={counts.other} />}
+              {counts.other > 0 && (
+                <LegendRow colorClass="bg-muted" label="Outras" value={counts.other} />
+              )}
               <li className="mt-1 flex items-center justify-between border-t border-line pt-1.5 font-semibold text-ink">
                 <span>Total</span>
                 <span>{total}</span>
               </li>
             </ul>
-          </div>
+          </Card>
 
-          <div className="rounded-card border border-line bg-surface p-4">
+          <Card>
             <h2 className="font-display text-sm font-semibold text-ink">Alertas</h2>
             <ul className="mt-3 flex flex-col gap-3">
               {closingAlerts.map(({ id, number }) => (
@@ -165,7 +176,7 @@ export default async function AdminMesasPage() {
                 <li className="text-xs text-muted">Nenhum alerta no momento.</li>
               )}
             </ul>
-          </div>
+          </Card>
         </div>
       </div>
     </div>
@@ -199,7 +210,7 @@ function StatCard({
   }[tone];
 
   return (
-    <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
+    <Card className="flex flex-col gap-2">
       <div className="flex items-start justify-between">
         <span className="text-xs text-muted">{label}</span>
         <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
@@ -208,11 +219,19 @@ function StatCard({
       </div>
       <span className={`font-display text-2xl font-semibold ${toneClass}`}>{value}</span>
       <span className="text-xs text-muted">{hint}</span>
-    </div>
+    </Card>
   );
 }
 
-function LegendRow({ colorClass, label, value }: { colorClass: string; label: string; value: number }) {
+function LegendRow({
+  colorClass,
+  label,
+  value,
+}: {
+  colorClass: string;
+  label: string;
+  value: number;
+}) {
   return (
     <li className="flex items-center justify-between">
       <span className="flex items-center gap-1.5 text-muted">

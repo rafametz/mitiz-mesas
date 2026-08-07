@@ -1,6 +1,9 @@
+import { Layers } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { CheckboxField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL } from "@/lib/money";
 import {
   createModifier,
@@ -28,7 +31,7 @@ export async function ModifiersSection({ productId }: { productId: string }) {
         const createModifierInGroup = createModifier.bind(null, group.id);
 
         return (
-          <div key={group.id} className="rounded-card border border-line bg-surface p-4">
+          <Card key={group.id}>
             <form action={updateGroupWithId} className="flex flex-wrap items-end gap-3">
               <TextField
                 label="Grupo"
@@ -139,12 +142,12 @@ export async function ModifiersSection({ productId }: { productId: string }) {
               />
               <SubmitButton>Adicionar</SubmitButton>
             </form>
-          </div>
+          </Card>
         );
       })}
 
       {groups.length === 0 && (
-        <p className="text-sm text-muted">Nenhum grupo de adicionais ainda.</p>
+        <EmptyState icon={Layers} title="Nenhum grupo de adicionais ainda." />
       )}
 
       <div>

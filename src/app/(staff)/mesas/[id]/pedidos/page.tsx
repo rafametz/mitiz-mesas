@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { ReceiptText } from "lucide-react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/application/auth/get-current-user";
@@ -6,12 +6,16 @@ import { getTableWithActiveSession } from "@/application/service-session/get-tab
 import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { MEAT_POINT_LABELS, ORDER_ITEM_STATUS_LABELS } from "@/domain/order/labels";
 import { CANCELLABLE_ORDER_ITEM_STATUSES } from "@/domain/order/states";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ORDER_ITEM_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatDateTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
 import { authorizeCancelAction, requestCancelAction } from "./actions";
 import { CancelItemForm } from "./cancel-item-form";
+import { OrderSentToast } from "./order-sent-toast";
 
 export default async function PedidosPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,19 +41,19 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="flex flex-col gap-6 py-4">
+      <OrderSentToast />
       {canCreate && (
-        <Link
-          href={`/mesas/${id}/pedidos/novo`}
-          className="self-start rounded-lg bg-wine px-4 py-2.5 text-sm font-semibold text-bg hover:bg-wine-dark"
-        >
+        <Button href={`/mesas/${id}/pedidos/novo`} className="self-start">
           + Novo pedido
-        </Link>
+        </Button>
       )}
 
-      {orders.length === 0 && <p className="text-sm text-muted">Nenhum pedido enviado ainda.</p>}
+      {orders.length === 0 && (
+        <EmptyState icon={ReceiptText} title="Nenhum pedido enviado ainda." />
+      )}
 
       {orders.map((order) => (
-        <div key={order.id} className="rounded-card border border-line bg-surface p-4">
+        <Card key={order.id}>
           <div className="mb-3 flex items-center justify-between text-sm">
             <span className="font-display font-semibold text-ink">
               Pedido #{order.sequenceNumber}
@@ -77,9 +81,9 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
                         ? ` (${MEAT_POINT_LABELS[item.meatPoint]})`
                         : ""}
                     </span>
-                    <Badge tone={ORDER_ITEM_STATUS_TONE[item.status]}>
+                    <StatusBadge tone={ORDER_ITEM_STATUS_TONE[item.status]}>
                       {ORDER_ITEM_STATUS_LABELS[item.status]}
-                    </Badge>
+                    </StatusBadge>
                   </div>
                   {item.guest && <div className="text-xs text-muted">Para: {item.guest.name}</div>}
                   {item.modifiers.length > 0 && (
@@ -102,6 +106,7 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
                       action={authorizeWithIds}
                       label="Cancelar"
                       pendingLabel="Cancelando..."
+                      successMessage="Item cancelado."
                     />
                   )}
                   {isCancellable &&
@@ -112,6 +117,7 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
                         action={requestWithIds}
                         label="Solicitar cancelamento"
                         pendingLabel="Enviando..."
+                        successMessage="Cancelamento solicitado."
                       />
                     )}
                   {item.status === "CANCELLATION_REQUESTED" && !canAuthorizeCancel && (
@@ -123,7 +129,7 @@ export default async function PedidosPage({ params }: { params: Promise<{ id: st
               );
             })}
           </ul>
-        </div>
+        </Card>
       ))}
     </div>
   );

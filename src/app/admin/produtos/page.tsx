@@ -4,7 +4,7 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { SelectField, TextAreaField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { PageHeader } from "@/components/ui/card";
-import { Table, Td, Th, Tr } from "@/components/ui/table";
+import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
 import { formatBRL } from "@/lib/money";
 import { createProduct, toggleAvailability } from "./actions";
 
@@ -76,6 +76,40 @@ export default async function ProdutosPage() {
           )}
         </tbody>
       </Table>
+
+      <CardList>
+        {products.map((product) => {
+          const toggle = toggleAvailability.bind(null, product.id, !product.available);
+          return (
+            <CardListRow key={product.id}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-display font-semibold text-ink">{product.name}</span>
+                <Link
+                  href={`/admin/produtos/${product.id}/editar`}
+                  className="text-xs font-medium text-wine underline"
+                >
+                  Editar
+                </Link>
+              </div>
+              <CardListField label="Categoria">{product.category.name}</CardListField>
+              <CardListField label="Setor">{product.defaultSector.name}</CardListField>
+              <CardListField label="Preço">
+                <span className="tabular">{formatBRL(product.price)}</span>
+              </CardListField>
+              <CardListField label="Disponível">
+                <form action={toggle}>
+                  <button type="submit" className="font-medium text-wine underline">
+                    {product.available ? "Sim" : "Não"}
+                  </button>
+                </form>
+              </CardListField>
+            </CardListRow>
+          );
+        })}
+        {products.length === 0 && (
+          <p className="text-sm text-muted">Nenhum produto cadastrado ainda.</p>
+        )}
+      </CardList>
 
       <div className="border-t border-line pt-6">
         <h2 className="mb-3 font-display text-base font-semibold text-ink">Novo produto</h2>

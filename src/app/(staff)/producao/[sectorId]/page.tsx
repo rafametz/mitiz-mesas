@@ -7,7 +7,7 @@ import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { MEAT_POINT_LABELS } from "@/domain/order/labels";
-import { PageHeader } from "@/components/ui/card";
+import { Card, PageHeader } from "@/components/ui/card";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { sectorChannel } from "@/lib/realtime/channels";
 import { formatElapsed } from "@/lib/datetime";
@@ -32,9 +32,27 @@ const COLUMNS: {
   actionLabel?: string;
   pendingLabel?: string;
 }[] = [
-  { status: "SENT", title: "Novos", nextStatus: "IN_PREPARATION", actionLabel: "Iniciar preparo", pendingLabel: "Iniciando..." },
-  { status: "IN_PREPARATION", title: "Em preparo", nextStatus: "READY", actionLabel: "Marcar pronto", pendingLabel: "Marcando..." },
-  { status: "READY", title: "Prontos", nextStatus: "DELIVERED", actionLabel: "Marcar entregue", pendingLabel: "Entregando..." },
+  {
+    status: "SENT",
+    title: "Novos",
+    nextStatus: "IN_PREPARATION",
+    actionLabel: "Iniciar preparo",
+    pendingLabel: "Iniciando...",
+  },
+  {
+    status: "IN_PREPARATION",
+    title: "Em preparo",
+    nextStatus: "READY",
+    actionLabel: "Marcar pronto",
+    pendingLabel: "Marcando...",
+  },
+  {
+    status: "READY",
+    title: "Prontos",
+    nextStatus: "DELIVERED",
+    actionLabel: "Marcar entregue",
+    pendingLabel: "Entregando...",
+  },
   { status: "DELIVERED", title: "Entregues" },
 ];
 
@@ -116,7 +134,7 @@ export default async function ProducaoSectorPage({
 
               <div className="flex flex-col gap-2">
                 {items.map((item) => (
-                  <div key={item.id} className="rounded-card border border-line bg-surface p-3 text-sm">
+                  <Card key={item.id} padding="sm" className="text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-display font-semibold text-ink">
                         Mesa {item.order.serviceSession.table.number}
@@ -129,7 +147,9 @@ export default async function ProducaoSectorPage({
                         ? ` (${MEAT_POINT_LABELS[item.meatPoint]})`
                         : ""}
                     </div>
-                    {item.guest && <div className="text-xs text-muted">Para: {item.guest.name}</div>}
+                    {item.guest && (
+                      <div className="text-xs text-muted">Para: {item.guest.name}</div>
+                    )}
                     {item.modifiers.length > 0 && (
                       <div className="text-xs text-muted">
                         + {item.modifiers.map((m) => m.modifierNameAtOrder).join(", ")}
@@ -153,11 +173,9 @@ export default async function ProducaoSectorPage({
                         pendingLabel={column.pendingLabel}
                       />
                     )}
-                  </div>
+                  </Card>
                 ))}
-                {items.length === 0 && (
-                  <p className="px-1 text-xs text-muted">Nenhum item aqui.</p>
-                )}
+                {items.length === 0 && <p className="px-1 text-xs text-muted">Nenhum item aqui.</p>}
               </div>
             </div>
           );

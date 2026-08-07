@@ -5,8 +5,11 @@ import { requireUser } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
 import { TABLE_STATUS_LABELS } from "@/domain/table/labels";
-import { Badge } from "@/components/ui/badge";
+import { Table2 } from "lucide-react";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { STATUS_TONE_STRIP_CLASS, TABLE_STATUS_TONE } from "@/components/ui/status-tone";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { restaurantTablesChannel } from "@/lib/realtime/channels";
@@ -50,7 +53,9 @@ export default async function MesasPage() {
           const occupied = Boolean(session);
           const readyCount = session?.orders.reduce((n, o) => n + o.items.length, 0) ?? 0;
           const partiallyPaid =
-            session && session.paidAmount.greaterThan(0) && session.paidAmount.lessThan(session.totalAmount);
+            session &&
+            session.paidAmount.greaterThan(0) &&
+            session.paidAmount.lessThan(session.totalAmount);
           const tone = TABLE_STATUS_TONE[table.status];
 
           return (
@@ -66,19 +71,22 @@ export default async function MesasPage() {
 
               <div className="flex flex-1 flex-col gap-2 p-3.5">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-display text-xl font-semibold text-ink">{table.number}</span>
+                  <span className="font-display text-xl font-semibold text-ink">
+                    {table.number}
+                  </span>
                   {readyCount > 0 && (
                     <span
                       className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold-dark"
                       title={`${readyCount} item(ns) pronto(s) para entrega`}
                     >
-                      <Bell className="h-3 w-3" />
+                      <Bell className="h-3 w-3" aria-hidden />
                       {readyCount}
+                      <span className="sr-only"> item(ns) pronto(s) para entrega</span>
                     </span>
                   )}
                 </div>
 
-                <Badge tone={tone}>{TABLE_STATUS_LABELS[table.status]}</Badge>
+                <StatusBadge tone={tone}>{TABLE_STATUS_LABELS[table.status]}</StatusBadge>
 
                 {session ? (
                   <>
@@ -113,13 +121,12 @@ export default async function MesasPage() {
           );
         })}
         {tables.length === 0 && (
-          <p className="col-span-full text-sm text-muted">
-            Nenhuma mesa cadastrada.{" "}
-            <Link href="/admin/mesas" className="font-medium text-wine underline">
-              Cadastrar mesas
-            </Link>
-            .
-          </p>
+          <EmptyState
+            icon={Table2}
+            title="Nenhuma mesa cadastrada."
+            className="col-span-full"
+            action={<Button href="/admin/mesas">Cadastrar mesas</Button>}
+          />
         )}
       </div>
     </main>

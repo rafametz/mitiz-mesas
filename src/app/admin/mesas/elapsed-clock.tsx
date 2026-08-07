@@ -6,15 +6,22 @@ import { useEffect, useState } from "react";
 // tela — não é tempo real multiusuário (isso é Módulo 5, via WebSocket/
 // realtime), só evita a leitura "congelada" no momento do último carregamento
 // da página, como no painel de referência do administrador.
+//
+// Começa em `null` (renderiza "--:--:--") de propósito: calcular
+// Date.now() já no primeiro render causa mismatch de hidratação — o
+// servidor renderiza num instante, o cliente hidrata alguns segundos
+// depois, e o texto vem diferente. O relógio de verdade só liga dentro do
+// useEffect (garantido client-only, depois da montagem).
 export function ElapsedClock({ since }: { since: string }) {
-  const [label, setLabel] = useState(() => formatHms(since));
+  const [label, setLabel] = useState<string | null>(null);
 
   useEffect(() => {
+    setLabel(formatHms(since));
     const id = setInterval(() => setLabel(formatHms(since)), 1000);
     return () => clearInterval(id);
   }, [since]);
 
-  return <span className="tabular">{label}</span>;
+  return <span className="tabular">{label ?? "--:--:--"}</span>;
 }
 
 function formatHms(since: string): string {

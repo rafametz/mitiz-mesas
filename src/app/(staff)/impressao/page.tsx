@@ -1,10 +1,12 @@
+import { Printer } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { PRINT_JOB_STATUS_LABELS, PRINT_JOB_TYPE_LABELS } from "@/domain/printing/labels";
-import { Badge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/ui/card";
+import { Card, PageHeader } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { PRINT_JOB_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatDateTime } from "@/lib/datetime";
 import { reprintAction, reprocessAction } from "./actions";
@@ -31,11 +33,14 @@ export default async function ImpressaoPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
-      <PageHeader title="Impressão" subtitle="Últimos 50 tickets — ver docs/printing/architecture.md" />
+      <PageHeader
+        title="Impressão"
+        subtitle="Últimos 50 tickets — ver docs/printing/architecture.md"
+      />
 
       <div className="flex flex-col gap-2">
         {jobs.map((job) => (
-          <div key={job.id} className="rounded-card border border-line bg-surface p-3 text-sm">
+          <Card key={job.id} padding="sm" className="text-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-display font-semibold text-ink">
@@ -45,7 +50,9 @@ export default async function ImpressaoPage() {
                   Pedido #{job.order.sequenceNumber} · {job.sector.name}
                 </span>
               </div>
-              <Badge tone={PRINT_JOB_STATUS_TONE[job.status]}>{PRINT_JOB_STATUS_LABELS[job.status]}</Badge>
+              <StatusBadge tone={PRINT_JOB_STATUS_TONE[job.status]}>
+                {PRINT_JOB_STATUS_LABELS[job.status]}
+              </StatusBadge>
             </div>
 
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
@@ -74,10 +81,10 @@ export default async function ImpressaoPage() {
                 />
               )}
             </div>
-          </div>
+          </Card>
         ))}
         {jobs.length === 0 && (
-          <p className="text-sm text-muted">Nenhum ticket de impressão ainda.</p>
+          <EmptyState icon={Printer} title="Nenhum ticket de impressão ainda." />
         )}
       </div>
     </main>
