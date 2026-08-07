@@ -19,3 +19,15 @@ export function formatBRL(value: Prisma.Decimal.Value): string {
     currency: "BRL",
   });
 }
+
+// Prende um valor dentro de [min, max] — usado pra desconto nunca passar
+// do subtotal, saldo nunca ficar negativo, etc. (CLAUDE.md regra 20/21).
+export function clampDecimal(
+  value: Prisma.Decimal,
+  min: Prisma.Decimal,
+  max: Prisma.Decimal,
+): Prisma.Decimal {
+  if (value.lessThan(min)) return min;
+  if (value.greaterThan(max)) return max;
+  return value;
+}

@@ -105,6 +105,23 @@ async function findOrCreateAuthUser(): Promise<{ id: string; password: string | 
   return { id: data.user.id, password };
 }
 
+// Formas de pagamento padrão de um restaurante brasileiro — dado de
+// referência, não de negócio fictício (mesmo racional de Role/Permission):
+// toda operação de fechamento (Módulo 8) precisa de pelo menos uma forma
+// de pagamento cadastrada pra funcionar; sem seed, seria um pré-requisito
+// manual chato antes do primeiro fechamento de mesa.
+const DEFAULT_PAYMENT_METHODS = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX"];
+
+async function seedPaymentMethods(restaurantId: string) {
+  for (const [index, name] of DEFAULT_PAYMENT_METHODS.entries()) {
+    await prisma.paymentMethod.upsert({
+      where: { restaurantId_name: { restaurantId, name } },
+      update: {},
+      create: { restaurantId, name, sortOrder: index },
+    });
+  }
+}
+
 async function seedTestUser(restaurantId: string, adminRoleId: string) {
   const { id: authUserId, password } = await findOrCreateAuthUser();
 
@@ -131,6 +148,7 @@ async function main() {
   if (!adminRole) throw new Error("Role ADMIN não foi criada.");
 
   const testUser = await seedTestUser(restaurant.id, adminRole.id);
+  await seedPaymentMethods(restaurant.id);
 
   console.log("\nSeed concluído.");
   console.log(`Restaurant: ${restaurant.name} (${restaurant.id})`);

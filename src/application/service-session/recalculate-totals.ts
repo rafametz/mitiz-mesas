@@ -11,17 +11,24 @@ type KnownSessionAmounts = {
 // Recalcula os valores em cache da comanda (CLAUDE.md — ServiceSession
 // guarda subtotal/desconto/taxa/total/pago/saldo para não precisar somar
 // tudo de novo toda vez que a tela abre). Roda dentro da mesma transação
-// de quem mudou algo que afeta o total (criar pedido, cancelar item —
-// depois, aplicar desconto/taxa/pagamento nos Módulos 8).
-//
-// Desconto e taxa de serviço ainda não existem (Módulo 8) — ficam como já
-// estão gravados (0 por padrão), não são recalculados aqui.
+// de quem mudou algo que afeta o total: criar pedido, cancelar item
+// (discountAmount/serviceChargeAmount/paidAmount inalterados, só repassam
+// o valor atual) ou aplicar desconto/taxa/pagamento (Módulo 8 — quem
+// chama já calculou o valor novo daquele campo específico).
 //
 // `knownAmounts` é opcional: quem chama pode passar os 3 valores se já
-// tiver buscado a ServiceSession por outro motivo na mesma transação
-// (create-order.ts e cancel-order-item.ts fazem isso) — evita buscar a
-// mesma linha de novo à toa (docs/performance/audit.md, achado #2/#7).
-// Sem isso, busca do jeito de sempre.
+// tiver buscado/calculado a ServiceSession por outro motivo na mesma
+// transação — evita buscar a mesma linha de novo à toa (docs/performance/
+// audit.md, achado #2/#7). Sem isso, busca do jeito de sempre (útil só
+// fora do fluxo normal, ex.: um script de correção pontual).
+//
+// Importante: os 3 campos são sempre GRAVADOS de volta aqui (não só lidos
+// pra calcular total/saldo) — antes do Módulo 8 eles nunca mudavam, então
+// "recalcular" só escrevia subtotal/total/saldo; virou um bug real assim
+// que desconto/taxa/pagamento passaram a existir de verdade (a comanda
+// calculava o total certo na hora, mas o valor gravado de discountAmount/
+// serviceChargeAmount/paidAmount ficava sempre 0, expondo dado errado pra
+// quem lesse a ServiceSession fora desta função).
 export async function recalculateSessionTotals(
   tx: Prisma.TransactionClient,
   serviceSessionId: string,
@@ -58,6 +65,13 @@ export async function recalculateSessionTotals(
 
   await tx.serviceSession.update({
     where: { id: serviceSessionId },
-    data: { subtotalAmount, totalAmount, balanceAmount },
+    data: {
+      subtotalAmount,
+      discountAmount,
+      serviceChargeAmount,
+      paidAmount,
+      totalAmount,
+      balanceAmount,
+    },
   });
 }
