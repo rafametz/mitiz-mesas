@@ -23,6 +23,17 @@ import type { Config } from "tailwindcss";
 // quase universal em apps de salão (mapa de mesas), reconhecida à distância
 // sem precisar ler texto. Usada só como sinalizador fino (faixa/badge), nunca
 // como cor de ação ou identidade.
+//
+// Mapeamento semântico (docs/design/design-system.md): a paleta oficial da
+// marca tem só 5 cores travadas (bg/ink/muted/wine/gold) — não inventamos
+// hex novo para "danger"/"warning"/"success". `wine` cobre erro/perigo
+// (SubmitButton variant="danger", Badge tone="wine"), `gold` cobre atenção/
+// aguardando, `free` cobre sucesso/disponível. Não existe um "info" ainda
+// porque nenhuma tela precisou — não adicionar sem necessidade real.
+//
+// Espaçamento: a escala de `design-system.md` (4/8/12/16/20/24/32/40/48) é
+// exatamente o espaçamento padrão do Tailwind (1/2/3/4/5/6/8/10/12) — não
+// precisa de token extra, só usar a escala padrão.
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
@@ -56,7 +67,27 @@ const config: Config = {
         sans: ["var(--font-sans)", "sans-serif"],
       },
       borderRadius: {
+        // Escala de raios do design system. `control-sm`/`control` cobrem
+        // botão/input; `card` (já existia) e `panel` cobrem superfícies;
+        // "pill" (badges) não precisa de token — `rounded-full` do Tailwind
+        // já resolve. Componentes novos (Button/IconButton/Input) usam
+        // `control-sm` por enquanto para ficar pixel-idêntico ao que já
+        // está em produção (SubmitButton/TextField usavam `rounded-lg`, que
+        // é exatamente 0.5rem) — adotar `control` (10px) fica para quando
+        // as telas existentes forem migradas de propósito (não nesta fase).
+        "control-sm": "0.5rem",
+        control: "0.625rem",
         card: "0.875rem",
+        panel: "1rem",
+      },
+      boxShadow: {
+        // Sombras discretas — "priorizar contraste... evitar excesso de
+        // efeitos" (CLAUDE.md seção 11). Nenhum componente usa isso ainda
+        // nesta fase (Card/Button seguem sem sombra, como já é hoje);
+        // ficam disponíveis para painéis flutuantes futuros (diálogo de
+        // confirmação, drawer — Fase 2 do plano de modernização).
+        card: "0 1px 2px 0 rgb(0 0 0 / 0.04)",
+        panel: "0 4px 16px -4px rgb(0 0 0 / 0.16)",
       },
     },
   },

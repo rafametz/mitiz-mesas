@@ -1,12 +1,29 @@
+const CARD_PADDING = {
+  sm: "p-3",
+  md: "p-4",
+} as const;
+
+// Superfície padrão (card) do sistema — ver docs/design/frontend-audit.md,
+// item "Cards": hoje a maioria das telas ainda reescreve
+// `rounded-card border border-line bg-surface p-{3,4}` na mão em vez de
+// usar este componente. `padding` cobre os dois tamanhos já usados em
+// produção (a migração das telas existentes fica para uma fase seguinte,
+// não muda nada aqui além de deixar o componente pronto pra receber elas).
 export function Card({
   children,
+  padding = "md",
   className = "",
 }: {
   children: React.ReactNode;
+  padding?: keyof typeof CARD_PADDING;
   className?: string;
 }) {
   return (
-    <div className={`rounded-card border border-line bg-surface p-4 ${className}`}>{children}</div>
+    <div
+      className={`rounded-card border border-line bg-surface ${CARD_PADDING[padding]} ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { inputBaseClass } from "@/components/ui/input";
 
 // Wrapper simples label+input reutilizado nos formulários de admin — evita
 // repetir a mesma marcação de label/estilo em cada tela de cadastro.
@@ -9,8 +10,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes 
 // (ex.: edição do produto + criar grupo de adicionais + criar adicional,
 // todos têm um campo "name"/"active") — usar `name` como id colidiria e
 // faria o <label> associar ao input errado.
-const inputClass =
-  "h-11 rounded-lg border border-line bg-surface px-3 text-base text-ink placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-gold disabled:opacity-60";
+const inputClass = inputBaseClass;
 const labelClass = "text-sm font-medium text-ink";
 
 type FieldProps = {

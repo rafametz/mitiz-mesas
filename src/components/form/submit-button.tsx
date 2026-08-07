@@ -1,13 +1,12 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { buttonClassName, type ButtonVariant } from "@/components/ui/button";
 
-const VARIANTS = {
-  primary: "bg-wine text-bg hover:bg-wine-dark",
-  outline: "border border-ink/20 text-ink hover:bg-ink/5",
-  danger: "border border-wine/40 text-wine hover:bg-wine/5",
-} as const;
-
+// Estilo compartilhado com Button (src/components/ui/button.tsx) via
+// buttonClassName — só acrescenta o estado `pending` do useFormStatus e
+// força type="submit". Antes da Fase 1 do plano de modernização, o mapa de
+// variantes vivia duplicado aqui.
 export function SubmitButton({
   children,
   pendingLabel,
@@ -18,7 +17,7 @@ export function SubmitButton({
   children: React.ReactNode;
   pendingLabel?: string;
   disabled?: boolean;
-  variant?: keyof typeof VARIANTS;
+  variant?: ButtonVariant;
   className?: string;
 }) {
   const { pending } = useFormStatus();
@@ -26,7 +25,7 @@ export function SubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
-      className={`h-11 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
+      className={buttonClassName({ variant, className })}
     >
       {pending ? (pendingLabel ?? "Salvando...") : children}
     </button>
