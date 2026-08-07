@@ -70,6 +70,24 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   KITCHEN: [PERMISSIONS.PRODUCTION_STATUS_UPDATE, PERMISSIONS.PRINT_JOBS_MANAGE],
 };
 
+// Pra onde cada perfil vai direto depois do login, sem passar pela tela
+// "Conta" (pedido do usuário: administrador cai no painel de mesas do
+// admin, garçom cai no grid de mesas do app). Caixa segue o garçom (ainda
+// não existe tela própria de caixa — CLAUDE.md Módulo 8 — e o perfil
+// também precisa ver todas as mesas, seção 5); Produção vai direto pra
+// fila da cozinha/parrilla em vez do grid de mesas, hipótese reversível
+// (troca só o valor abaixo se não for o que a operação espera).
+export const POST_LOGIN_PATH: Record<RoleCode, string> = {
+  ADMIN: "/admin/mesas",
+  CASHIER: "/mesas",
+  WAITER: "/mesas",
+  KITCHEN: "/producao",
+};
+
+export function getPostLoginPath(roleCode: RoleCode): string {
+  return POST_LOGIN_PATH[roleCode];
+}
+
 // Checagem pura: dado o conjunto de códigos que o usuário tem (carregado do
 // banco via Role -> RolePermission), ele tem a permissão pedida?
 export function hasPermission(grantedCodes: readonly string[], code: PermissionCode): boolean {

@@ -13,7 +13,9 @@ async function login(page: Page) {
   await page.getByLabel("E-mail").fill(email!);
   await page.getByLabel("Senha").fill(password!);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page).toHaveURL("/", { timeout: NAV_TIMEOUT });
+  // Usuário de teste é Administrador — cai direto em /admin/mesas
+  // (getPostLoginPath), não mais em "/".
+  await expect(page).toHaveURL(/\/admin\/mesas/, { timeout: NAV_TIMEOUT });
 }
 
 const suffix = Date.now().toString(36);

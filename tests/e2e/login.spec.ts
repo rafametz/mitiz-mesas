@@ -25,7 +25,14 @@ test("login com credenciais válidas entra e permite sair", async ({ page }) => 
   // Timeout maior aqui de propósito: o round-trip real (Server Action ->
   // Supabase Auth -> redirect -> Server Component -> Prisma) passa de 5s
   // em ambientes com latência de rede mais alta até o Supabase.
-  await expect(page).toHaveURL("/", { timeout: 15000 });
+  // O usuário de teste é Administrador — cai direto no painel de mesas do
+  // admin (getPostLoginPath), não mais na tela "Conta".
+  await expect(page).toHaveURL(/\/admin\/mesas/, { timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Mesas" })).toBeVisible();
+
+  // "Conta" (alcançável pela barra inferior) continua mostrando
+  // identidade/perfil e é de onde se sai da conta.
+  await page.goto("/");
   await expect(page.getByText("Usuário de Teste (seed)")).toBeVisible();
   await expect(page.getByText("Administrador")).toBeVisible();
 

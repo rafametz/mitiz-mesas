@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  getPostLoginPath,
   hasAnyPermission,
   hasPermission,
   PERMISSIONS,
@@ -73,5 +74,22 @@ describe("ROLE_PERMISSIONS — regras de negócio (CLAUDE.md seção 5 / busines
 
   it("Caixa também reimprime conferências/comprovantes (CLAUDE.md seção 5)", () => {
     expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.PRINT_JOBS_MANAGE)).toBe(true);
+  });
+});
+
+// Pedido do usuário: cada perfil cai direto na sua tela principal depois
+// do login, sem passar pela tela "Conta".
+describe("getPostLoginPath", () => {
+  it("Administrador cai no painel de mesas do admin", () => {
+    expect(getPostLoginPath("ADMIN")).toBe("/admin/mesas");
+  });
+
+  it("Garçom e Caixa caem no grid de mesas do app", () => {
+    expect(getPostLoginPath("WAITER")).toBe("/mesas");
+    expect(getPostLoginPath("CASHIER")).toBe("/mesas");
+  });
+
+  it("Produção cai na fila de produção", () => {
+    expect(getPostLoginPath("KITCHEN")).toBe("/producao");
   });
 });
