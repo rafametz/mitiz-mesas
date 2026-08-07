@@ -2,6 +2,7 @@ import { CircleUserRound } from "lucide-react";
 import { requireUser } from "@/application/auth/get-current-user";
 import { Card } from "@/components/ui/card";
 import { SubmitButton } from "@/components/form/submit-button";
+import { BiometricSetup } from "@/components/auth/biometric-setup";
 import { signOut } from "../login/actions";
 
 // "Conta" — alcançável pela barra inferior. Navegação para Mesas/Admin já
@@ -27,6 +28,8 @@ export default async function ContaPage() {
           <dd className="text-ink">{user.email}</dd>
         </dl>
       </Card>
+
+      <BiometricSetup user={{ id: user.id, name: user.name, email: user.email }} />
 
       <form action={signOut}>
         <SubmitButton variant="outline" className="w-full">
