@@ -33,7 +33,14 @@ export const config = {
   // local de impressão do Módulo 7, autenticado por token Bearer próprio,
   // não por cookie do Supabase). Cada rota de API é responsável pela
   // própria autenticação.
+  //
+  // manifest.webmanifest e sw.js também ficam de fora, pelo mesmo motivo:
+  // o navegador busca os dois sem cookie de sessão nenhum pra decidir se
+  // oferece "Instalar app" — um redirect HTML pro login ali quebra a
+  // instalação (o manifesto vira HTML em vez de JSON) e impede o Service
+  // Worker de registrar (a especificação recusa registro se a resposta do
+  // próprio arquivo do SW for um redirect).
   matcher: [
-    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
