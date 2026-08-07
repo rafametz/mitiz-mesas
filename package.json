@@ -24,6 +24,7 @@
     "prisma:seed": "tsx --env-file=.env prisma/seed.ts",
     "auth:link-admin": "tsx --env-file=.env scripts/link-admin-user.ts",
     "cleanup:e2e-data": "tsx --env-file=.env scripts/cleanup-e2e-test-data.ts",
+    "reset:tables": "tsx --env-file=.env scripts/reset-tables.ts",
     "icons:generate": "tsx scripts/generate-app-icons.ts"
   },
   "prisma": {
