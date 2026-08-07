@@ -1,4 +1,10 @@
-import type { OrderItemStatus, PrintJobStatus, ServiceSessionStatus, TableStatus } from "@prisma/client";
+import type {
+  OrderItemStatus,
+  OrderStatus,
+  PrintJobStatus,
+  ServiceSessionStatus,
+  TableStatus,
+} from "@prisma/client";
 import type { AgentStatus } from "@/domain/printing/agent-status";
 
 // Mapeamento de status -> tom visual do Badge. Fica na camada de UI de
@@ -41,6 +47,21 @@ export const SERVICE_SESSION_STATUS_TONE: Record<
   PAID: "gold",
   CLOSED: "neutral",
   REOPENED: "wine",
+  CANCELLED: "muted",
+};
+
+// Status do pedido como um todo (rollup dos itens — deriveOrderProgressStatus
+// em src/domain/order/states.ts), mostrado no cabeçalho do card do pedido na
+// tela da mesa. "READY" usa wine (mesmo tom de item pronto) de propósito —
+// é a informação que o garçom mais precisa notar rápido.
+export const ORDER_STATUS_TONE: Record<OrderStatus, "neutral" | "wine" | "gold" | "muted"> = {
+  DRAFT: "muted",
+  SENT: "gold",
+  RECEIVED: "gold",
+  IN_PREPARATION: "gold",
+  READY: "wine",
+  DELIVERED: "neutral",
+  PARTIALLY_CANCELLED: "muted",
   CANCELLED: "muted",
 };
 

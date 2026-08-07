@@ -2,12 +2,13 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShoppingCart } from "lucide-react";
-import { SelectField, TextAreaField, TextField } from "@/components/form/field";
+import { Minus, Plus, ShoppingCart } from "lucide-react";
+import { SelectField, TextAreaField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { createOrderAction, type FormState } from "../actions";
 
@@ -55,6 +56,17 @@ const MEAT_POINTS = [
 
 const initialState: FormState = { error: null };
 
+// Mesmo intervalo validado no servidor (createOrderSchema em
+// src/application/order/create-order.ts) — clampar aqui é só conveniência
+// de UI, a validação real continua no backend (CLAUDE.md regra 24).
+const MIN_QUANTITY = 1;
+const MAX_QUANTITY = 50;
+
+function clampQuantity(value: number): number {
+  if (!Number.isFinite(value)) return MIN_QUANTITY;
+  return Math.min(MAX_QUANTITY, Math.max(MIN_QUANTITY, Math.trunc(value)));
+}
+
 function formatBRLNumber(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -86,7 +98,9 @@ export function NewOrderForm({
   useEffect(() => {
     if (wasPending.current && !isPending && state.success) {
       showToast("Pedido enviado.");
-      router.push(`/mesas/${tableId}/pedidos`);
+      // A lista de pedidos vive na tela principal da mesa desde a
+      // refatoração mobile-first (não existe mais "/pedidos" própria).
+      router.push(`/mesas/${tableId}`);
     }
     wasPending.current = isPending;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,7 +108,19 @@ export function NewOrderForm({
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
-  const [quantity, setQuantity] = useState(1);
+  // String, não number — bug de usabilidade no celular: com o campo
+  // controlado por um `number` que voltava pra "1" a cada tecla vazia
+  // (Number("") é 0, que é falsy), o garçom nunca conseguia apagar o "1"
+  // pra digitar outro número — o próximo dígito sempre grudava depois
+  // ("2" virava "12"). Guardando o texto bruto, o campo pode ficar vazio
+  // enquanto a pessoa digita; só normaliza (mínimo 1) ao sair do campo.
+  const [quantityInput, setQuantityInput] = useState("1");
+  const quantity = clampQuantity(Number(quantityInput));
+
+  function setQuantityClamped(next: number) {
+    setQuantityInput(String(clampQuantity(next)));
+  }
+
   const [guestId, setGuestId] = useState("");
   const [meatPoint, setMeatPoint] = useState("");
   const [notes, setNotes] = useState("");
@@ -151,7 +177,7 @@ export function NewOrderForm({
       },
     ]);
 
-    setQuantity(1);
+    setQuantityInput("1");
     setGuestId("");
     setMeatPoint("");
     setNotes("");
@@ -194,14 +220,43 @@ export function NewOrderForm({
           ))}
         </SelectField>
 
-        <TextField
-          label="Quantidade"
-          name="quantity"
-          type="number"
-          min={1}
-          value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value) || 1)}
-        />
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Quantidade</span>
+          <div className="flex items-center gap-2">
+            <IconButton
+              label="Diminuir quantidade"
+              icon={Minus}
+              size="md"
+              className="border border-line disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => setQuantityClamped(quantity - 1)}
+              disabled={quantity <= MIN_QUANTITY}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label="Quantidade"
+              value={quantityInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Só dígitos, campo pode ficar vazio enquanto digita — ver
+                // comentário em quantityInput acima.
+                if (raw === "" || /^\d+$/.test(raw)) setQuantityInput(raw);
+              }}
+              onFocus={(e) => e.target.select()}
+              onBlur={() => setQuantityInput(String(quantity))}
+              className="h-11 w-16 rounded-control-sm border border-line bg-surface text-center tabular text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
+            />
+            <IconButton
+              label="Aumentar quantidade"
+              icon={Plus}
+              size="md"
+              className="border border-line disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => setQuantityClamped(quantity + 1)}
+              disabled={quantity >= MAX_QUANTITY}
+            />
+          </div>
+        </div>
 
         {guests.length > 0 && (
           <SelectField

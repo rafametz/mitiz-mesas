@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, Users } from "lucide-react";
+import { ArrowLeft, Clock, History, Users } from "lucide-react";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
@@ -9,7 +9,6 @@ import { SERVICE_SESSION_STATUS_TONE, TABLE_STATUS_TONE } from "@/components/ui/
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { tableChannel } from "@/lib/realtime/channels";
 import { formatElapsed, formatTime } from "@/lib/datetime";
-import { MesaTabs } from "./mesa-tabs";
 
 export default async function MesaLayout({
   children,
@@ -60,9 +59,12 @@ export default async function MesaLayout({
             </div>
           )}
         </div>
+        {/* Histórico é a informação menos usada durante o atendimento ativo
+            (é sobre atendimentos já encerrados) — fica um ícone discreto no
+            cabeçalho, não uma aba do mesmo peso que Pedidos/Comanda
+            (refatoração mobile-first da tela da mesa). */}
+        <IconButton href={`/mesas/${id}/historico`} label="Histórico da mesa" icon={History} />
       </div>
-
-      {session && <MesaTabs tableId={id} />}
 
       {children}
     </div>

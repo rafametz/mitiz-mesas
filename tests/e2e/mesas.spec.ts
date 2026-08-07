@@ -49,18 +49,17 @@ test.describe("Módulo 3 — mesas e atendimentos", () => {
     await page.getByPlaceholder("Pessoa 1").fill("Ana");
     await page.getByRole("button", { name: "Abrir mesa" }).click();
 
-    // Depois de aberta: cabeçalho mostra "Aberto" e as abas aparecem.
+    // Depois de aberta: cabeçalho mostra "Aberto" — Comanda/Pedidos/Pessoas
+    // vivem todos na mesma tela agora (refatoração mobile-first), sem abas.
     await expect(page.getByText("Aberto", { exact: false })).toBeVisible({ timeout: NAV_TIMEOUT });
-    const pessoasTab = page.getByRole("link", { name: "Pessoas" });
-    await expect(pessoasTab).toBeVisible({ timeout: NAV_TIMEOUT });
 
-    // Aba Pessoas mostra o nome já informado na abertura.
-    await pessoasTab.click();
-    await expect(page).toHaveURL(/\/pessoas$/, { timeout: NAV_TIMEOUT });
-    await expect(page.getByText("Cliente Teste")).toBeVisible({ timeout: NAV_TIMEOUT });
+    // Pessoas: o nome já informado na abertura aparece direto no bloco
+    // compacto, sem precisar navegar nem expandir.
     await expect(page.getByText("Ana", { exact: true })).toBeVisible({ timeout: NAV_TIMEOUT });
 
-    // Adiciona mais uma pessoa pela aba.
+    // Expande o bloco de Pessoas pra ver o responsável e adicionar alguém.
+    await page.getByTestId("pessoas-toggle").click();
+    await expect(page.getByText("Cliente Teste")).toBeVisible({ timeout: NAV_TIMEOUT });
     await page.getByLabel("Adicionar pessoa").fill("Beto");
     await page.getByRole("button", { name: "Adicionar" }).click();
     await expect(page.getByText("Beto", { exact: true })).toBeVisible({ timeout: NAV_TIMEOUT });

@@ -76,12 +76,12 @@ export async function createOrderAction(
 
   // Não redireciona mais no servidor — o pedido já está gravado e
   // confirmado neste ponto (docs/performance/optimization-plan.md, Fase
-  // 4). revalidatePath ainda marca as rotas como desatualizadas, pra
-  // quando o cliente navegar buscar dado fresco, mas quem decide
-  // navegar — e mostra a confirmação — é o componente cliente,
-  // imediatamente ao ver este retorno, sem esperar uma navegação
-  // completa do servidor primeiro.
-  revalidatePath(`/mesas/${tableId}/pedidos`);
+  // 4). revalidatePath ainda marca a rota como desatualizada, pra quando
+  // o cliente navegar buscar dado fresco, mas quem decide navegar — e
+  // mostra a confirmação — é o componente cliente, imediatamente ao ver
+  // este retorno, sem esperar uma navegação completa do servidor primeiro.
+  // A lista de pedidos vive na tela principal da mesa desde a refatoração
+  // mobile-first (não existe mais uma página "/pedidos" própria).
   revalidatePath(`/mesas/${tableId}`);
   return { error: null, success: true };
 }
@@ -106,7 +106,7 @@ export async function requestCancelAction(
     if (zodMessage) return { error: zodMessage };
     return { error: "Não foi possível solicitar o cancelamento." };
   }
-  revalidatePath(`/mesas/${tableId}/pedidos`);
+  revalidatePath(`/mesas/${tableId}`);
   return { error: null };
 }
 
@@ -125,6 +125,6 @@ export async function authorizeCancelAction(
     if (zodMessage) return { error: zodMessage };
     return { error: "Não foi possível cancelar o item." };
   }
-  revalidatePath(`/mesas/${tableId}/pedidos`);
+  revalidatePath(`/mesas/${tableId}`);
   return { error: null };
 }

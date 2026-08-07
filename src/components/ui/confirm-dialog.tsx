@@ -21,6 +21,7 @@ export function ConfirmDialog({
   cancelLabel = "Cancelar",
   onCancel,
   confirmSlot,
+  children,
 }: {
   open: boolean;
   title: string;
@@ -28,6 +29,10 @@ export function ConfirmDialog({
   cancelLabel?: string;
   onCancel: () => void;
   confirmSlot: React.ReactNode;
+  // Conteúdo extra entre a descrição e os botões — hoje só o campo de
+  // motivo do cancelamento de item (CancelItemForm), quando a confirmação
+  // precisa coletar um dado, não só um "sim/não".
+  children?: React.ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -68,6 +73,7 @@ export function ConfirmDialog({
         <p id={descriptionId} className="text-sm text-muted">
           {description}
         </p>
+        {children}
         <div className="mt-2 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>
             {cancelLabel}

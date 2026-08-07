@@ -59,5 +59,7 @@ export async function addGuest(sessionId: string, tableId: string, formData: For
     data: { serviceSessionId: sessionId, name, sortOrder: (lastGuest?.sortOrder ?? -1) + 1 },
   });
 
-  revalidatePath(`/mesas/${tableId}/pessoas`);
+  // Pessoas vive na tela principal da mesa desde a refatoração
+  // mobile-first (não existe mais uma página "/pessoas" própria).
+  revalidatePath(`/mesas/${tableId}`);
 }

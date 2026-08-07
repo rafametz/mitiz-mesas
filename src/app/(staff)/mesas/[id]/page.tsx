@@ -1,13 +1,37 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ChevronDown, Plus, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
+import {
+  MEAT_POINT_LABELS,
+  ORDER_ITEM_STATUS_LABELS,
+  ORDER_STATUS_LABELS,
+} from "@/domain/order/labels";
+import { CANCELLABLE_ORDER_ITEM_STATUSES } from "@/domain/order/states";
+import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
+import { TextField } from "@/components/form/field";
+import { SubmitButton } from "@/components/form/submit-button";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Fab } from "@/components/ui/fab";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { ORDER_ITEM_STATUS_TONE, ORDER_STATUS_TONE } from "@/components/ui/status-tone";
+import { formatTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
+import { addGuest } from "./actions";
 import { OpenTableForm } from "./open-table-form";
+import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
+import { CancelItemForm } from "./pedidos/cancel-item-form";
 
+// Refatoração mobile-first da tela da mesa (foco: garçom em atendimento) —
+// Comanda + Pedidos + Pessoas viviam em 3 páginas/abas separadas; viram uma
+// só, porque são as 3 coisas que o garçom checa o tempo todo durante o
+// serviço. Pagamentos (sem uso real até o Módulo 8) e Histórico (raro
+// durante atendimento ativo) saíram da navegação principal — ver
+// mesa-tabs removido e IconButton de histórico em layout.tsx.
 function SummaryField({
   label,
   value,
@@ -21,13 +45,13 @@ function SummaryField({
 }) {
   return (
     <div
-      className={`rounded-card border p-3 ${
-        emphasis ? "border-wine/25 bg-wine/[0.04]" : "border-line bg-surface"
+      className={`rounded-control-sm border p-2 ${
+        emphasis ? "border-wine/25 bg-wine/[0.04]" : "border-line bg-bg/60"
       }`}
     >
       <div className="text-xs text-muted">{label}</div>
       <div
-        className={`tabular font-display text-lg font-semibold ${emphasis ? "text-wine" : "text-ink"}`}
+        className={`tabular font-display text-sm font-semibold ${emphasis ? "text-wine" : "text-ink"}`}
         data-testid={testId}
       >
         {value}
@@ -65,45 +89,281 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
     );
   }
 
-  const orderCount = await prisma.order.count({ where: { serviceSessionId: session.id } });
+  // Mais recentes primeiro — é o que acabou de acontecer que o garçom quer
+  // ver primeiro (item pronto, pedido que acabou de sair).
+  const orders = await prisma.order.findMany({
+    where: { serviceSessionId: session.id },
+    orderBy: { sequenceNumber: "desc" },
+    include: {
+      items: {
+        include: { modifiers: true, guest: true, cancelledBy: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  const canCreateOrder = hasPermission(user.permissions, PERMISSIONS.ORDERS_CREATE);
+  const canRequestCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_REQUEST);
+  const canAuthorizeCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_AUTHORIZE);
+  const canAddGuest = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
+  // Pagamento ainda não existe de verdade (Módulo 8) — paidAmount só fica
+  // > 0 quando essa funcionalidade nascer; a UI já fica pronta pra isso sem
+  // precisar de outra alteração de tela.
+  const hasPartialPayment = session.paidAmount.greaterThan(0);
+
+  const addGuestWithIds = addGuest.bind(null, session.id, id);
+
+  // Totalizador tipo nota: junta os itens de todos os pedidos ("2x Anjo",
+  // "1x Panceta"...) numa única lista, em vez do garçom somar pedido por
+  // pedido pra saber o consumo total ou falar o valor pro cliente (pedido
+  // do usuário). Fica sempre visível — diferente do resumo financeiro e de
+  // pessoas — porque é a pergunta mais frequente durante o atendimento.
+  const consolidatedSummary = buildConsolidatedSummary(orders.flatMap((order) => order.items));
 
   return (
-    <div className="flex flex-col gap-4 pb-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <SummaryField
-          label="Subtotal"
-          value={formatBRL(session.subtotalAmount)}
-          testId="resumo-subtotal"
-        />
-        <SummaryField
-          label="Taxa de serviço"
-          value={formatBRL(session.serviceChargeAmount)}
-          testId="resumo-taxa"
-        />
-        <SummaryField
-          label="Desconto"
-          value={formatBRL(session.discountAmount)}
-          testId="resumo-desconto"
-        />
-        <SummaryField label="Total" value={formatBRL(session.totalAmount)} testId="resumo-total" />
-        <SummaryField label="Pago" value={formatBRL(session.paidAmount)} testId="resumo-pago" />
-        <SummaryField
-          label="Saldo"
-          value={formatBRL(session.balanceAmount)}
-          testId="resumo-saldo"
-          emphasis
-        />
-      </div>
-      <p className="text-sm text-muted">
-        Taxa, desconto e pagamentos ainda não são aplicáveis por aqui — chegam no Módulo 8.
-      </p>
-      <Link
-        href={`/mesas/${id}/pedidos`}
-        className="flex items-center gap-1.5 self-start text-sm font-medium text-wine"
-      >
-        {orderCount === 0 ? "Lançar primeiro pedido" : `Ver pedidos (${orderCount})`}
-        <ArrowRight className="h-4 w-4" />
-      </Link>
+    <div className="flex flex-col gap-4 pb-24">
+      {hasPartialPayment && (
+        <Link
+          href={`/mesas/${id}/pagamentos`}
+          className="rounded-card border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-medium text-gold-dark"
+        >
+          Pagamento parcial — pago {formatBRL(session.paidAmount)}, saldo restante{" "}
+          {formatBRL(session.balanceAmount)}
+        </Link>
+      )}
+
+      {/* Resumo financeiro: só Subtotal fica sempre visível — os outros 5
+          valores hoje ficam sempre zerados (Módulo 8 não existe ainda), então
+          mostrá-los sempre era ruído, não informação. Um toque expande. */}
+      <details className="group overflow-hidden rounded-card border border-line bg-surface">
+        <summary
+          data-testid="financeiro-toggle"
+          className="flex cursor-pointer list-none items-center justify-between px-3 py-3"
+        >
+          <span className="text-xs text-muted">Subtotal</span>
+          <span className="flex items-center gap-2">
+            <span
+              className="tabular font-display text-lg font-semibold text-ink"
+              data-testid="resumo-subtotal"
+            >
+              {formatBRL(session.subtotalAmount)}
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+          </span>
+        </summary>
+        <div className="grid grid-cols-2 gap-2 border-t border-line px-3 py-3 sm:grid-cols-3">
+          <SummaryField
+            label="Taxa de serviço"
+            value={formatBRL(session.serviceChargeAmount)}
+            testId="resumo-taxa"
+          />
+          <SummaryField
+            label="Desconto"
+            value={formatBRL(session.discountAmount)}
+            testId="resumo-desconto"
+          />
+          <SummaryField
+            label="Total"
+            value={formatBRL(session.totalAmount)}
+            testId="resumo-total"
+          />
+          <SummaryField label="Pago" value={formatBRL(session.paidAmount)} testId="resumo-pago" />
+          <SummaryField
+            label="Saldo"
+            value={formatBRL(session.balanceAmount)}
+            testId="resumo-saldo"
+            emphasis
+          />
+        </div>
+      </details>
+
+      {/* Resumo da comanda: totalizador estilo nota — todos os itens de
+          todos os pedidos, agrupados e somados. Sempre visível (pedido
+          explícito do usuário): é a informação que o garçom mais usa pra
+          falar o consumo pro cliente, diferente do detalhe por pedido
+          abaixo, que fica escondido. */}
+      <Card>
+        <h2 className="mb-2 text-sm font-semibold text-ink">Resumo da comanda</h2>
+        {consolidatedSummary.lines.length === 0 ? (
+          <p className="text-sm text-muted">Nenhum item lançado ainda.</p>
+        ) : (
+          <>
+            <ul className="flex flex-col gap-1.5 text-sm">
+              {consolidatedSummary.lines.map((line) => (
+                <li key={line.key} className="flex items-baseline justify-between gap-3">
+                  <span className="text-ink">
+                    {line.quantity}x {line.label}
+                  </span>
+                  <span className="tabular shrink-0 text-muted">{formatBRL(line.lineTotal)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2 text-sm font-semibold text-ink">
+              <span>Total</span>
+              <span className="tabular font-display text-base">
+                {formatBRL(consolidatedSummary.total)}
+              </span>
+            </div>
+          </>
+        )}
+      </Card>
+
+      {/* Pessoas: uma linha compacta, expande só quando precisa adicionar
+          alguém ou ver o responsável — antes era uma página inteira própria. */}
+      <details className="group overflow-hidden rounded-card border border-line bg-surface">
+        <summary
+          data-testid="pessoas-toggle"
+          className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-3 text-sm"
+        >
+          <span className="flex flex-wrap items-center gap-1.5">
+            {session.guests.length === 0 && (
+              <span className="text-muted">Nenhum nome informado</span>
+            )}
+            {session.guests.map((guest) => (
+              <span key={guest.id} className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink">
+                {guest.name}
+              </span>
+            ))}
+            <span className="text-xs text-muted">
+              ({session.guests.length}/{session.guestCount})
+            </span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+          <div>
+            <span className="text-xs text-muted">Responsável</span>
+            <p className="text-sm text-ink">{session.responsibleName ?? "Não informado"}</p>
+          </div>
+          {canAddGuest && (
+            <form action={addGuestWithIds} className="flex items-end gap-2">
+              <TextField label="Adicionar pessoa" name="name" required maxLength={80} />
+              <SubmitButton>Adicionar</SubmitButton>
+            </form>
+          )}
+        </div>
+      </details>
+
+      {/* Pedidos — detalhe por pedido (horário, status, cancelamento). Fica
+          escondido por padrão: o Resumo da comanda acima já responde "o
+          que tem na mesa"; isto aqui é pra quando alguém precisa saber
+          quando um pedido específico foi enviado ou cancelar um item
+          (pedido do usuário — inverte a prioridade de visibilidade). */}
+      <details className="group overflow-hidden rounded-card border border-line bg-surface">
+        <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-3 text-sm">
+          <span className="font-semibold text-ink">Ver todos os pedidos ({orders.length})</span>
+          <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+        </summary>
+
+        <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
+          {orders.length === 0 && (
+            <EmptyState icon={ReceiptText} title="Nenhum pedido enviado ainda." />
+          )}
+
+          {orders.map((order) => {
+            // Quando todo item do pedido está no mesmo status, o badge do
+            // cabeçalho já conta a história inteira — repetir o mesmo badge
+            // em cada item (ex.: pedido de 1 item) era duplicação visual sem
+            // informação nova (feedback do usuário sobre a refatoração da
+            // tela). Só vale a pena mostrar o status por item quando eles
+            // divergem (ex.: um item pronto, outro ainda em preparo).
+            const itemStatuses = new Set(order.items.map((item) => item.status));
+            const showItemStatus = itemStatuses.size > 1;
+
+            return (
+              <Card key={order.id}>
+                <div className="mb-3 flex items-center justify-between gap-2 text-sm">
+                  <span className="font-display font-semibold text-ink">
+                    #{order.sequenceNumber} · {formatTime(order.createdAt)}
+                  </span>
+                  <StatusBadge tone={ORDER_STATUS_TONE[order.status]}>
+                    {ORDER_STATUS_LABELS[order.status]}
+                  </StatusBadge>
+                </div>
+
+                <ul className="flex flex-col gap-3">
+                  {order.items.map((item) => {
+                    const isCancellable = CANCELLABLE_ORDER_ITEM_STATUSES.includes(item.status);
+                    const requestWithIds = requestCancelAction.bind(null, item.id, id);
+                    const authorizeWithIds = authorizeCancelAction.bind(null, item.id, id);
+                    const itemLabel = `${item.quantity}x ${item.productNameAtOrder}`;
+
+                    return (
+                      <li
+                        key={item.id}
+                        className="border-t border-line pt-3 text-sm first:border-t-0 first:pt-0"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-ink">
+                            {itemLabel}
+                            {item.meatPoint && item.meatPoint !== "NAO_SE_APLICA"
+                              ? ` (${MEAT_POINT_LABELS[item.meatPoint]})`
+                              : ""}
+                          </span>
+                          {showItemStatus && (
+                            <StatusBadge tone={ORDER_ITEM_STATUS_TONE[item.status]}>
+                              {ORDER_ITEM_STATUS_LABELS[item.status]}
+                            </StatusBadge>
+                          )}
+                        </div>
+                        {item.guest && (
+                          <div className="text-xs text-muted">Para: {item.guest.name}</div>
+                        )}
+                        {item.modifiers.length > 0 && (
+                          <div className="text-xs text-muted">
+                            + {item.modifiers.map((m) => m.modifierNameAtOrder).join(", ")}
+                          </div>
+                        )}
+                        {item.notes && <div className="text-xs text-muted">Obs.: {item.notes}</div>}
+
+                        {item.status === "CANCELLED" && (
+                          <p className="mt-1 text-xs text-wine">
+                            Cancelado: {item.cancelReason}
+                            {item.cancelledBy && ` (${item.cancelledBy.name})`}
+                          </p>
+                        )}
+
+                        {isCancellable && canAuthorizeCancel && (
+                          <CancelItemForm
+                            action={authorizeWithIds}
+                            label="Cancelar"
+                            pendingLabel="Cancelando..."
+                            successMessage="Item cancelado."
+                            itemLabel={itemLabel}
+                          />
+                        )}
+                        {isCancellable &&
+                          !canAuthorizeCancel &&
+                          canRequestCancel &&
+                          item.status !== "CANCELLATION_REQUESTED" && (
+                            <CancelItemForm
+                              action={requestWithIds}
+                              label="Solicitar cancelamento"
+                              pendingLabel="Enviando..."
+                              successMessage="Cancelamento solicitado."
+                              itemLabel={itemLabel}
+                            />
+                          )}
+                        {item.status === "CANCELLATION_REQUESTED" && !canAuthorizeCancel && (
+                          <p className="mt-1 text-xs text-gold-dark">
+                            Cancelamento solicitado — aguardando autorização.
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            );
+          })}
+        </div>
+      </details>
+
+      {canCreateOrder && (
+        <Fab href={`/mesas/${id}/pedidos/novo`} icon={Plus}>
+          Novo pedido
+        </Fab>
+      )}
     </div>
   );
 }

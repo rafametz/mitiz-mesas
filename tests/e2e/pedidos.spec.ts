@@ -79,10 +79,10 @@ test.describe("Módulo 4 — pedidos", () => {
     await page.getByRole("button", { name: "Abrir mesa" }).click();
     await expect(page.getByText("Aberto", { exact: false })).toBeVisible({ timeout: NAV_TIMEOUT });
 
-    // Lança o pedido (Módulo 4).
-    await page.getByRole("link", { name: "Pedidos", exact: true }).click();
-    await expect(page).toHaveURL(/\/pedidos$/, { timeout: NAV_TIMEOUT });
-    await page.getByRole("link", { name: "+ Novo pedido" }).click();
+    // Lança o pedido (Módulo 4) — Comanda e Pedidos vivem na mesma tela
+    // desde a refatoração mobile-first; o FAB "Novo pedido" é o único toque
+    // necessário até chegar no formulário.
+    await page.getByRole("link", { name: "Novo pedido" }).click();
     await expect(page).toHaveURL(/\/pedidos\/novo$/, { timeout: NAV_TIMEOUT });
 
     const productSelect = page.getByLabel("Produto");
@@ -96,31 +96,35 @@ test.describe("Módulo 4 — pedidos", () => {
     await expect(page.getByText("2x " + productName)).toBeVisible();
 
     await page.getByRole("button", { name: "Enviar pedido" }).click();
-    await expect(page).toHaveURL(/\/pedidos$/, { timeout: NAV_TIMEOUT });
+    await expect(page).toHaveURL(/\/mesas\/[^/]+$/, { timeout: NAV_TIMEOUT });
     await expect(page.getByText("2x " + productName)).toBeVisible({ timeout: NAV_TIMEOUT });
     await expect(page.getByText("Manteiga extra", { exact: false })).toBeVisible();
 
-    // Comanda mostra o subtotal real: (50 + 3) * 2 = 106,00.
-    await page.getByRole("link", { name: "Comanda" }).click();
-    await expect(page).toHaveURL(/\/mesas\/[^/]+$/, { timeout: NAV_TIMEOUT });
+    // Subtotal já aparece direto na tela (real: (50 + 3) * 2 = 106,00), sem
+    // navegar. Total/Saldo ficam no resumo financeiro expansível.
     await expect(page.getByTestId("resumo-subtotal")).toHaveText("R$ 106,00", {
       timeout: NAV_TIMEOUT,
     });
+    await page.getByTestId("financeiro-toggle").click();
     await expect(page.getByTestId("resumo-total")).toHaveText("R$ 106,00");
     await expect(page.getByTestId("resumo-saldo")).toHaveText("R$ 106,00");
 
-    // Cancela o item (usuário de teste é Admin — autoriza direto).
-    await page.getByRole("link", { name: "Pedidos", exact: true }).click();
-    await expect(page).toHaveURL(/\/pedidos$/, { timeout: NAV_TIMEOUT });
-    await page.getByPlaceholder("Motivo").fill("Cliente desistiu do prato");
+    // Cancela o item (usuário de teste é Admin — autoriza direto) — já na
+    // mesma tela, sem navegar. Botão compacto abre um diálogo de
+    // confirmação com o motivo dentro (não fica mais um campo sempre
+    // aberto em cada item).
     await page.getByRole("button", { name: "Cancelar" }).click();
+    // [open] — cada item cancelável tem seu próprio <dialog> no DOM (só um
+    // fica aberto por vez); sem isso, o locator pode casar mais de um.
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog).toBeVisible({ timeout: NAV_TIMEOUT });
+    await dialog.getByLabel("Motivo").fill("Cliente desistiu do prato");
+    await dialog.getByRole("button", { name: "Cancelar" }).click();
     await expect(page.getByText("Cancelado:", { exact: false })).toBeVisible({
       timeout: NAV_TIMEOUT,
     });
 
-    // Comanda reflete o cancelamento — subtotal volta a zero.
-    await page.getByRole("link", { name: "Comanda" }).click();
-    await expect(page).toHaveURL(/\/mesas\/[^/]+$/, { timeout: NAV_TIMEOUT });
+    // Subtotal volta a zero — ainda na mesma tela.
     await expect(page.getByTestId("resumo-subtotal")).toHaveText("R$ 0,00", {
       timeout: NAV_TIMEOUT,
     });
