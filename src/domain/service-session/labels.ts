@@ -1,4 +1,4 @@
-import { ServiceSessionStatus } from "@prisma/client";
+import { DiscountType, ServiceSessionStatus } from "@prisma/client";
 
 export const SERVICE_SESSION_STATUS_LABELS: Record<ServiceSessionStatus, string> = {
   OPEN: "Aberto",
@@ -8,4 +8,9 @@ export const SERVICE_SESSION_STATUS_LABELS: Record<ServiceSessionStatus, string>
   CLOSED: "Fechado",
   REOPENED: "Reaberto",
   CANCELLED: "Cancelado",
+};
+
+export const DISCOUNT_TYPE_LABELS: Record<DiscountType, string> = {
+  PERCENTAGE: "Percentual",
+  FIXED_AMOUNT: "Valor fixo",
 };

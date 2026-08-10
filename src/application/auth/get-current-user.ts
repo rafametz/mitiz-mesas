@@ -3,7 +3,12 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { hasPermission, type PermissionCode, type RoleCode } from "@/domain/auth/permissions";
+import {
+  hasAnyPermission,
+  hasPermission,
+  type PermissionCode,
+  type RoleCode,
+} from "@/domain/auth/permissions";
 
 export type CurrentUser = {
   id: string;
@@ -76,6 +81,17 @@ export async function requireUser(): Promise<CurrentUser> {
 export async function requirePermission(code: PermissionCode): Promise<CurrentUser> {
   const user = await requireUser();
   if (!hasPermission(user.permissions, code)) {
+    redirect("/sem-permissao");
+  }
+  return user;
+}
+
+// Mesma ideia, pra ações que mais de um perfil pode fazer por caminhos
+// diferentes (ex.: solicitar fechamento — Garçom com TABLES_CLOSE_REQUEST
+// ou Caixa/Admin com TABLES_CLOSE direto, Módulo 8).
+export async function requireAnyPermission(codes: PermissionCode[]): Promise<CurrentUser> {
+  const user = await requireUser();
+  if (!hasAnyPermission(user.permissions, codes)) {
     redirect("/sem-permissao");
   }
   return user;

@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/ui/fab";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SummaryField } from "@/components/ui/summary-field";
 import { ORDER_ITEM_STATUS_TONE, ORDER_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
@@ -29,36 +30,10 @@ import { CancelItemForm } from "./pedidos/cancel-item-form";
 // Refatoração mobile-first da tela da mesa (foco: garçom em atendimento) —
 // Comanda + Pedidos + Pessoas viviam em 3 páginas/abas separadas; viram uma
 // só, porque são as 3 coisas que o garçom checa o tempo todo durante o
-// serviço. Pagamentos (sem uso real até o Módulo 8) e Histórico (raro
-// durante atendimento ativo) saíram da navegação principal — ver
-// mesa-tabs removido e IconButton de histórico em layout.tsx.
-function SummaryField({
-  label,
-  value,
-  testId,
-  emphasis = false,
-}: {
-  label: string;
-  value: string;
-  testId: string;
-  emphasis?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-control-sm border p-2 ${
-        emphasis ? "border-wine/25 bg-wine/[0.04]" : "border-line bg-bg/60"
-      }`}
-    >
-      <div className="text-xs text-muted">{label}</div>
-      <div
-        className={`tabular font-display text-sm font-semibold ${emphasis ? "text-wine" : "text-ink"}`}
-        data-testid={testId}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
+// serviço. Histórico (raro durante atendimento ativo) saiu da navegação
+// principal — ver mesa-tabs removido e IconButton de histórico em
+// layout.tsx. Pagamentos (Módulo 8) tem seu próprio ícone no cabeçalho
+// (mesmo layout.tsx) mais o banner abaixo quando o fechamento já começou.
 
 export default async function MesaComandaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -106,10 +81,20 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
   const canRequestCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_REQUEST);
   const canAuthorizeCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_AUTHORIZE);
   const canAddGuest = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
-  // Pagamento ainda não existe de verdade (Módulo 8) — paidAmount só fica
-  // > 0 quando essa funcionalidade nascer; a UI já fica pronta pra isso sem
-  // precisar de outra alteração de tela.
-  const hasPartialPayment = session.paidAmount.greaterThan(0);
+
+  // Uma vez que o fechamento foi solicitado (Módulo 8), a mesa entra numa
+  // fase diferente da operação normal — "aguardando fechamento: Fechar
+  // conta em destaque" (rules/frontend-design.md, "Cards de mesa"). Cada
+  // status tem sua própria mensagem porque o que falta fazer muda: revisar
+  // taxa/desconto, terminar de pagar, ou só confirmar e liberar a mesa.
+  const closingBannerText: string | null =
+    session.status === "WAITING_CLOSING"
+      ? "Fechamento solicitado — revise taxa de serviço, desconto e registre o pagamento."
+      : session.status === "PARTIALLY_PAID"
+        ? `Pagamento parcial — pago ${formatBRL(session.paidAmount)}, saldo restante ${formatBRL(session.balanceAmount)}.`
+        : session.status === "PAID"
+          ? "Pago — finalize o atendimento para liberar a mesa."
+          : null;
 
   const addGuestWithIds = addGuest.bind(null, session.id, id);
 
@@ -122,13 +107,12 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col gap-4 pb-24">
-      {hasPartialPayment && (
+      {closingBannerText && (
         <Link
           href={`/mesas/${id}/pagamentos`}
           className="rounded-card border border-gold/30 bg-gold/10 px-3 py-2 text-sm font-medium text-gold-dark"
         >
-          Pagamento parcial — pago {formatBRL(session.paidAmount)}, saldo restante{" "}
-          {formatBRL(session.balanceAmount)}
+          {closingBannerText}
         </Link>
       )}
 

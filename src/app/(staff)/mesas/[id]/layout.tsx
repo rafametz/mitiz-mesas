@@ -1,6 +1,7 @@
-import { ArrowLeft, Clock, History, Users } from "lucide-react";
+import { ArrowLeft, Clock, History, Users, Wallet } from "lucide-react";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
+import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
 import { TABLE_STATUS_LABELS } from "@/domain/table/labels";
 import { IconButton } from "@/components/ui/icon-button";
@@ -17,9 +18,22 @@ export default async function MesaLayout({
   children: React.ReactNode;
   params: Promise<{ id: string }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   const { table, session } = await getTableWithActiveSession(id);
+
+  // Ícone de acesso ao fechamento (Módulo 8) fica sempre visível quando há
+  // atendimento ativo e o perfil tem alguma permissão relacionada — mesmo
+  // racional do ícone de Histórico ao lado: ação disponível pelo cabeçalho
+  // em qualquer aba, sem disputar espaço com o FAB "Novo pedido".
+  const canAccessClosing =
+    session !== null &&
+    hasAnyPermission(user.permissions, [
+      PERMISSIONS.TABLES_CLOSE_REQUEST,
+      PERMISSIONS.TABLES_CLOSE,
+      PERMISSIONS.PAYMENTS_REGISTER,
+      PERMISSIONS.DISCOUNTS_APPLY,
+    ]);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
@@ -59,11 +73,20 @@ export default async function MesaLayout({
             </div>
           )}
         </div>
-        {/* Histórico é a informação menos usada durante o atendimento ativo
-            (é sobre atendimentos já encerrados) — fica um ícone discreto no
-            cabeçalho, não uma aba do mesmo peso que Pedidos/Comanda
-            (refatoração mobile-first da tela da mesa). */}
-        <IconButton href={`/mesas/${id}/historico`} label="Histórico da mesa" icon={History} />
+        <div className="flex shrink-0 items-center gap-1">
+          {canAccessClosing && (
+            <IconButton
+              href={`/mesas/${id}/pagamentos`}
+              label="Fechamento e pagamentos"
+              icon={Wallet}
+            />
+          )}
+          {/* Histórico é a informação menos usada durante o atendimento ativo
+              (é sobre atendimentos já encerrados) — fica um ícone discreto no
+              cabeçalho, não uma aba do mesmo peso que Pedidos/Comanda
+              (refatoração mobile-first da tela da mesa). */}
+          <IconButton href={`/mesas/${id}/historico`} label="Histórico da mesa" icon={History} />
+        </div>
       </div>
 
       {children}
