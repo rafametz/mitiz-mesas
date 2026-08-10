@@ -2,15 +2,11 @@ import { Layers } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { CheckboxField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL } from "@/lib/money";
-import {
-  createModifier,
-  createModifierGroup,
-  updateModifier,
-  updateModifierGroup,
-} from "./modifiers-actions";
+import { createModifier, updateModifier, updateModifierGroup } from "./modifiers-actions";
 
 // Seção de adicionais/modificadores, dentro da edição do produto — não é
 // tela própria porque só faz sentido no contexto de um produto (CLAUDE.md
@@ -24,7 +20,14 @@ export async function ModifiersSection({ productId }: { productId: string }) {
 
   return (
     <div className="flex flex-col gap-6 border-t border-line pt-6">
-      <h2 className="font-display text-base font-semibold text-ink">Adicionais / modificadores</h2>
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="font-display text-base font-semibold text-ink">
+          Adicionais / modificadores
+        </h2>
+        <Button href={`/admin/produtos/${productId}/grupos/novo`} size="sm">
+          + Novo grupo
+        </Button>
+      </div>
 
       {groups.map((group) => {
         const updateGroupWithId = updateModifierGroup.bind(null, group.id);
@@ -147,43 +150,12 @@ export async function ModifiersSection({ productId }: { productId: string }) {
       })}
 
       {groups.length === 0 && (
-        <EmptyState icon={Layers} title="Nenhum grupo de adicionais ainda." />
+        <EmptyState
+          icon={Layers}
+          title="Nenhum grupo de adicionais ainda."
+          action={<Button href={`/admin/produtos/${productId}/grupos/novo`}>Criar o primeiro</Button>}
+        />
       )}
-
-      <div>
-        <h3 className="mb-3 font-display text-sm font-semibold text-ink">
-          Novo grupo de adicionais
-        </h3>
-        <form
-          action={createModifierGroup.bind(null, productId)}
-          className="flex max-w-sm flex-col gap-4"
-        >
-          <TextField
-            label="Nome do grupo"
-            name="name"
-            required
-            maxLength={80}
-            placeholder="Ex.: Ponto da carne"
-          />
-          <TextField
-            label="Mínimo de seleções"
-            name="minSelect"
-            type="number"
-            min={0}
-            defaultValue={0}
-          />
-          <TextField
-            label="Máximo de seleções"
-            name="maxSelect"
-            type="number"
-            min={1}
-            defaultValue={1}
-          />
-          <CheckboxField label="Obrigatório" name="required" />
-          <CheckboxField label="Ativo" name="active" defaultChecked />
-          <SubmitButton>Criar grupo</SubmitButton>
-        </form>
-      </div>
     </div>
   );
 }

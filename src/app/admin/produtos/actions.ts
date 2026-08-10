@@ -39,23 +39,57 @@ function parseProductForm(formData: FormData) {
   });
 }
 
-export async function createProduct(formData: FormData) {
-  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseProductForm(formData);
-  const restaurant = await getCurrentRestaurant();
+function firstZodMessage(error: unknown): string | null {
+  if (error instanceof z.ZodError) return error.issues[0]?.message ?? null;
+  return null;
+}
 
+// `success` distingue "acabou de salvar" do estado inicial — os formulários
+// de produto vivem em página própria e navegam de volta pra listagem só
+// depois de ver `success: true` (mesmo padrão de createOrderAction em
+// mesas/[id]/pedidos/actions.ts).
+export type FormState = { error: string | null; success?: boolean };
+
+export async function createProduct(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+
+  let data: ReturnType<typeof parseProductForm>;
+  try {
+    data = parseProductForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
+
+  const restaurant = await getCurrentRestaurant();
   await prisma.product.create({ data: { ...data, restaurantId: restaurant.id } });
 
   revalidatePath("/admin/produtos");
+  return { error: null, success: true };
 }
 
-export async function updateProduct(id: string, formData: FormData) {
+export async function updateProduct(
+  id: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseProductForm(formData);
+
+  let data: ReturnType<typeof parseProductForm>;
+  try {
+    data = parseProductForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
 
   await prisma.product.update({ where: { id }, data });
 
   revalidatePath("/admin/produtos");
+  return { error: null, success: true };
 }
 
 // Ação rápida para a listagem: só liga/desliga disponibilidade, sem abrir

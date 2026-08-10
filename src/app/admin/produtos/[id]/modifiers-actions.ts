@@ -31,13 +31,36 @@ function parseGroupForm(formData: FormData) {
   });
 }
 
-export async function createModifierGroup(productId: string, formData: FormData) {
+function firstZodMessage(error: unknown): string | null {
+  if (error instanceof z.ZodError) return error.issues[0]?.message ?? null;
+  return null;
+}
+
+// `success` distingue "acabou de criar" do estado inicial — o formulário
+// de novo grupo vive em página própria (/admin/produtos/[id]/grupos/novo) e
+// volta pra edição do produto só depois de ver `success: true` (mesmo
+// padrão de createProduct em ../actions.ts).
+export type FormState = { error: string | null; success?: boolean };
+
+export async function createModifierGroup(
+  productId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseGroupForm(formData);
+
+  let data: ReturnType<typeof parseGroupForm>;
+  try {
+    data = parseGroupForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
 
   await prisma.productModifierGroup.create({ data: { ...data, productId } });
 
   revalidatePath(`/admin/produtos/${productId}/editar`);
+  return { error: null, success: true };
 }
 
 export async function updateModifierGroup(groupId: string, formData: FormData) {
