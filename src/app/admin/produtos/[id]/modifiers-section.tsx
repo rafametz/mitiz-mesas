@@ -1,6 +1,7 @@
 import { Layers } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { CheckboxField, TextField } from "@/components/form/field";
+import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -96,12 +97,12 @@ export async function ModifiersSection({ productId }: { productId: string }) {
                             maxLength={80}
                             className="w-40"
                           />
-                          <TextField
-                            label="Valor (R$)"
+                          <MoneyField
+                            label="Valor"
                             name="priceDelta"
-                            inputMode="decimal"
                             defaultValue={modifier.priceDelta.toString()}
-                            className="w-28"
+                            allowNegative
+                            className="w-40"
                           />
                           <CheckboxField
                             label="Ativo"
@@ -135,14 +136,7 @@ export async function ModifiersSection({ productId }: { productId: string }) {
                 maxLength={80}
                 className="w-40"
               />
-              <TextField
-                label="Valor (R$)"
-                name="priceDelta"
-                inputMode="decimal"
-                placeholder="0.00"
-                required
-                className="w-28"
-              />
+              <MoneyField label="Valor" name="priceDelta" allowNegative className="w-40" />
               <SubmitButton>Adicionar</SubmitButton>
             </form>
           </Card>

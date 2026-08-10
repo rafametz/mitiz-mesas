@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { SelectField, TextField } from "@/components/form/field";
+import { SelectField } from "@/components/form/field";
+import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useToast } from "@/components/ui/toast";
 import { registerPaymentAction, type FormState } from "./actions";
@@ -31,14 +32,12 @@ export function RegisterPaymentForm({
   const { showToast } = useToast();
   const action = registerPaymentAction.bind(null, tableId, sessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
-  const [amount, setAmount] = useState(balance);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const wasPending = useRef(false);
   useEffect(() => {
     if (wasPending.current && !isPending && state.success) {
       showToast("Pagamento registrado.");
-      setAmount("");
       setIdempotencyKey(crypto.randomUUID());
     }
     wasPending.current = isPending;
@@ -58,14 +57,11 @@ export function RegisterPaymentForm({
           </option>
         ))}
       </SelectField>
-      <TextField
-        label="Valor (R$)"
-        name="amount"
-        inputMode="decimal"
-        required
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-      />
+      {/* `key` força remontar o campo (e reler `balance`) a cada pagamento
+          bem-sucedido — depois de revalidatePath, o saldo já vem atualizado
+          do servidor, então o próximo pagamento já sugere o valor certo em
+          vez de ficar com o valor antigo ou em branco. */}
+      <MoneyField key={idempotencyKey} label="Valor" name="amount" defaultValue={balance} />
       {state.error && (
         <p role="alert" className="text-sm text-wine">
           {state.error}

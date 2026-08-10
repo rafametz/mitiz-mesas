@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "@/components/form/field";
+import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useToast } from "@/components/ui/toast";
 import { createProduct, type FormState } from "../actions";
@@ -39,13 +40,7 @@ export function NewProductForm({
     <form action={formAction} className="flex max-w-sm flex-col gap-4">
       <TextField label="Nome" name="name" required maxLength={120} />
       <TextAreaField label="Descrição (opcional)" name="description" maxLength={500} />
-      <TextField
-        label="Preço (R$)"
-        name="price"
-        inputMode="decimal"
-        placeholder="0.00"
-        required
-      />
+      <MoneyField label="Preço" name="price" />
       <SelectField label="Categoria" name="categoryId" required defaultValue="">
         <option value="" disabled>
           Selecione

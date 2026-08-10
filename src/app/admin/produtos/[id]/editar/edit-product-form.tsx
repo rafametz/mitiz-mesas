@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "@/components/form/field";
+import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useToast } from "@/components/ui/toast";
 import { updateProduct, type FormState } from "../../actions";
@@ -57,13 +58,7 @@ export function EditProductForm({
         defaultValue={product.description ?? ""}
         maxLength={500}
       />
-      <TextField
-        label="Preço (R$)"
-        name="price"
-        inputMode="decimal"
-        defaultValue={product.price}
-        required
-      />
+      <MoneyField label="Preço" name="price" defaultValue={product.price} />
       <SelectField label="Categoria" name="categoryId" defaultValue={product.categoryId} required>
         {categories.map((category) => (
           <option key={category.id} value={category.id}>
