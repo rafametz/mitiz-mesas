@@ -26,6 +26,8 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
   let productId: string;
   let paymentMethodId: string;
   const createdTableIds: string[] = [];
+  let categoryId: string;
+  let sectorId: string;
 
   beforeAll(async () => {
     const restaurant = await prisma.restaurant.findFirstOrThrow();
@@ -36,9 +38,11 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     const category = await prisma.category.create({
       data: { restaurantId, name: `Categoria caixa ${suffix}` },
     });
+    categoryId = category.id;
     const sector = await prisma.productionSector.create({
       data: { restaurantId, name: `Setor caixa ${suffix}` },
     });
+    sectorId = sector.id;
     const product = await prisma.product.create({
       data: {
         restaurantId,
@@ -76,6 +80,13 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     await prisma.serviceSession.deleteMany({ where: { tableId: { in: createdTableIds } } });
     await prisma.table.deleteMany({ where: { id: { in: createdTableIds } } });
     await prisma.product.deleteMany({ where: { id: productId } });
+    // Categoria/setor criados só para este arquivo de teste — sem isso,
+    // cada rodada de `npm run test:integration` deixava um par órfão no
+    // banco (achado real: 4 pares acumulados, removidos manualmente em
+    // 2026-08-10). Só é seguro apagar depois do produto acima, já que
+    // Product tem onDelete: Restrict para category/defaultSector.
+    await prisma.category.deleteMany({ where: { id: categoryId } });
+    await prisma.productionSector.deleteMany({ where: { id: sectorId } });
     await prisma.$disconnect();
   });
 
