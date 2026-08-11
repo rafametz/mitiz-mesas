@@ -65,6 +65,9 @@ const config: Config = {
       fontFamily: {
         display: ["var(--font-display)", "serif"],
         sans: ["var(--font-sans)", "sans-serif"],
+        // Só para o nome do app por extenso ("MITIZ Mesas") — ver
+        // src/app/layout.tsx.
+        brand: ["var(--font-brand)", "serif"],
       },
       borderRadius: {
         // Escala de raios do design system. `control-sm`/`control` cobrem

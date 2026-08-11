@@ -10,7 +10,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-4 text-center">
           <MitizMark className="h-16 w-16 text-gold" />
           <div>
-            <h1 className="font-display text-2xl font-semibold italic text-bg">MITIZ Mesas</h1>
+            <h1 className="font-brand text-2xl font-semibold italic text-bg">MITIZ Mesas</h1>
             <p className="mt-1 text-sm tracking-wide text-bg/60">Boutique de Carnes</p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Manrope } from "next/font/google";
+import { Aleo, Fraunces, Manrope } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
 import "./globals.css";
@@ -17,6 +17,18 @@ const fraunces = Fraunces({
 const manrope = Manrope({
   subsets: ["latin"],
   variable: "--font-sans",
+});
+
+// Aleo: só para o nome do app ("MITIZ Mesas"), onde aparece por extenso —
+// cabeçalho do app do salão, tela de login, tela de bloqueio biométrico
+// (pedido do usuário, 2026-08-11). Fonte da marca em si (className
+// font-brand); não substitui a Fraunces (font-display), que continua
+// sendo a fonte de títulos/números em geral no resto da interface.
+const aleo = Aleo({
+  subsets: ["latin"],
+  variable: "--font-brand",
+  weight: ["400", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -50,7 +62,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable}`}>
+    <html lang="pt-BR" className={`${fraunces.variable} ${manrope.variable} ${aleo.variable}`}>
       <body className="bg-bg font-sans text-ink antialiased">
         <ServiceWorkerRegister />
         <ToastProvider>{children}</ToastProvider>
