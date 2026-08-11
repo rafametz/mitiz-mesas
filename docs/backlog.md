@@ -641,8 +641,17 @@ impressão) existirem.
 
 ## Módulo 10 — Histórico
 
-- Aba "Histórico" na tela da mesa (atendimentos anteriores);
-- Consulta de atendimentos encerrados (filtro por data/mesa/garçom).
+- ✅ Aba "Histórico" na tela da mesa (atendimentos anteriores);
+- ✅ Detalhe completo de um atendimento encerrado (2026-08-11, pedido do
+  usuário) — `/mesas/[id]/historico/[sessionId]`: resumo financeiro
+  (subtotal, taxa, desconto, total, pago, saldo), taxa/desconto aplicados
+  e por quem, pessoas da mesa, itens consumidos consolidados (quantidade e
+  valor, reusa `buildConsolidatedSummary`) e pagamentos registrados
+  (forma, valor, pessoa vinculada quando houver, quem registrou, quando).
+  Tela estática de propósito (sem `RealtimeRefresh`): atendimento encerrado
+  não muda mais;
+- Consulta de atendimentos encerrados **de todas as mesas** com filtro por
+  data/garçom (visão geral, não por mesa) — ainda não feito.
 
 ## Módulo 11 — Relatórios básicos
 
