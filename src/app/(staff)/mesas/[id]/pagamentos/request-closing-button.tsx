@@ -15,17 +15,30 @@ export function RequestClosingButton({
   tableId,
   sessionId,
   tableNumber,
+  label = "Solicitar fechamento",
+  variant = "primary",
+  className,
 }: {
   tableId: string;
   sessionId: string;
   tableNumber: string;
+  // "Fechar mesa" (mais direto, usado como entrada principal na tela da
+  // mesa) vs. "Solicitar fechamento" (padrão, dentro da própria tela de
+  // fechamento/pagamentos) — mesma ação, só o rótulo muda conforme o
+  // contexto onde o botão aparece. Aceita ReactNode pra poder compor com
+  // ícone (ex.: entrada da tela da mesa).
+  label?: React.ReactNode;
+  variant?: "primary" | "secondary";
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const action = requestClosingAction.bind(null, tableId, sessionId);
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>Solicitar fechamento</Button>
+      <Button variant={variant} className={className} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
 
       <form action={action}>
         <ConfirmDialog

@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { ChevronDown, Plus, ReceiptText } from "lucide-react";
+import { ChevronDown, DoorClosed, Plus, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
-import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
+import { hasAnyPermission, hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import {
   MEAT_POINT_LABELS,
   ORDER_ITEM_STATUS_LABELS,
@@ -24,6 +24,7 @@ import { formatTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
 import { addGuest } from "./actions";
 import { OpenTableForm } from "./open-table-form";
+import { RequestClosingButton } from "./pagamentos/request-closing-button";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
 
@@ -81,6 +82,10 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
   const canRequestCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_REQUEST);
   const canAuthorizeCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_AUTHORIZE);
   const canAddGuest = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
+  const canRequestClosingPermission = hasAnyPermission(user.permissions, [
+    PERMISSIONS.TABLES_CLOSE_REQUEST,
+    PERMISSIONS.TABLES_CLOSE,
+  ]);
 
   // Revisão 2026-08-10 — pagamento e fechamento são conceitos separados:
   // pagamento parcial (ou até saldo já zerado) não tira a mesa de OPEN nem
@@ -115,6 +120,26 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
         >
           {closingBannerText}
         </Link>
+      )}
+
+      {/* Entrada bem visível pra fechar a mesa — antes só existia o ícone
+          pequeno de carteira no cabeçalho (layout.tsx), difícil de notar
+          (feedback do usuário). Some quando o fechamento já foi
+          solicitado (CLOSING) — o banner acima já assume esse lugar. */}
+      {session.status === "OPEN" && canRequestClosingPermission && (
+        <RequestClosingButton
+          tableId={id}
+          sessionId={session.id}
+          tableNumber={table.number}
+          label={
+            <>
+              <DoorClosed className="h-5 w-5" />
+              Fechar mesa
+            </>
+          }
+          variant="secondary"
+          className="w-full justify-center gap-2"
+        />
       )}
 
       {/* Resumo financeiro: só Subtotal fica sempre visível — os outros 5
