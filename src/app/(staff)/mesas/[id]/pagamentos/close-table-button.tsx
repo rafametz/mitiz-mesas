@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SubmitButton } from "@/components/form/submit-button";
+import { bareTableNumber } from "@/domain/table/labels";
 import { closeTableAction } from "./actions";
 
 // Passo final (business-rules.md §6, passos 7-9) — irreversível (libera a
@@ -36,7 +37,7 @@ export function CloseTableButton({
         <ConfirmDialog
           open={open}
           title="Finalizar atendimento"
-          description={`A mesa ${tableNumber} será liberada para um novo atendimento. Esta ação não pode ser desfeita.`}
+          description={`A mesa ${bareTableNumber(tableNumber)} será liberada para um novo atendimento. Esta ação não pode ser desfeita.`}
           cancelLabel="Voltar"
           onCancel={() => setOpen(false)}
           confirmSlot={<SubmitButton>Finalizar e liberar mesa</SubmitButton>}

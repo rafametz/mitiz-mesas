@@ -2,6 +2,7 @@ import { AlertTriangle, CircleDot, DoorOpen, Table2, Timer } from "lucide-react"
 import { prisma } from "@/lib/prisma";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
+import { formatTableLabel } from "@/domain/table/labels";
 import { Button } from "@/components/ui/button";
 import { Card, PageHeader } from "@/components/ui/card";
 import { DonutChart } from "@/components/ui/donut-chart";
@@ -161,14 +162,14 @@ export default async function AdminMesasPage() {
               {closingAlerts.map(({ id, number }) => (
                 <AlertRow
                   key={`closing-${id}`}
-                  title={`Mesa ${number} aguardando fechamento`}
+                  title={`${formatTableLabel(number)} aguardando fechamento`}
                   detail="Verifique e finalize o fechamento."
                 />
               ))}
               {longOpenAlerts.map(({ row, minutes }) => (
                 <AlertRow
                   key={`long-${row.id}`}
-                  title={`Mesa ${row.number} aberta há mais de ${Math.floor(LONG_SESSION_ALERT_MINUTES / 60)}h`}
+                  title={`${formatTableLabel(row.number)} aberta há mais de ${Math.floor(LONG_SESSION_ALERT_MINUTES / 60)}h`}
                   detail={`Tempo: ${formatElapsed(new Date(row.session!.openedAt))} (${minutes} min)`}
                 />
               ))}

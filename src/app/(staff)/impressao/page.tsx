@@ -5,6 +5,7 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { PRINT_JOB_STATUS_LABELS, PRINT_JOB_TYPE_LABELS } from "@/domain/printing/labels";
 import { getAgentStatus, formatElapsedSince } from "@/domain/printing/agent-status";
+import { formatTableLabel } from "@/domain/table/labels";
 import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -78,7 +79,7 @@ export default async function ImpressaoPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-display font-semibold text-ink">
-                  Mesa {job.order.serviceSession.table.number}
+                  {formatTableLabel(job.order.serviceSession.table.number)}
                 </span>
                 <span className="text-xs text-muted">
                   Pedido #{job.order.sequenceNumber} · {job.sector.name}

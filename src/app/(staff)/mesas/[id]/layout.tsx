@@ -3,7 +3,7 @@ import { requireUser } from "@/application/auth/get-current-user";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
-import { TABLE_STATUS_LABELS } from "@/domain/table/labels";
+import { formatTableLabel, TABLE_STATUS_LABELS } from "@/domain/table/labels";
 import { IconButton } from "@/components/ui/icon-button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SERVICE_SESSION_STATUS_TONE, TABLE_STATUS_TONE } from "@/components/ui/status-tone";
@@ -43,7 +43,9 @@ export default async function MesaLayout({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <MesaBackButton tableId={id} />
-            <h1 className="font-display text-xl font-semibold text-ink">Mesa {table.number}</h1>
+            <h1 className="font-display text-xl font-semibold text-ink">
+              {formatTableLabel(table.number)}
+            </h1>
             <StatusBadge
               tone={
                 session

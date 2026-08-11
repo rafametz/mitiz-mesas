@@ -23,6 +23,8 @@ export default async function EditarMesaPage({ params }: { params: Promise<{ id:
           defaultValue={table.number}
           required
           maxLength={20}
+          placeholder="Ex.: 1 ou Varanda 3"
+          hint={`Não inclua a palavra "Mesa": ela já aparece automaticamente nas telas.`}
         />
         <TextField
           label="Capacidade (opcional)"

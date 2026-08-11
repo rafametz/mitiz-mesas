@@ -4,6 +4,7 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { prisma } from "@/lib/prisma";
 import { PERMISSIONS } from "@/domain/auth/permissions";
+import { formatTableLabel } from "@/domain/table/labels";
 import { PageHeader } from "@/components/ui/card";
 import { NewOrderForm } from "./new-order-form";
 
@@ -30,7 +31,7 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
   if (products.length === 0) {
     return (
       <div className="flex flex-col gap-4 py-4">
-        <PageHeader title="Novo pedido" subtitle={`Mesa ${table.number}`} />
+        <PageHeader title="Novo pedido" subtitle={formatTableLabel(table.number)} />
         <p className="text-sm text-muted">
           Nenhum produto disponível. Cadastre produtos em Administração antes de lançar pedidos.
         </p>
@@ -40,7 +41,7 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Novo pedido" subtitle={`Mesa ${table.number}`} />
+      <PageHeader title="Novo pedido" subtitle={formatTableLabel(table.number)} />
       <NewOrderForm
         tableId={id}
         serviceSessionId={session.id}

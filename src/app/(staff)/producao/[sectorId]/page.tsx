@@ -7,6 +7,7 @@ import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { MEAT_POINT_LABELS } from "@/domain/order/labels";
+import { formatTableLabel } from "@/domain/table/labels";
 import { Card, PageHeader } from "@/components/ui/card";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { sectorChannel } from "@/lib/realtime/channels";
@@ -137,7 +138,7 @@ export default async function ProducaoSectorPage({
                   <Card key={item.id} padding="sm" className="text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-display font-semibold text-ink">
-                        Mesa {item.order.serviceSession.table.number}
+                        {formatTableLabel(item.order.serviceSession.table.number)}
                       </span>
                       <span className="text-xs text-muted">há {formatElapsed(item.createdAt)}</span>
                     </div>
