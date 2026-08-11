@@ -46,16 +46,26 @@ enum TableStatus {
   WAITING_SERVICE
   ORDER_IN_PROGRESS
   WAITING_CLOSING
-  PARTIALLY_PAID
   RESERVED
   BLOCKED
 }
 
+// PAGAMENTO e FECHAMENTO são conceitos separados (revisão 2026-08-10 —
+// docs/architecture/decisions/, ADR de separação pagamento/fechamento):
+// registrar pagamento nunca muda este status sozinho, só quem decide
+// "solicitar fechamento"/"finalizar" mexe aqui. PARTIALLY_PAID e PAID
+// saíam do enum porque eram, na prática, um subproduto do saldo
+// (paidAmount/balanceAmount) recalculado a cada pagamento — duas fontes de
+// verdade pra mesma informação. A informação "tem pagamento parcial?" ou
+// "saldo já zerou?" continua disponível (é só olhar os campos), só deixa
+// de ser um ESTADO que bloqueia ou libera ação.
 enum ServiceSessionStatus {
   OPEN
-  WAITING_CLOSING
-  PARTIALLY_PAID
-  PAID
+  // Fechamento solicitado — só a partir daqui novo pedido é bloqueado
+  // (createOrder exige OPEN) e taxa/desconto podem ser aplicados. Pode
+  // voltar pra OPEN (cancelar a solicitação) sem precisar fechar e reabrir
+  // o atendimento inteiro.
+  CLOSING
   CLOSED
   REOPENED
   CANCELLED
@@ -101,6 +111,17 @@ enum PrintJobType {
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
+}
+
+// Pessoa quitou sua participação na conta (pagamento por pessoa, revisão
+// 2026-08-10) — puramente informativo/organizacional, não é uma trava
+// financeira: marcar/desmarcar é manual (quem está no caixa decide), o
+// valor calculado da participação dela é só referência na tela. Pessoa
+// SETTLED some por padrão do seletor de "pessoa" ao lançar item novo, mas
+// nada que já foi lançado pra ela é apagado ou desvinculado.
+enum GuestStatus {
+  ACTIVE
+  SETTLED
 }
 
 // Ponto da carne (CLAUDE.md seção 4/9). NAO_SE_APLICA cobre itens que não
@@ -356,14 +377,16 @@ model ServiceSession {
 }
 
 model Guest {
-  id               String   @id @default(cuid())
+  id               String      @id @default(cuid())
   serviceSessionId String
   name             String?
-  sortOrder        Int      @default(0)
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  sortOrder        Int         @default(0)
+  status           GuestStatus @default(ACTIVE)
+  createdAt        DateTime    @default(now()) @db.Timestamptz(6)
 
   serviceSession ServiceSession @relation(fields: [serviceSessionId], references: [id], onDelete: Cascade)
   orderItems     OrderItem[]
+  payments       Payment[]
 
   @@index([serviceSessionId])
   @@map("guests")
@@ -583,6 +606,10 @@ model Payment {
   id               String  @id @default(cuid())
   serviceSessionId String
   paymentMethodId  String
+  // Pagamento geral da mesa quando null; vinculado a uma pessoa específica
+  // quando preenchido (pagamento por pessoa, revisão 2026-08-10) — os dois
+  // convivem na mesma comanda.
+  guestId          String?
   amount           Decimal @db.Decimal(10, 2)
   // Garante que duplo toque não registre o mesmo pagamento duas vezes
   // (regra 18/19).
@@ -599,10 +626,12 @@ model Payment {
 
   serviceSession ServiceSession @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
   paymentMethod  PaymentMethod  @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  guest          Guest?         @relation(fields: [guestId], references: [id], onDelete: SetNull)
   registeredBy   User           @relation("PaymentRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
   voidedBy       User?          @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
 
   @@index([serviceSessionId])
+  @@index([guestId])
   @@map("payments")
 }
 

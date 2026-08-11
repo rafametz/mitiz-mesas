@@ -1,4 +1,5 @@
 import type {
+  GuestStatus,
   OrderItemStatus,
   OrderStatus,
   PrintJobStatus,
@@ -18,7 +19,6 @@ export const TABLE_STATUS_TONE: Record<
   WAITING_SERVICE: "gold",
   ORDER_IN_PROGRESS: "gold",
   WAITING_CLOSING: "gold",
-  PARTIALLY_PAID: "gold",
   RESERVED: "muted",
   BLOCKED: "muted",
 };
@@ -42,9 +42,7 @@ export const SERVICE_SESSION_STATUS_TONE: Record<
   "neutral" | "wine" | "gold" | "muted"
 > = {
   OPEN: "wine",
-  WAITING_CLOSING: "gold",
-  PARTIALLY_PAID: "gold",
-  PAID: "gold",
+  CLOSING: "gold",
   CLOSED: "neutral",
   REOPENED: "wine",
   CANCELLED: "muted",
@@ -90,4 +88,12 @@ export const AGENT_STATUS_TONE: Record<AgentStatus, "wine" | "muted" | "free"> =
   online: "free",
   offline: "wine",
   never_connected: "muted",
+};
+
+// Pessoa quitou a participação dela na conta (pagamento por pessoa) —
+// SETTLED usa o mesmo tom neutro de "encerrado" (mesmo racional de
+// CLOSED em ServiceSession), não é um alerta nem uma conquista.
+export const GUEST_STATUS_TONE: Record<GuestStatus, "wine" | "neutral"> = {
+  ACTIVE: "wine",
+  SETTLED: "neutral",
 };

@@ -9,16 +9,28 @@ referência operacional para implementação e testes
 ### Mesa (`Table` / `ServiceSession` combinados na visão do card)
 
 `FREE` → `OCCUPIED` → `WAITING_SERVICE` → `ORDER_IN_PROGRESS` →
-`WAITING_CLOSING` → `PARTIALLY_PAID` → (fechamento) → `FREE`
+`WAITING_CLOSING` (fechamento solicitado) → (fechamento) → `FREE`
 
 Estados adicionais: `RESERVED`, `BLOCKED` (fora do fluxo normal, definidos por
-administrador/caixa).
+administrador/caixa). "Tem pagamento parcial?" não é mais um estado — é
+sempre calculado a partir de `paidAmount`/`balanceAmount` e só exibido na
+tela (revisão 2026-08-10).
 
 ### Atendimento (`ServiceSession`)
 
-`OPEN` → `WAITING_CLOSING` → `PARTIALLY_PAID` → `PAID` → `CLOSED`
+`OPEN` → `CLOSING` → `CLOSED`
 Exceções: `REOPENED` (a partir de `CLOSED`, só admin), `CANCELLED` (a partir de
-`OPEN`, sem pedidos enviados).
+`OPEN`, sem pedidos enviados), `CLOSING` → `OPEN` (cancelar a solicitação de
+fechamento sem passar por `CLOSED`/`REOPENED`).
+
+**Revisão 2026-08-10 — separação PAGAMENTO / FECHAMENTO DO ATENDIMENTO**
+(ver ADR em `docs/architecture/decisions/`): antes, registrar pagamento
+só era permitido depois de solicitar fechamento e sempre acabava mudando
+o status da sessão (`PARTIALLY_PAID`/`PAID`, removidos do enum), o que
+bloqueava pedido novo como efeito colateral de um pagamento parcial no
+meio do atendimento. Agora pagamento é permitido em `OPEN` inteiro e
+nunca muda o status sozinho; só `CLOSING` bloqueia pedido novo, e só
+através da ação explícita "solicitar fechamento".
 
 ### Pedido (`Order`)
 
@@ -40,9 +52,8 @@ silenciosamente ignoradas.
 
 ## 2. Regras obrigatórias
 
-1. Uma mesa só pode ter um atendimento ativo (`OPEN`/`WAITING_CLOSING`/
-   `PARTIALLY_PAID`) por vez.
-2. Mesa com atendimento fechado não recebe novos pedidos.
+1. Uma mesa só pode ter um atendimento ativo (`OPEN`/`CLOSING`) por vez.
+2. Mesa com atendimento fechado (ou em `CLOSING`) não recebe novos pedidos.
 3. Pedido em `DRAFT` pode ser editado livremente pelo autor.
 4. Pedido em `SENT` (ou além) não é alterado silenciosamente.
 5. Alteração após envio gera cancelamento, complemento ou novo item — nunca
@@ -54,8 +65,12 @@ silenciosamente ignoradas.
 9. O preço do item é congelado no momento do lançamento do pedido.
 10. Alterar o preço de um produto no cadastro não retroage sobre vendas
     já lançadas.
-11. Mesa só fecha quando o saldo (`total − pago`) é exatamente zero.
-12. Pagamento parcial reduz o saldo da comanda.
+11. Mesa só fecha quando o fechamento foi solicitado (`CLOSING`) **e** o
+    saldo (`total − pago`) é exatamente zero. Saldo zero sozinho em
+    `OPEN` nunca fecha a mesa.
+12. Pagamento parcial reduz o saldo da comanda, a qualquer momento do
+    atendimento ativo (`OPEN` ou `CLOSING`) — nunca exige fechamento
+    solicitado antes, nunca bloqueia pedido novo sozinho.
 13. É possível combinar mais de uma forma de pagamento no mesmo fechamento.
 14. Todo desconto registra tipo, valor, motivo e usuário responsável.
 15. Taxa de serviço é configurável e opcional no fechamento.
@@ -107,16 +122,39 @@ silenciosamente ignoradas.
 6. Exibir confirmação clara ao garçom (sucesso, ou erro específico se algo
    falhar).
 
-## 6. Fluxo — Fechar mesa
+## 6. Fluxo — Pagamento e fechamento de mesa (revisão 2026-08-10)
 
-1. Solicitar fechamento (`WAITING_CLOSING`);
+### 6a. Pagamento — independente do fechamento
+
+Disponível a qualquer momento do atendimento ativo (`OPEN` ou `CLOSING`):
+
+1. Registrar pagamento — geral da mesa (`guestId` nulo) ou vinculado a
+   uma pessoa específica;
+2. Divisão percentual/igual, quando usada, é só calculadora — o valor
+   final é transformado em R$ e gravado no pagamento, nunca uma
+   porcentagem recalculada depois;
+3. Saldo recalculado a partir de consumo + taxa − desconto − pago,
+   sempre, independente do status;
+4. Pessoa pode ser marcada `SETTLED` manualmente pelo caixa (sem cálculo
+   obrigatório) depois de registrar o pagamento dela — some do seletor de
+   "pessoa" em pedido novo por padrão, itens já lançados pra ela não são
+   afetados.
+
+### 6b. Fechamento do atendimento
+
+1. Solicitar fechamento (`OPEN` → `CLOSING`) — só a partir daqui novo
+   pedido é bloqueado; pode ser cancelado (`CLOSING` → `OPEN`) sem passar
+   por `CLOSED`/`REOPENED`;
 2. Conferir itens da comanda;
-3. Aplicar taxa de serviço (se optado);
-4. Aplicar desconto, se autorizado;
-5. Escolher forma de divisão (pessoa, item, valor, igual);
-6. Registrar um ou mais pagamentos (`PARTIALLY_PAID` enquanto saldo > 0);
-7. Validar saldo == 0 no servidor antes de permitir finalizar;
-8. Finalizar atendimento (`PAID` → `CLOSED`);
+3. Aplicar taxa de serviço (se optado) — só permitido em `CLOSING`;
+4. Aplicar desconto, se autorizado — só permitido em `CLOSING`;
+5. Escolher forma de divisão (pessoa, item, valor, igual) — apoio pro
+   pagamento da seção 6a, que pode já ter começado antes mesmo do
+   fechamento ser solicitado;
+6. Registrar o(s) pagamento(s) que faltarem (mesma ação da seção 6a);
+7. Validar `status == CLOSING` e saldo == 0 no servidor antes de permitir
+   finalizar;
+8. Finalizar atendimento (`CLOSING` → `CLOSED`);
 9. Liberar mesa (`FREE`);
 10. Manter histórico completo do atendimento e seus pedidos/pagamentos.
 

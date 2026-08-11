@@ -6,6 +6,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { openTable, OpenTableError } from "@/application/service-session/open-table";
+import {
+  GuestSettlementError,
+  markGuestSettled,
+  reopenGuest,
+} from "@/application/guest/mark-guest-settled";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 
 export type FormState = { error: string | null };
@@ -62,4 +67,43 @@ export async function addGuest(sessionId: string, tableId: string, formData: For
   // Pessoas vive na tela principal da mesa desde a refatoração
   // mobile-first (não existe mais uma página "/pessoas" própria).
   revalidatePath(`/mesas/${tableId}`);
+}
+
+// Pagamento por pessoa (revisão 2026-08-10): marcar/desmarcar quitada é
+// manual, sem cálculo obrigatório (decisão confirmada com o usuário) —
+// mesma permissão de mexer em pessoas da mesa (TABLES_OPEN).
+// Assinatura fixada pelo useActionState (prevState, formData) — nenhum
+// dos dois é lido aqui (guestId já vem do bind, não há campo de formulário).
+export async function markGuestSettledAction(
+  tableId: string,
+  guestId: string,
+  _prevState: FormState, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _formData: FormData, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.TABLES_OPEN);
+  try {
+    await markGuestSettled(guestId, user.id);
+  } catch (error) {
+    if (error instanceof GuestSettlementError) return { error: error.message };
+    return { error: "Não foi possível marcar esta pessoa como quitada." };
+  }
+  revalidatePath(`/mesas/${tableId}`);
+  return { error: null };
+}
+
+export async function reopenGuestAction(
+  tableId: string,
+  guestId: string,
+  _prevState: FormState, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _formData: FormData, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.TABLES_OPEN);
+  try {
+    await reopenGuest(guestId, user.id);
+  } catch (error) {
+    if (error instanceof GuestSettlementError) return { error: error.message };
+    return { error: "Não foi possível reativar esta pessoa." };
+  }
+  revalidatePath(`/mesas/${tableId}`);
+  return { error: null };
 }

@@ -7,6 +7,10 @@ import { requireAnyPermission, requirePermission } from "@/application/auth/get-
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { requestClosing, RequestClosingError } from "@/application/service-session/request-closing";
 import {
+  cancelClosingRequest,
+  CancelClosingRequestError,
+} from "@/application/service-session/cancel-closing-request";
+import {
   applyDiscount,
   ApplyDiscountError,
   voidDiscount,
@@ -39,6 +43,21 @@ export async function requestClosingAction(tableId: string, sessionId: string) {
   }
   revalidateMesa(tableId);
   redirect(`/mesas/${tableId}/pagamentos`);
+}
+
+// Volta CLOSING -> OPEN (revisão 2026-08-10) — "pedi a conta por engano"
+// ou o cliente quer pedir mais alguma coisa. Mesma permissão de quem pode
+// solicitar o fechamento.
+export async function cancelClosingRequestAction(tableId: string, sessionId: string) {
+  const user = await requireAnyPermission([PERMISSIONS.TABLES_CLOSE_REQUEST, PERMISSIONS.TABLES_CLOSE]);
+  try {
+    await cancelClosingRequest(sessionId, user.id);
+  } catch (error) {
+    if (error instanceof CancelClosingRequestError) throw error;
+    throw new Error("Não foi possível cancelar a solicitação de fechamento.");
+  }
+  revalidateMesa(tableId);
+  redirect(`/mesas/${tableId}`);
 }
 
 export async function applyDiscountAction(
@@ -115,6 +134,7 @@ export async function registerPaymentAction(
       paymentMethodId: String(formData.get("paymentMethodId") ?? ""),
       amount: String(formData.get("amount") ?? ""),
       idempotencyKey,
+      guestId: String(formData.get("guestId") ?? "") || undefined,
     });
   } catch (error) {
     if (error instanceof RegisterPaymentError) return { error: error.message };

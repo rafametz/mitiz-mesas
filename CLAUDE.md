@@ -199,20 +199,32 @@ Exemplo:
 - `OCCUPIED`: ocupada;
 - `WAITING_SERVICE`: aguardando atendimento;
 - `ORDER_IN_PROGRESS`: pedido em andamento;
-- `WAITING_CLOSING`: aguardando fechamento;
-- `PARTIALLY_PAID`: pagamento parcial;
+- `WAITING_CLOSING`: aguardando fechamento (fechamento do atendimento
+  solicitado — ver nota abaixo, não tem relação com pagamento);
 - `RESERVED`: reservada;
 - `BLOCKED`: bloqueada.
+
+"Tem pagamento parcial?" não é mais um estado gravado da mesa — é sempre
+calculado (`paidAmount > 0 && paidAmount < totalAmount`) e mostrado como
+informação na tela, nunca controla nenhuma regra.
 
 ### Atendimento
 
 - `OPEN`;
-- `WAITING_CLOSING`;
-- `PARTIALLY_PAID`;
-- `PAID`;
+- `CLOSING` (fechamento solicitado);
 - `CLOSED`;
 - `REOPENED`;
 - `CANCELLED`.
+
+**PAGAMENTO e FECHAMENTO DO ATENDIMENTO são conceitos separados** (revisão
+2026-08-10 — ver ADR correspondente em
+`docs/architecture/decisions/`). Registrar pagamento **nunca** muda este
+status sozinho: uma mesa `OPEN` pode receber zero, um ou vários pagamentos
+parciais e continuar `OPEN`, aceitando pedido novo normalmente, mesmo que
+o saldo chegue a zero no meio do caminho. Só uma ação explícita de
+solicitar fechamento move a sessão para `CLOSING` — e só a partir daí novo
+pedido é bloqueado. `CLOSING` pode voltar para `OPEN` (cancelar a
+solicitação) sem precisar fechar e reabrir o atendimento inteiro.
 
 ### Pedido
 
@@ -257,8 +269,14 @@ Exemplo:
 8. Pagamentos nunca devem ser apagados definitivamente.
 9. O preço do item deve ser congelado no momento do lançamento.
 10. Alterar o preço do produto não pode modificar vendas anteriores.
-11. A mesa só pode ser fechada quando o saldo for zero.
-12. Pagamentos parciais devem reduzir o saldo da comanda.
+11. A mesa só pode ser fechada quando o fechamento foi solicitado
+    (`CLOSING`) **e** o saldo for zero. Saldo zero sozinho, com a mesa
+    ainda `OPEN`, nunca fecha nada — a mesa pode voltar a ter saldo > 0
+    com um pedido novo a qualquer momento.
+12. Pagamentos parciais devem reduzir o saldo da comanda, a qualquer
+    momento do atendimento ativo (`OPEN` ou `CLOSING`) — nunca exigem que
+    o fechamento tenha sido solicitado antes, e nunca bloqueiam pedido
+    novo sozinhos.
 13. Deve ser possível usar mais de uma forma de pagamento.
 14. Descontos devem registrar tipo, valor, motivo e usuário responsável.
 15. Taxa de serviço deve ser configurável e opcional no fechamento.
@@ -308,16 +326,36 @@ Exemplo:
 5. Atualizar clientes conectados em tempo real;
 6. Exibir confirmação clara ao garçom.
 
-### Fechar mesa
+### Pagamento (independente do fechamento)
 
-1. Solicitar fechamento;
+Pode acontecer a qualquer momento do atendimento ativo (`OPEN` ou
+`CLOSING`), quantas vezes for preciso, sem depender de "solicitar
+fechamento" antes:
+
+1. Registrar pagamento — geral da mesa ou vinculado a uma pessoa
+   específica (`guestId` opcional);
+2. Valor sempre em R$, nunca porcentagem viva — se a interface oferecer
+   divisão percentual/igual, o valor é calculado e gravado no momento do
+   pagamento, não recalculado depois;
+3. Saldo é recalculado a partir do consumo, taxa, desconto e pagamentos
+   efetivamente registrados — sobe com pedido novo, desce com pagamento;
+4. Uma pessoa pode ser marcada como quitada (`SETTLED`) manualmente pelo
+   caixa depois de registrar o pagamento dela — some por padrão do
+   seletor de "pessoa" ao lançar item novo, sem apagar nada do que já foi
+   lançado pra ela.
+
+### Fechar mesa (fechamento do atendimento)
+
+1. Solicitar fechamento (`OPEN` → `CLOSING` — só a partir daqui novo
+   pedido é bloqueado; pode ser cancelado, voltando pra `OPEN`);
 2. Conferir itens;
 3. Aplicar taxa de serviço;
 4. Aplicar desconto, se autorizado;
-5. Escolher forma de divisão;
-6. Registrar um ou mais pagamentos;
-7. Validar saldo;
-8. Finalizar atendimento;
+5. Escolher forma de divisão (calculadora de apoio — o pagamento em si
+   segue a seção acima);
+6. Registrar o(s) pagamento(s) que faltarem;
+7. Validar saldo == 0 e status `CLOSING`;
+8. Finalizar atendimento (`CLOSING` → `CLOSED`);
 9. Liberar mesa;
 10. Manter histórico completo.
 

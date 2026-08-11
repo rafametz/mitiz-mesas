@@ -82,19 +82,20 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
   const canAuthorizeCancel = hasPermission(user.permissions, PERMISSIONS.ORDERS_CANCEL_AUTHORIZE);
   const canAddGuest = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
 
-  // Uma vez que o fechamento foi solicitado (Módulo 8), a mesa entra numa
-  // fase diferente da operação normal — "aguardando fechamento: Fechar
-  // conta em destaque" (rules/frontend-design.md, "Cards de mesa"). Cada
-  // status tem sua própria mensagem porque o que falta fazer muda: revisar
-  // taxa/desconto, terminar de pagar, ou só confirmar e liberar a mesa.
+  // Revisão 2026-08-10 — pagamento e fechamento são conceitos separados:
+  // pagamento parcial (ou até saldo já zerado) não tira a mesa de OPEN nem
+  // impede pedido novo, então o banner é só informativo nesses casos. Só
+  // quando o fechamento foi solicitado de propósito (CLOSING) é que a
+  // mesa entra na fase "aguardando fechamento: Fechar conta em destaque"
+  // (rules/frontend-design.md, "Cards de mesa").
   const closingBannerText: string | null =
-    session.status === "WAITING_CLOSING"
+    session.status === "CLOSING"
       ? "Fechamento solicitado — revise taxa de serviço, desconto e registre o pagamento."
-      : session.status === "PARTIALLY_PAID"
-        ? `Pagamento parcial — pago ${formatBRL(session.paidAmount)}, saldo restante ${formatBRL(session.balanceAmount)}.`
-        : session.status === "PAID"
-          ? "Pago — finalize o atendimento para liberar a mesa."
-          : null;
+      : session.paidAmount.greaterThan(0)
+        ? session.balanceAmount.greaterThan(0)
+          ? `Pagamento parcial — pago ${formatBRL(session.paidAmount)}, saldo restante ${formatBRL(session.balanceAmount)}.`
+          : `Saldo quitado — pago ${formatBRL(session.paidAmount)}. A mesa continua aberta para novos pedidos.`
+        : null;
 
   const addGuestWithIds = addGuest.bind(null, session.id, id);
 
@@ -204,7 +205,15 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
               <span className="text-muted">Nenhum nome informado</span>
             )}
             {session.guests.map((guest) => (
-              <span key={guest.id} className="rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink">
+              <span
+                key={guest.id}
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  guest.status === "SETTLED"
+                    ? "bg-free/10 text-free-dark line-through decoration-1"
+                    : "bg-ink/5 text-ink"
+                }`}
+                title={guest.status === "SETTLED" ? `${guest.name} — já quitou a parte dela` : undefined}
+              >
                 {guest.name}
               </span>
             ))}

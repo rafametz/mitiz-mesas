@@ -44,7 +44,12 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
       <NewOrderForm
         tableId={id}
         serviceSessionId={session.id}
-        guests={session.guests.map((guest) => ({ id: guest.id, name: guest.name ?? "(sem nome)" }))}
+        // Pessoa SETTLED (já quitou a parte dela — pagamento por pessoa,
+        // revisão 2026-08-10) some do seletor por padrão, mas nada do que
+        // já foi lançado pra ela antes é apagado ou desvinculado.
+        guests={session.guests
+          .filter((guest) => guest.status === "ACTIVE")
+          .map((guest) => ({ id: guest.id, name: guest.name ?? "(sem nome)" }))}
         products={products.map((product) => ({
           id: product.id,
           name: product.name,

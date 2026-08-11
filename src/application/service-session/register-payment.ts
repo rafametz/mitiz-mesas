@@ -3,8 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { recalculateSessionTotals } from "./recalculate-totals";
-import { canRegisterPayment, statusAfterPayment } from "@/domain/service-session/closing";
-import { sumDecimals, toDecimal, ZERO } from "@/lib/money";
+import { canRegisterPayment } from "@/domain/service-session/closing";
+import { sumDecimals, toDecimal } from "@/lib/money";
 import { publishChange } from "@/lib/realtime/publish";
 import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
 import { runAfterResponse } from "@/lib/run-after-response";
@@ -15,16 +15,31 @@ const registerSchema = z.object({
   paymentMethodId: z.string().min(1),
   amount: z.coerce.number().positive("Informe um valor de pagamento maior que zero."),
   idempotencyKey: z.string().min(1),
+  // Pagamento por pessoa (revisão 2026-08-10) — omitido/undefined é
+  // pagamento geral da mesa, como sempre foi.
+  guestId: z
+    .string()
+    .min(1)
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 });
 
 // Registra um pagamento — pode ser chamado várias vezes pra combinar mais
-// de uma forma no mesmo fechamento (regra 13). Idempotente de verdade
+// de uma forma no mesmo fechamento (regra 13), a qualquer momento do
+// atendimento ativo (OPEN ou CLOSING — revisão 2026-08-10: pagamento nunca
+// exigiu fechamento solicitado, e nunca muda o status da sessão sozinho;
+// ver src/domain/service-session/closing.ts). Idempotente de verdade
 // (regra 18/19, mesmo padrão de createOrder): chave repetida devolve o
 // pagamento já existente, nunca duplica.
 export async function registerPayment(
   serviceSessionId: string,
   actorUserId: string,
-  input: { paymentMethodId: string; amount: string | number; idempotencyKey: string },
+  input: {
+    paymentMethodId: string;
+    amount: string | number;
+    idempotencyKey: string;
+    guestId?: string;
+  },
 ) {
   const data = registerSchema.parse(input);
 
@@ -42,15 +57,20 @@ export async function registerPayment(
       });
 
       if (!canRegisterPayment(session.status)) {
-        throw new RegisterPaymentError(
-          "Solicite o fechamento da mesa antes de registrar um pagamento.",
-        );
+        throw new RegisterPaymentError("Esta mesa não tem atendimento ativo para receber pagamento.");
       }
 
       const method = await tx.paymentMethod.findFirst({
         where: { id: data.paymentMethodId, restaurantId: session.table.restaurantId, active: true },
       });
       if (!method) throw new RegisterPaymentError("Forma de pagamento inválida ou inativa.");
+
+      if (data.guestId) {
+        const guest = await tx.guest.findFirst({
+          where: { id: data.guestId, serviceSessionId },
+        });
+        if (!guest) throw new RegisterPaymentError("Esta pessoa não pertence a esta mesa.");
+      }
 
       const amount = toDecimal(data.amount);
       const balance = toDecimal(session.balanceAmount);
@@ -62,6 +82,7 @@ export async function registerPayment(
         data: {
           serviceSessionId,
           paymentMethodId: data.paymentMethodId,
+          guestId: data.guestId,
           amount,
           idempotencyKey: data.idempotencyKey,
           registeredById: actorUserId,
@@ -74,7 +95,7 @@ export async function registerPayment(
         action: "payment.registered",
         entityType: "Payment",
         entityId: payment.id,
-        metadata: { amount: amount.toString(), paymentMethod: method.name },
+        metadata: { amount: amount.toString(), paymentMethod: method.name, guestId: data.guestId ?? null },
       });
 
       const activePayments = await tx.payment.findMany({
@@ -82,28 +103,15 @@ export async function registerPayment(
       });
       const paidAmount = sumDecimals(activePayments.map((p) => p.amount));
 
+      // Só recalcula os totais (saldo sobe/desce com consumo e pagamento,
+      // sempre) — nunca mexe em ServiceSession.status/Table.status. Quem
+      // decide fechar a mesa é requestClosing/closeTable, ações
+      // explícitas e separadas (docs/product/business-rules.md §6).
       await recalculateSessionTotals(tx, serviceSessionId, {
         discountAmount: session.discountAmount,
         serviceChargeAmount: session.serviceChargeAmount,
         paidAmount,
       });
-
-      const totalAmount = toDecimal(session.totalAmount);
-      const remainingBalance = totalAmount.sub(paidAmount).lessThan(ZERO)
-        ? ZERO
-        : totalAmount.sub(paidAmount);
-      const newStatus = statusAfterPayment(remainingBalance);
-
-      await tx.serviceSession.update({
-        where: { id: serviceSessionId },
-        data: { status: newStatus },
-      });
-      if (newStatus === "PARTIALLY_PAID") {
-        await tx.table.update({
-          where: { id: session.tableId },
-          data: { status: "PARTIALLY_PAID" },
-        });
-      }
 
       return {
         payment,
@@ -134,7 +142,9 @@ const voidSchema = z
   .max(300);
 
 // Pagamento nunca é apagado (regra 8) — estorno é anulação registrada
-// (voidedAt/voidReason), preservando o original.
+// (voidedAt/voidReason), preservando o original. Também não mexe em
+// status — só devolve o saldo (revisão 2026-08-10, mesmo racional de
+// registerPayment).
 export async function voidPayment(paymentId: string, actorUserId: string, reason: string) {
   const voidReason = voidSchema.parse(reason);
 
@@ -170,26 +180,6 @@ export async function voidPayment(paymentId: string, actorUserId: string, reason
       serviceChargeAmount: payment.serviceSession.serviceChargeAmount,
       paidAmount,
     });
-
-    // Estornar pagamento nunca regride de PAID pra PARTIALLY_PAID
-    // sozinho seria surpreendente demais numa mesa já sendo finalizada —
-    // mas o saldo readquirido precisa refletir na tela mesmo assim, então
-    // o status volta a PARTIALLY_PAID sempre que sobra saldo de novo,
-    // simetricamente à regra de statusAfterPayment.
-    const totalAmount = toDecimal(payment.serviceSession.totalAmount);
-    const remainingBalance = totalAmount.sub(paidAmount).lessThan(ZERO)
-      ? ZERO
-      : totalAmount.sub(paidAmount);
-    if (remainingBalance.greaterThan(ZERO)) {
-      await tx.serviceSession.update({
-        where: { id: payment.serviceSessionId },
-        data: { status: "PARTIALLY_PAID" },
-      });
-      await tx.table.update({
-        where: { id: payment.serviceSession.tableId },
-        data: { status: "PARTIALLY_PAID" },
-      });
-    }
 
     return {
       tableId: payment.serviceSession.tableId,

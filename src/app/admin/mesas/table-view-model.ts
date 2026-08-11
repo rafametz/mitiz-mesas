@@ -34,7 +34,6 @@ export function statusBucket(status: TableStatus): StatusBucket {
     case "ORDER_IN_PROGRESS":
       return "occupied";
     case "WAITING_CLOSING":
-    case "PARTIALLY_PAID":
       return "closing";
     default:
       return "other";

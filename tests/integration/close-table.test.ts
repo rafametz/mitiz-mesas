@@ -4,6 +4,10 @@ import { openTable } from "@/application/service-session/open-table";
 import { createOrder } from "@/application/order/create-order";
 import { requestClosing, RequestClosingError } from "@/application/service-session/request-closing";
 import {
+  cancelClosingRequest,
+  CancelClosingRequestError,
+} from "@/application/service-session/cancel-closing-request";
+import {
   applyDiscount,
   ApplyDiscountError,
   voidDiscount,
@@ -15,12 +19,15 @@ import {
   voidPayment,
 } from "@/application/service-session/register-payment";
 import { closeTable, CloseTableError } from "@/application/service-session/close-table";
+import { markGuestSettled, reopenGuest } from "@/application/guest/mark-guest-settled";
 
 // Teste de integração — precisa de DATABASE_URL/DIRECT_URL reais
-// (npm run test:integration). Cobre o fluxo completo do Módulo 8
-// (business-rules.md §6): solicitar fechamento → taxa/desconto →
-// pagamento(s) → finalizar, incluindo as rejeições do servidor.
-describe("Módulo 8 — Caixa e pagamentos", () => {
+// (npm run test:integration). Cobre o Módulo 8 revisado
+// (docs/product/business-rules.md §6, revisão 2026-08-10 — separação
+// PAGAMENTO/FECHAMENTO): pagamento é permitido a qualquer momento do
+// atendimento ativo (OPEN ou CLOSING) e nunca bloqueia pedido novo
+// sozinho; só CLOSING (fechamento solicitado explicitamente) bloqueia.
+describe("Módulo 8 — Caixa e pagamentos (pagamento separado de fechamento)", () => {
   let restaurantId: string;
   let waiterId: string;
   let productId: string;
@@ -77,28 +84,24 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     await prisma.order.deleteMany({
       where: { serviceSession: { tableId: { in: createdTableIds } } },
     });
+    await prisma.guest.deleteMany({
+      where: { serviceSession: { tableId: { in: createdTableIds } } },
+    });
     await prisma.serviceSession.deleteMany({ where: { tableId: { in: createdTableIds } } });
     await prisma.table.deleteMany({ where: { id: { in: createdTableIds } } });
     await prisma.product.deleteMany({ where: { id: productId } });
-    // Categoria/setor criados só para este arquivo de teste — sem isso,
-    // cada rodada de `npm run test:integration` deixava um par órfão no
-    // banco (achado real: 4 pares acumulados, removidos manualmente em
-    // 2026-08-10). Só é seguro apagar depois do produto acima, já que
-    // Product tem onDelete: Restrict para category/defaultSector.
     await prisma.category.deleteMany({ where: { id: categoryId } });
     await prisma.productionSector.deleteMany({ where: { id: sectorId } });
     await prisma.$disconnect();
   });
 
-  // Cada teste abre a mesa e lança um pedido de R$100,00 — ponto de
-  // partida comum pro fluxo de fechamento.
-  async function openTableWithOrder() {
+  async function openTableWithOrder(guestCount = 2) {
     const table = await prisma.table.create({
       data: { restaurantId, number: `CAIXA-${Date.now()}-${Math.random().toString(36).slice(2)}` },
     });
     createdTableIds.push(table.id);
 
-    const session = await openTable({ tableId: table.id, waiterId, guestCount: 2 });
+    const session = await openTable({ tableId: table.id, waiterId, guestCount });
     await createOrder({
       serviceSessionId: session.id,
       waiterId,
@@ -109,12 +112,108 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     return prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
   }
 
-  it("fluxo completo: solicitar fechamento, taxa, desconto, dois pagamentos, finalizar", async () => {
-    const session = await openTableWithOrder();
+  // Reproduz o exemplo do enunciado: mesa de 4 pessoas, consumo 400, uma
+  // pessoa paga 100 e vai embora, a mesa continua OPEN e aceita mais
+  // pedido, saldo recalculado dinamicamente.
+  it("pagamento parcial em OPEN não bloqueia pedido novo e o saldo é recalculado dinamicamente", async () => {
+    const table = await prisma.table.create({
+      data: { restaurantId, number: `CAIXA-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+    });
+    createdTableIds.push(table.id);
+
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 4 });
+
+    // Consumo = 400 (4x produto de 100).
+    await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `enunciado-1-${session.id}`,
+      items: [{ productId, quantity: 4 }],
+    });
+    let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.totalAmount.toString()).toBe("400");
+
+    // Uma pessoa paga 100 e vai embora — sem solicitar fechamento.
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "100.00",
+      idempotencyKey: `enunciado-pay-${session.id}`,
+    });
+    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN"); // continua OPEN — não vira "fechando".
+    expect(current.paidAmount.toString()).toBe("100");
+    expect(current.balanceAmount.toString()).toBe("300");
+
+    // As outras continuam pedindo — isto é o que o bug antigo bloqueava.
+    await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `enunciado-2-${session.id}`,
+      items: [{ productId, quantity: 1, notes: "mais consumo depois do pagamento parcial" }],
+    });
+    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.totalAmount.toString()).toBe("500");
+    expect(current.paidAmount.toString()).toBe("100");
+    expect(current.balanceAmount.toString()).toBe("400");
+  });
+
+  it("saldo chegando a zero em OPEN não fecha nada nem impede pedido novo", async () => {
+    const session = await openTableWithOrder(1); // consumo = 100
+
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "100.00",
+      idempotencyKey: `zera-${session.id}`,
+    });
+    let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.balanceAmount.toString()).toBe("0");
+
+    // Mesmo com saldo zero, a mesa não fechou sozinha — continua aceitando
+    // pedido novo, saldo volta a subir.
+    await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `zera-2-${session.id}`,
+      items: [{ productId, quantity: 1 }],
+    });
+    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.balanceAmount.toString()).toBe("100");
+  });
+
+  it("closeTable rejeita mesmo com saldo zero se o fechamento não foi solicitado (status != CLOSING)", async () => {
+    const session = await openTableWithOrder(1);
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "100.00",
+      idempotencyKey: `sem-closing-${session.id}`,
+    });
+    const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.balanceAmount.toString()).toBe("0");
+
+    await expect(closeTable(session.id, waiterId)).rejects.toThrow(CloseTableError);
+  });
+
+  it("fluxo completo: pagamento antes de solicitar, fechamento pedido depois, taxa, desconto, finalizar", async () => {
+    const session = await openTableWithOrder(); // consumo = 100
+
+    // Pagamento parcial ANTES de solicitar fechamento — o novo caminho
+    // principal (revisão 2026-08-10).
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "30.00",
+      idempotencyKey: `fluxo-pre-${session.id}`,
+    });
+    let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.balanceAmount.toString()).toBe("70");
 
     await requestClosing(session.id, waiterId);
-    let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("WAITING_CLOSING");
+    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("CLOSING");
 
     // Taxa de 10% sobre 100 = 10.
     await applyServiceCharge(session.id, waiterId, { percent: 10 });
@@ -128,29 +227,18 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
       reason: "Cliente fidelidade",
     });
     current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    // Total = 100 (subtotal) - 20 (desconto) + 10 (taxa) = 90.
+    // Total = 100 (subtotal) - 20 (desconto) + 10 (taxa) = 90. Pago 30 -> saldo 60.
     expect(current.discountAmount.toString()).toBe("20");
     expect(current.totalAmount.toString()).toBe("90");
-    expect(current.balanceAmount.toString()).toBe("90");
+    expect(current.balanceAmount.toString()).toBe("60");
 
-    // Primeiro pagamento parcial — 50.
     await registerPayment(session.id, waiterId, {
       paymentMethodId,
-      amount: "50.00",
-      idempotencyKey: `pay-1-${session.id}`,
+      amount: "60.00",
+      idempotencyKey: `fluxo-final-${session.id}`,
     });
     current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("PARTIALLY_PAID");
-    expect(current.balanceAmount.toString()).toBe("40");
-
-    // Segundo pagamento (forma diferente) cobre o resto — 40.
-    await registerPayment(session.id, waiterId, {
-      paymentMethodId,
-      amount: "40.00",
-      idempotencyKey: `pay-2-${session.id}`,
-    });
-    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("PAID");
+    expect(current.status).toBe("CLOSING"); // pagamento nunca muda o status sozinho.
     expect(current.balanceAmount.toString()).toBe("0");
 
     await closeTable(session.id, waiterId);
@@ -169,24 +257,57 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     await expect(requestClosing(session.id, waiterId)).rejects.toThrow(RequestClosingError);
   });
 
-  it("rejeita taxa/desconto/pagamento antes de solicitar o fechamento", async () => {
+  it("cancelClosingRequest volta CLOSING -> OPEN e a mesa aceita pedido de novo", async () => {
+    const session = await openTableWithOrder();
+    await requestClosing(session.id, waiterId);
+    let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("CLOSING");
+
+    await cancelClosingRequest(session.id, waiterId);
+    current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+
+    // Aceita pedido de novo, prova de que voltou a ficar OPEN de verdade.
+    await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `pos-cancel-${session.id}`,
+      items: [{ productId, quantity: 1 }],
+    });
+
+    const table = await prisma.table.findUniqueOrThrow({ where: { id: session.tableId } });
+    expect(table.status).toBe("OCCUPIED");
+  });
+
+  it("rejeita cancelar solicitação de fechamento quando não está em CLOSING", async () => {
+    const session = await openTableWithOrder();
+    await expect(cancelClosingRequest(session.id, waiterId)).rejects.toThrow(
+      CancelClosingRequestError,
+    );
+  });
+
+  it("rejeita taxa/desconto antes de solicitar o fechamento (continuam exigindo CLOSING)", async () => {
     const session = await openTableWithOrder();
 
     await expect(
       applyDiscount(session.id, waiterId, { type: "PERCENTAGE", value: 10, reason: "Teste" }),
     ).rejects.toThrow(ApplyDiscountError);
-    await expect(
-      registerPayment(session.id, waiterId, {
-        paymentMethodId,
-        amount: "10.00",
-        idempotencyKey: `early-${session.id}`,
-      }),
-    ).rejects.toThrow(RegisterPaymentError);
+  });
+
+  it("pagamento é permitido em OPEN sem fechamento solicitado (revisão 2026-08-10)", async () => {
+    const session = await openTableWithOrder();
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "10.00",
+      idempotencyKey: `open-payment-${session.id}`,
+    });
+    const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.status).toBe("OPEN");
+    expect(current.paidAmount.toString()).toBe("10");
   });
 
   it("rejeita pagamento maior que o saldo restante", async () => {
     const session = await openTableWithOrder();
-    await requestClosing(session.id, waiterId);
 
     await expect(
       registerPayment(session.id, waiterId, {
@@ -206,7 +327,6 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
 
   it("pagamento é idempotente — chave repetida não duplica nem soma duas vezes", async () => {
     const session = await openTableWithOrder();
-    await requestClosing(session.id, waiterId);
     const idempotencyKey = `dup-${session.id}`;
 
     await registerPayment(session.id, waiterId, {
@@ -224,12 +344,11 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     expect(payments).toHaveLength(1);
 
     const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("PAID");
+    expect(current.balanceAmount.toString()).toBe("0");
   });
 
-  it("estornar pagamento (nunca apaga) restaura o saldo e volta pra PARTIALLY_PAID", async () => {
+  it("estornar pagamento (nunca apaga) restaura o saldo, sem mudar o status", async () => {
     const session = await openTableWithOrder();
-    await requestClosing(session.id, waiterId);
     const payment = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       amount: "100.00",
@@ -237,7 +356,8 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     });
 
     let current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("PAID");
+    expect(current.status).toBe("OPEN");
+    expect(current.balanceAmount.toString()).toBe("0");
 
     await voidPayment(payment.id, waiterId, "Pagamento em duplicidade");
 
@@ -245,8 +365,68 @@ describe("Módulo 8 — Caixa e pagamentos", () => {
     expect(voided.voidedAt).not.toBeNull(); // nunca apagado, só marcado
 
     current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
-    expect(current.status).toBe("PARTIALLY_PAID");
+    expect(current.status).toBe("OPEN"); // estorno também não mexe em status.
     expect(current.balanceAmount.toString()).toBe("100");
+  });
+
+  it("pagamento vinculado a uma pessoa (guestId) — pagamento geral continua funcionando também", async () => {
+    const session = await openTableWithOrder();
+    const guest = await prisma.guest.create({
+      data: { serviceSessionId: session.id, name: "Ana", sortOrder: 0 },
+    });
+
+    const payment = await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "40.00",
+      idempotencyKey: `guest-pay-${session.id}`,
+      guestId: guest.id,
+    });
+    expect(payment.guestId).toBe(guest.id);
+
+    // Pagamento geral (sem guestId) continua funcionando na mesma comanda.
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      amount: "10.00",
+      idempotencyKey: `general-pay-${session.id}`,
+    });
+
+    const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.paidAmount.toString()).toBe("50");
+  });
+
+  it("rejeita pagamento vinculado a pessoa que não pertence à mesa", async () => {
+    const session = await openTableWithOrder();
+    const otherSession = await openTableWithOrder();
+    const guestFromOtherTable = await prisma.guest.create({
+      data: { serviceSessionId: otherSession.id, name: "Intruso", sortOrder: 0 },
+    });
+
+    await expect(
+      registerPayment(session.id, waiterId, {
+        paymentMethodId,
+        amount: "10.00",
+        idempotencyKey: `intruso-${session.id}`,
+        guestId: guestFromOtherTable.id,
+      }),
+    ).rejects.toThrow(RegisterPaymentError);
+  });
+
+  it("marcar/reabrir pessoa (SETTLED/ACTIVE) é manual e não mexe em pagamento nem status da mesa", async () => {
+    const session = await openTableWithOrder();
+    const guest = await prisma.guest.create({
+      data: { serviceSessionId: session.id, name: "Beto", sortOrder: 0 },
+    });
+
+    await markGuestSettled(guest.id, waiterId);
+    let current = await prisma.guest.findUniqueOrThrow({ where: { id: guest.id } });
+    expect(current.status).toBe("SETTLED");
+
+    await reopenGuest(guest.id, waiterId);
+    current = await prisma.guest.findUniqueOrThrow({ where: { id: guest.id } });
+    expect(current.status).toBe("ACTIVE");
+
+    const session2 = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(session2.status).toBe("OPEN");
   });
 
   it("só permite um desconto ativo por vez — precisa anular antes de aplicar outro", async () => {

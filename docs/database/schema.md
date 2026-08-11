@@ -182,8 +182,14 @@ nem só da validação de UI (regra 24).
    `pg_class.relrowsecurity` e leitura de teste pelo Prisma (que conecta
    como dono das tabelas — RLS não bloqueia a aplicação, só a API pública
    do Supabase sem policy).
-
-Nenhum dado de negócio foi inserido.
+6. ✅ Separação pagamento/fechamento (ADR 0004) —
+   `prisma/migrations/20260810160849_separate_payment_from_closing`:
+   renomeia `ServiceSessionStatus.WAITING_CLOSING` → `CLOSING`, remove
+   `PARTIALLY_PAID`/`PAID` do enum (com backfill de dados existentes,
+   incluindo uma sessão órfã real fechada explicitamente pela própria
+   migration), remove `PARTIALLY_PAID` de `TableStatus`, adiciona
+   `Guest.status` (`GuestStatus`) e `Payment.guestId` opcional
+   (pagamento por pessoa).
 
 ## 7. Fluxo de migration usado na prática
 

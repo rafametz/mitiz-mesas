@@ -23,9 +23,9 @@ export async function closeTable(serviceSessionId: string, actorUserId: string) 
 
     if (!canCloseTable(session.status, session.balanceAmount)) {
       throw new CloseTableError(
-        session.status === "PAID"
+        session.status === "CLOSING"
           ? "Saldo da comanda ainda não está zerado."
-          : "Esta mesa ainda não está pronta para ser finalizada.",
+          : "Solicite o fechamento da mesa antes de finalizar.",
       );
     }
 

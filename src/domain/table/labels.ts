@@ -8,7 +8,6 @@ export const TABLE_STATUS_LABELS: Record<TableStatus, string> = {
   WAITING_SERVICE: "Aguardando atendimento",
   ORDER_IN_PROGRESS: "Pedido em andamento",
   WAITING_CLOSING: "Aguardando fechamento",
-  PARTIALLY_PAID: "Pagamento parcial",
   RESERVED: "Reservada",
   BLOCKED: "Bloqueada",
 };

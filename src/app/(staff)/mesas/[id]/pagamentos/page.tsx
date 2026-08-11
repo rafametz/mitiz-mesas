@@ -10,16 +10,21 @@ import {
   canModifyClosingCharges,
   canRegisterPayment,
 } from "@/domain/service-session/closing";
-import { splitByPerson, splitEqually, type SplitItemInput } from "@/domain/service-session/split";
+import { splitEqually, type SplitItemInput } from "@/domain/service-session/split";
+import { deriveGuestParticipation } from "@/domain/service-session/guest-participation";
 import { DISCOUNT_TYPE_LABELS } from "@/domain/service-session/labels";
 import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { GUEST_STATUS_TONE } from "@/components/ui/status-tone";
 import { SummaryField } from "@/components/ui/summary-field";
 import { ReasonConfirmForm } from "@/components/form/reason-confirm-form";
 import { formatDateTime } from "@/lib/datetime";
 import { formatBRL, sumDecimals, toDecimal, ZERO } from "@/lib/money";
 import { voidDiscountAction, voidPaymentAction } from "./actions";
 import { ApplyDiscountForm } from "./apply-discount-form";
+import { CancelClosingRequestButton } from "./cancel-closing-request-button";
 import { CloseTableButton } from "./close-table-button";
+import { GuestSettleButton } from "./guest-settle-button";
 import { RegisterPaymentForm } from "./register-payment-form";
 import { RequestClosingButton } from "./request-closing-button";
 import { ServiceChargeForm } from "./service-charge-form";
@@ -39,35 +44,10 @@ export default async function PagamentosPage({
 
   const restaurant = await getCurrentRestaurant();
 
-  const canRequestClosingPermission = hasAnyPermission(user.permissions, [
-    PERMISSIONS.TABLES_CLOSE_REQUEST,
-    PERMISSIONS.TABLES_CLOSE,
-  ]);
-
-  // Antes do fechamento solicitado, não há taxa/desconto/pagamento pra
-  // mostrar — só o convite pra dar o primeiro passo (business-rules.md §6).
-  if (session.status === "OPEN") {
-    return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <h2 className="font-display text-lg font-semibold text-ink">Fechamento e pagamentos</h2>
-        {canRequestClosingPermission ? (
-          <>
-            <p className="max-w-xs text-sm text-muted">
-              Esta mesa ainda está com o atendimento em andamento. Solicite o fechamento para
-              revisar taxa de serviço, aplicar desconto e registrar o pagamento.
-            </p>
-            <RequestClosingButton tableId={id} sessionId={session.id} tableNumber={table.number} />
-          </>
-        ) : (
-          <p className="max-w-xs text-sm text-muted">
-            Esta mesa ainda está com o atendimento em andamento. Peça para o garçom ou o caixa
-            solicitar o fechamento.
-          </p>
-        )}
-      </div>
-    );
-  }
-
+  // Pagamento e fechamento são conceitos separados (revisão 2026-08-10):
+  // pagamento é possível em qualquer status ativo (OPEN ou CLOSING) — não
+  // existe mais um "portão" que esconde a página inteira até o fechamento
+  // ser solicitado. Só taxa/desconto/finalizar dependem de CLOSING.
   const [activeDiscount, latestServiceCharge, payments, paymentMethods, items] = await Promise.all([
     prisma.discount.findFirst({
       where: { serviceSessionId: session.id, voidedAt: null },
@@ -81,7 +61,7 @@ export default async function PagamentosPage({
     prisma.payment.findMany({
       where: { serviceSessionId: session.id, voidedAt: null },
       orderBy: { createdAt: "desc" },
-      include: { paymentMethod: true, registeredBy: true },
+      include: { paymentMethod: true, registeredBy: true, guest: true },
     }),
     prisma.paymentMethod.findMany({
       where: { restaurantId: restaurant.id, active: true },
@@ -93,6 +73,10 @@ export default async function PagamentosPage({
     }),
   ]);
 
+  const canRequestClosingPermission = hasAnyPermission(user.permissions, [
+    PERMISSIONS.TABLES_CLOSE_REQUEST,
+    PERMISSIONS.TABLES_CLOSE,
+  ]);
   const canModifyCharges =
     hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY) &&
     canModifyClosingCharges(session.status);
@@ -106,6 +90,8 @@ export default async function PagamentosPage({
   const canClosePermission = hasPermission(user.permissions, PERMISSIONS.TABLES_CLOSE);
   const readyToClose = canCloseTable(session.status, session.balanceAmount);
 
+  const activeGuests = session.guests.filter((g) => g.status === "ACTIVE");
+
   // Divisão da conta: ferramenta de apoio pro caixa (business-rules.md §6,
   // passo 5) — só ajuda a calcular, não grava nada; a divisão de verdade
   // acontece pelos pagamentos que forem registrados abaixo.
@@ -113,10 +99,6 @@ export default async function PagamentosPage({
   const hasBalanceToSplit = toDecimal(session.totalAmount).greaterThan(ZERO);
   const equalParts = hasBalanceToSplit ? splitEqually(session.totalAmount, parts) : [];
 
-  const guestsForSplit = session.guests.map((guest, index) => ({
-    id: guest.id,
-    name: guest.name ?? `Pessoa ${index + 1}`,
-  }));
   const splitItems: SplitItemInput[] = items.map((item) => {
     const modifiersTotal = sumDecimals(
       item.modifiers.map((m) => toDecimal(m.priceDeltaAtOrder).mul(m.quantity)),
@@ -124,8 +106,17 @@ export default async function PagamentosPage({
     const lineTotal = toDecimal(item.unitPrice).add(modifiersTotal).mul(item.quantity);
     return { guestId: item.guestId, label: `${item.quantity}x ${item.productNameAtOrder}`, lineTotal };
   });
-  const personSplit =
-    hasBalanceToSplit && guestsForSplit.length > 0 ? splitByPerson(splitItems, guestsForSplit) : [];
+  // Pagamento por pessoa (revisão 2026-08-10): consumo + pago + saldo de
+  // cada uma, calculado a partir dos pagamentos já vinculados a ela — só
+  // exibição, marcar SETTLED continua sendo decisão manual do caixa.
+  const guestParticipation =
+    hasBalanceToSplit && session.guests.length > 0
+      ? deriveGuestParticipation(
+          session.guests.map((g) => ({ id: g.id, name: g.name, status: g.status })),
+          splitItems,
+          payments.map((p) => ({ guestId: p.guestId, amount: p.amount })),
+        )
+      : [];
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -141,6 +132,38 @@ export default async function PagamentosPage({
           <SummaryField label="Pago" value={formatBRL(session.paidAmount)} />
           <SummaryField label="Saldo" value={formatBRL(session.balanceAmount)} emphasis />
         </div>
+      </Card>
+
+      {/* Fechamento: separado de pagamento de propósito (revisão
+          2026-08-10) — pagamento nunca depende disto, só taxa/desconto/
+          finalizar dependem. */}
+      <Card>
+        <h2 className="mb-1 text-sm font-semibold text-ink">Fechamento</h2>
+        {session.status === "CLOSING" ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-ink">
+              Fechamento solicitado — revise taxa de serviço, desconto e registre o pagamento antes
+              de finalizar.
+            </p>
+            {canRequestClosingPermission && (
+              <CancelClosingRequestButton tableId={id} sessionId={session.id} />
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-sm text-muted">
+              Atendimento aberto — pedidos continuam sendo aceitos normalmente. Solicite o
+              fechamento quando a mesa estiver pronta para encerrar.
+            </p>
+            {canRequestClosingPermission ? (
+              <RequestClosingButton tableId={id} sessionId={session.id} tableNumber={table.number} />
+            ) : (
+              <p className="text-xs text-muted">
+                Peça para o garçom ou o caixa solicitar o fechamento.
+              </p>
+            )}
+          </div>
+        )}
       </Card>
 
       {canApplyServiceCharge && (
@@ -233,16 +256,33 @@ export default async function PagamentosPage({
               </ul>
             </div>
 
-            {personSplit.length > 0 && (
+            {guestParticipation.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
                   Por pessoa
                 </p>
-                <ul className="flex flex-col gap-1 text-sm">
-                  {personSplit.map((part) => (
-                    <li key={part.guestId} className="flex items-center justify-between text-ink">
-                      <span>{part.guestName}</span>
-                      <span className="tabular">{formatBRL(part.amount)}</span>
+                <ul className="flex flex-col gap-2">
+                  {guestParticipation.map((part) => (
+                    <li key={part.guestId} className="flex items-start justify-between gap-2 text-sm">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-ink">{part.guestName}</span>
+                          <StatusBadge tone={GUEST_STATUS_TONE[part.status]}>
+                            {part.status === "SETTLED" ? "Quitada" : "Ativa"}
+                          </StatusBadge>
+                        </div>
+                        <div className="tabular text-xs text-muted">
+                          consumo {formatBRL(part.consumption)} · pago {formatBRL(part.paid)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="tabular font-medium text-ink">{formatBRL(part.balance)}</span>
+                        <GuestSettleButton
+                          tableId={id}
+                          guestId={part.guestId}
+                          isSettled={part.status === "SETTLED"}
+                        />
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -267,6 +307,9 @@ export default async function PagamentosPage({
                   <div className="text-ink">
                     {payment.paymentMethod.name} —{" "}
                     <span className="tabular font-medium">{formatBRL(payment.amount)}</span>
+                    {payment.guest && (
+                      <span className="text-muted"> · {payment.guest.name ?? "pessoa sem nome"}</span>
+                    )}
                   </div>
                   <div className="text-xs text-muted">
                     {formatDateTime(payment.createdAt)} · {payment.registeredBy.name}
@@ -292,6 +335,7 @@ export default async function PagamentosPage({
             tableId={id}
             sessionId={session.id}
             paymentMethods={paymentMethods}
+            guests={activeGuests.map((g, i) => ({ id: g.id, name: g.name ?? `Pessoa ${i + 1}` }))}
             balance={session.balanceAmount.toString()}
           />
         )}
@@ -304,7 +348,11 @@ export default async function PagamentosPage({
           tableNumber={table.number}
           disabled={!readyToClose}
           disabledReason={
-            readyToClose ? undefined : "Registre o pagamento total (saldo zerado) para finalizar."
+            readyToClose
+              ? undefined
+              : session.status !== "CLOSING"
+                ? "Solicite o fechamento da mesa antes de finalizar."
+                : "Registre o pagamento total (saldo zerado) para finalizar."
           }
         />
       )}

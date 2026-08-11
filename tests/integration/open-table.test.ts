@@ -75,7 +75,7 @@ describe("openTable", () => {
     // (docs/database/schema.md §4).
     await expect(
       prisma.serviceSession.create({
-        data: { tableId: table.id, waiterId, guestCount: 1, status: "WAITING_CLOSING" },
+        data: { tableId: table.id, waiterId, guestCount: 1, status: "CLOSING" },
       }),
     ).rejects.toThrow();
   });

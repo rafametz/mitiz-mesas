@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { registerPaymentAction, type FormState } from "./actions";
 
 type PaymentMethodOption = { id: string; name: string };
+type GuestOption = { id: string; name: string };
 
 const initialState: FormState = { error: null };
 
@@ -19,11 +20,15 @@ export function RegisterPaymentForm({
   tableId,
   sessionId,
   paymentMethods,
+  guests,
   balance,
 }: {
   tableId: string;
   sessionId: string;
   paymentMethods: PaymentMethodOption[];
+  // Pessoas ativas da mesa — pagamento por pessoa (revisão 2026-08-10),
+  // opcional: em branco = pagamento geral da mesa, como sempre foi.
+  guests: GuestOption[];
   // Saldo restante no momento em que a página carregou — só serve de
   // sugestão inicial no campo de valor (o servidor sempre revalida o valor
   // de verdade; CLAUDE.md regra 24).
@@ -57,6 +62,16 @@ export function RegisterPaymentForm({
           </option>
         ))}
       </SelectField>
+      {guests.length > 0 && (
+        <SelectField label="Pessoa (opcional — em branco = pagamento geral)" name="guestId" defaultValue="">
+          <option value="">Pagamento geral da mesa</option>
+          {guests.map((guest) => (
+            <option key={guest.id} value={guest.id}>
+              {guest.name}
+            </option>
+          ))}
+        </SelectField>
+      )}
       {/* `key` força remontar o campo (e reler `balance`) a cada pagamento
           bem-sucedido — depois de revalidatePath, o saldo já vem atualizado
           do servidor, então o próximo pagamento já sugere o valor certo em
