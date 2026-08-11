@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, History, Users, Wallet } from "lucide-react";
+import { Clock, History, Users, Wallet } from "lucide-react";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
@@ -10,6 +10,7 @@ import { SERVICE_SESSION_STATUS_TONE, TABLE_STATUS_TONE } from "@/components/ui/
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { tableChannel } from "@/lib/realtime/channels";
 import { formatElapsed, formatTime } from "@/lib/datetime";
+import { MesaBackButton } from "./back-button";
 
 export default async function MesaLayout({
   children,
@@ -41,12 +42,7 @@ export default async function MesaLayout({
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <IconButton
-              href="/mesas"
-              label="Voltar para mesas"
-              icon={ArrowLeft}
-              className="-ml-2"
-            />
+            <MesaBackButton tableId={id} />
             <h1 className="font-display text-xl font-semibold text-ink">Mesa {table.number}</h1>
             <StatusBadge
               tone={

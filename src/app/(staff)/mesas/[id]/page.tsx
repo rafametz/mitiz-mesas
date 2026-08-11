@@ -14,6 +14,7 @@ import { CANCELLABLE_ORDER_ITEM_STATUSES } from "@/domain/order/states";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
 import { TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Fab } from "@/components/ui/fab";
@@ -24,7 +25,6 @@ import { formatTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
 import { addGuest } from "./actions";
 import { OpenTableForm } from "./open-table-form";
-import { RequestClosingButton } from "./pagamentos/request-closing-button";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
 
@@ -122,24 +122,24 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
         </Link>
       )}
 
-      {/* Entrada bem visível pra fechar a mesa — antes só existia o ícone
-          pequeno de carteira no cabeçalho (layout.tsx), difícil de notar
-          (feedback do usuário). Some quando o fechamento já foi
-          solicitado (CLOSING) — o banner acima já assume esse lugar. */}
+      {/* Entrada bem visível pra ir pra tela de fechamento/pagamentos —
+          antes só existia o ícone pequeno de carteira no cabeçalho
+          (layout.tsx), difícil de notar (feedback do usuário). Só leva pra
+          lá (o caixa registra pagamentos conforme o pessoal for acertando);
+          não solicita o fechamento sozinho — essa ação continua sendo
+          explícita dentro da própria tela de pagamentos, com sua
+          confirmação (feedback do usuário: o botão não deve "fechar a mesa
+          na hora"). Some quando o fechamento já foi solicitado (CLOSING) —
+          o banner acima já assume esse lugar. */}
       {session.status === "OPEN" && canRequestClosingPermission && (
-        <RequestClosingButton
-          tableId={id}
-          sessionId={session.id}
-          tableNumber={table.number}
-          label={
-            <>
-              <DoorClosed className="h-5 w-5" />
-              Fechar mesa
-            </>
-          }
+        <Button
+          href={`/mesas/${id}/pagamentos`}
           variant="secondary"
           className="w-full justify-center gap-2"
-        />
+        >
+          <DoorClosed className="h-5 w-5" />
+          Fechar mesa
+        </Button>
       )}
 
       {/* Resumo financeiro: só Subtotal fica sempre visível — os outros 5
