@@ -13,4 +13,5 @@ export const PRINT_JOB_TYPE_LABELS: Record<PrintJobType, string> = {
   COMPLEMENT: "Complemento",
   CANCELLATION: "Cancelamento",
   REPRINT: "Reimpressão",
+  BILL_SUMMARY: "Resumo da comanda",
 };

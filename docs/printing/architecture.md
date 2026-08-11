@@ -83,6 +83,21 @@ ninguem processar; ver "Fora do escopo desta versão" abaixo).
      avisa quem está preparando para parar/não entregar.
    - Reimpressão manual (`/admin/impressao`, ação "Reimprimir"): tipo
      `REPRINT`, mesmo `contentSnapshot` do job original.
+   - "Imprimir conferência" (tela da mesa, CLAUDE.md seção 10): tipo
+     `BILL_SUMMARY`, criado direto pelo clique do usuário (não dentro de
+     nenhuma transação maior nem adiado com `runAfterResponse` — é a
+     própria ação principal, `src/application/printing/
+     create-bill-summary-print-job.ts`). Diferente dos outros 4 tipos: não
+     é sobre um `Order` específico nem um setor de produção, é um resumo
+     do atendimento inteiro no momento em que foi impresso (itens
+     consolidados de todos os pedidos, total, divisão igual por pessoa e,
+     se já houver, pagamentos e saldo) — por isso `orderId`/`sectorId`
+     ficam nulos e existe `serviceSessionId` em vez disso.
+     `createReprintJob` rejeita reimprimir esse tipo (o saldo pode ter
+     mudado desde então; pedir um resumo novo pela tela da mesa é o
+     caminho certo). Formato próprio em
+     `src/domain/printing/bill-summary.ts`, com valores já formatados em
+     BRL (o agente não tem Decimal/Intl).
 2. **`contentSnapshot`** é montado e congelado no momento da criação — se o
    nome do produto ou da mesa mudar depois, a reimpressão sai igual ao que
    foi impresso da primeira vez (mesmo racional do preço congelado em

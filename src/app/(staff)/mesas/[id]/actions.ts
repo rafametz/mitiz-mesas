@@ -4,13 +4,17 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/application/auth/get-current-user";
+import { requireAnyPermission, requirePermission } from "@/application/auth/get-current-user";
 import { openTable, OpenTableError } from "@/application/service-session/open-table";
 import {
   GuestSettlementError,
   markGuestSettled,
   reopenGuest,
 } from "@/application/guest/mark-guest-settled";
+import {
+  BillSummaryPrintError,
+  createBillSummaryPrintJob,
+} from "@/application/printing/create-bill-summary-print-job";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 
 export type FormState = { error: string | null };
@@ -106,4 +110,33 @@ export async function reopenGuestAction(
   }
   revalidatePath(`/mesas/${tableId}`);
   return { error: null };
+}
+
+// "Imprimir conferência" (CLAUDE.md seção 10) — quem pode criar pedido,
+// registrar pagamento ou já gerencia a fila de impressão (Garçom, Caixa,
+// Admin); Produção fica de fora (não interage com a tela da mesa). Estado
+// próprio (não o `FormState` compartilhado acima) porque o resultado
+// também precisa dizer se existe impressora cadastrada, pro botão escolher
+// o toast certo sem duplicar essa checagem no cliente.
+export type PrintBillSummaryState = { error: string | null; printerConfigured: boolean | null };
+
+export async function printBillSummaryAction(
+  tableId: string,
+  sessionId: string,
+  _prevState: PrintBillSummaryState, // eslint-disable-line @typescript-eslint/no-unused-vars
+  _formData: FormData, // eslint-disable-line @typescript-eslint/no-unused-vars
+): Promise<PrintBillSummaryState> {
+  await requireAnyPermission([
+    PERMISSIONS.ORDERS_CREATE,
+    PERMISSIONS.PAYMENTS_REGISTER,
+    PERMISSIONS.PRINT_JOBS_MANAGE,
+  ]);
+  try {
+    const { printerConfigured } = await createBillSummaryPrintJob(sessionId);
+    revalidatePath(`/mesas/${tableId}`);
+    return { error: null, printerConfigured };
+  } catch (error) {
+    if (error instanceof BillSummaryPrintError) return { error: error.message, printerConfigured: null };
+    return { error: "Não foi possível gerar o resumo da comanda.", printerConfigured: null };
+  }
 }

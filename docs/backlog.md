@@ -572,6 +572,48 @@ verdade o pedido de teste nunca tinha sido criado. Resolvido criando o
 pedido de teste direto no banco (mesmo shape que `createOrder` grava) pra
 isolar o teste do agente da instabilidade da automação do navegador.
 
+### "Imprimir conferência" — resumo da comanda (2026-08-11) ✅
+
+Pedido explícito do usuário: um ticket com o mesmo cabeçalho dos tickets de
+pedido, resumo consolidado de itens/valores, total, divisão igual por
+pessoa e, se já houver, pagamentos registrados e saldo atual. Era a última
+peça pendente da lista de ações da tela da mesa em CLAUDE.md seção 10
+("Imprimir conferência"), registrada como fora de escopo desde o Módulo 3
+(linha ~147 acima) até os módulos que ela depende (`Order`, `Payment`,
+impressão) existirem.
+
+- ✅ Novo `PrintJobType.BILL_SUMMARY` — diferente dos outros 4 tipos, não é
+  sobre um `Order` nem um setor de produção: é sobre o `ServiceSession`
+  inteiro. `orderId`/`sectorId` do `PrintJob` viraram opcionais,
+  `serviceSessionId` novo (migration
+  `20260811190000_bill_summary_print_job`, só adição de valor de enum +
+  colunas opcionais, sem reescrita de dado — bem mais simples que a
+  migration do Módulo 8);
+- ✅ `src/domain/printing/bill-summary.ts` — schema próprio (zod), valores
+  monetários já formatados em BRL no `contentSnapshot` (o agente não tem
+  Decimal/Intl, mesmo racional de `meatPointLabel` em `ticket.ts`);
+- ✅ `src/application/printing/create-bill-summary-print-job.ts` — reusa
+  `buildConsolidatedSummary` (mesmo totalizador já usado na tela da mesa) e
+  `splitEqually` (mesma divisão igual já usada em "Dividir a conta");
+- ✅ `createReprintJob` rejeita reimprimir esse tipo (o saldo pode ter
+  mudado desde a impressão original; gerar um resumo novo pela tela da
+  mesa é o caminho certo, não reaproveitar o snapshot antigo) — decisão
+  registrada, não um limite técnico;
+- ✅ Botão "Imprimir" ao lado do título "Resumo da comanda" na tela da mesa
+  (`src/app/(staff)/mesas/[id]/page.tsx`) — ação junto do que está sendo
+  impresso, não escondida no cabeçalho; toast avisa se não há impressora
+  cadastrada ainda (job fica registrado mesmo assim, mesmo comportamento
+  dos outros tipos sem impressora);
+- **Testes**: 4 unitários (`bill-summary.ts`) + 4 de integração novos em
+  `tests/integration/print-jobs.test.ts` (resumo com itens/total/divisão
+  por pessoa, pagamentos + saldo, rejeição de reimpressão, claim sem erro
+  de validação). `tsc --noEmit`, `npm run lint`, `npm run build` e `npm
+  test` (108/108) limpos; `npm run test:integration` limpo (as duas falhas
+  vistas numa primeira rodada foram conflito de transação Serializable sob
+  concorrência entre arquivos de teste — pré-existente, confirmado
+  rodando os mesmos arquivos isolados sem falha, não relacionado a esta
+  mudança).
+
 ## Módulo 8 — Caixa e pagamentos
 
 - `Payment`, `PaymentMethod`, `Discount`, `ServiceCharge`;

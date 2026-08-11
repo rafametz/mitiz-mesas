@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { hashPrinterToken } from "@/lib/printing/token";
 import { ticketContentSchema, buildTicketContent } from "@/domain/printing/ticket";
+import { billSummaryContentSchema } from "@/domain/printing/bill-summary";
 import { canTransitionPrintJob } from "@/domain/printing/states";
 import { publishChange } from "@/lib/realtime/publish";
 import { sectorChannel } from "@/lib/realtime/channels";
@@ -40,7 +41,13 @@ export async function claimPendingPrintJobs(printerId: string, limit = 10) {
       id: job.id,
       type: job.type,
       attempts: job.attempts,
-      content: ticketContentSchema.parse(job.contentSnapshot),
+      // BILL_SUMMARY tem um formato de conteúdo próprio (bill-summary.ts),
+      // sem setor nem número de pedido — os outros 4 tipos continuam no
+      // formato de ticket.ts.
+      content:
+        job.type === "BILL_SUMMARY"
+          ? billSummaryContentSchema.parse(job.contentSnapshot)
+          : ticketContentSchema.parse(job.contentSnapshot),
     }));
   });
 }
@@ -83,7 +90,9 @@ export async function reprocessPrintJob(jobId: string) {
     where: { id: jobId },
     data: { status: "PENDING", lastError: null },
   });
-  if (updated.printerId) {
+  // sectorId é nulo para BILL_SUMMARY (não pertence a um setor de produção
+  // — nada na tela de produção depende dele) — só publica quando existe.
+  if (updated.printerId && updated.sectorId) {
     await publishChange([sectorChannel(updated.sectorId)], "print_job.requeued");
   }
   return updated;
@@ -99,6 +108,21 @@ export async function createReprintJob(originalJobId: string) {
     where: { id: originalJobId },
     include: { order: { include: { serviceSession: { include: { table: true } } } } },
   });
+
+  // Resumo da comanda reflete o saldo no momento em que foi gerado — ao
+  // contrário de um ticket de pedido (congelado de propósito), "reimprimir
+  // o mesmo conteúdo de antes" não faz sentido aqui: se pagamento ou
+  // pedido novo aconteceu depois, o saldo já mudou. Pedir um resumo novo
+  // pela tela da mesa (Imprimir conferência) é o caminho certo, não este.
+  if (original.type === "BILL_SUMMARY") {
+    throw new PrintJobError(
+      "Resumo da comanda não é reimprimível. Gere um novo pela tela da mesa (Imprimir conferência), assim ele já sai com o saldo atual.",
+    );
+  }
+  if (!original.order) {
+    throw new PrintJobError("Job de impressão sem pedido vinculado.");
+  }
+
   const originalContent = ticketContentSchema.parse(original.contentSnapshot);
 
   const printer = await prisma.printer.findFirst({
@@ -128,7 +152,7 @@ export async function createReprintJob(originalJobId: string) {
     },
   });
 
-  if (created.printerId) {
+  if (created.printerId && created.sectorId) {
     await publishChange([sectorChannel(created.sectorId)], "print_job.created");
   }
 

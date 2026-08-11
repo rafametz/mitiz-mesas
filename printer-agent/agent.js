@@ -58,16 +58,86 @@ const TYPE_LABEL = {
   COMPLEMENT: "*** COMPLEMENTO ***",
   CANCELLATION: "*** CANCELAMENTO ***",
   REPRINT: "*** REIMPRESSAO ***",
+  BILL_SUMMARY: "*** RESUMO DA COMANDA ***",
 };
 
 function formatDateTimeBR(iso) {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+// "Imprimir conferência" (formato em src/domain/printing/bill-summary.ts
+// no projeto principal) — resumo do atendimento inteiro, não de um pedido:
+// itens consolidados, totais, divisão igual por pessoa e, se já houver,
+// pagamentos e saldo. Valores já vêm formatados em BRL do servidor (nada
+// de Decimal/Intl aqui, mesmo racional do resto do agente: dependência
+// zero além do necessário pra imprimir).
+function renderBillSummary(content) {
+  printer.clear();
+  printer.setTextDoubleHeight();
+  printer.alignCenter();
+  printer.bold(true);
+  printer.println(content.restaurantName);
+  printer.bold(false);
+  printer.println(TYPE_LABEL.BILL_SUMMARY);
+  printer.drawLine();
+
+  printer.alignLeft();
+  printer.println(`Mesa: ${content.tableNumber}`);
+  printer.println(`Garcom: ${content.waiterName}`);
+  printer.println(`Hora: ${formatDateTimeBR(content.generatedAt)}`);
+  printer.drawLine();
+
+  for (const item of content.items) {
+    printer.bold(true);
+    printer.println(`${item.quantity}x ${item.label}`);
+    printer.bold(false);
+    printer.println(`  ${item.lineTotal}`);
+  }
+  printer.drawLine();
+
+  printer.leftRight("Subtotal", content.subtotal);
+  if (content.serviceCharge) printer.leftRight("Taxa de servico", content.serviceCharge);
+  if (content.discount) printer.leftRight("Desconto", content.discount);
+  printer.bold(true);
+  printer.leftRight("TOTAL", content.total);
+  printer.bold(false);
+  printer.drawLine();
+
+  printer.println(`Dividido por ${content.guestCount} pessoa(s):`);
+  content.perPersonShares.forEach((share, index) => {
+    printer.leftRight(`  Parte ${index + 1}`, share);
+  });
+
+  if (content.payments.length > 0) {
+    printer.drawLine();
+    printer.println("Pagamentos ja registrados:");
+    for (const payment of content.payments) {
+      const label = payment.guestName
+        ? `${payment.methodName} (${payment.guestName})`
+        : payment.methodName;
+      printer.leftRight(`  ${label}`, payment.amount);
+    }
+    printer.leftRight("Pago", content.paidAmount);
+  }
+
+  printer.drawLine();
+  printer.bold(true);
+  printer.leftRight("SALDO", content.balance);
+  printer.bold(false);
+
+  printer.drawLine();
+  printer.cut();
+}
+
 // Monta o ticket a partir do `contentSnapshot` (formato descrito em
 // src/domain/printing/ticket.ts no projeto principal) — decisão de layout
 // (negrito, corte, largura de coluna) é toda daqui, não do servidor.
 function renderTicket(content) {
+  if (content.type === "BILL_SUMMARY") {
+    renderBillSummary(content);
+    return;
+  }
+
   printer.clear();
   // Só altura dobrada, não largura — deixa o texto maior/mais legível sem
   // mexer na largura de coluna (que já leva em conta o `width: 42` lá em

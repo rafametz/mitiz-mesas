@@ -3,15 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { createOrder } from "@/application/order/create-order";
 import { openTable } from "@/application/service-session/open-table";
 import { authorizeCancelOrderItem } from "@/application/order/cancel-order-item";
+import { registerPayment } from "@/application/service-session/register-payment";
 import {
   claimPendingPrintJobs,
   createReprintJob,
   findPrinterByToken,
   markPrintJobFailed,
   markPrintJobPrinted,
+  PrintJobError,
   reprocessPrintJob,
 } from "@/application/printing/print-queue";
+import { createBillSummaryPrintJob } from "@/application/printing/create-bill-summary-print-job";
 import { generatePrinterToken, hashPrinterToken } from "@/lib/printing/token";
+import { formatBRL } from "@/lib/money";
 
 describe("PrintJob (Módulo 7 — impressão)", () => {
   let restaurantId: string;
@@ -21,6 +25,7 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
   let sectorId: string;
   let printerId: string;
   let printerToken: string;
+  let paymentMethodId: string;
   const createdTableIds: string[] = [];
 
   beforeAll(async () => {
@@ -57,10 +62,18 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
         },
       })
     ).id;
+    paymentMethodId = (
+      await prisma.paymentMethod.create({
+        data: { restaurantId, name: `Forma print ${suffix}` },
+      })
+    ).id;
   });
 
   afterAll(async () => {
-    await prisma.printJob.deleteMany({ where: { sectorId } });
+    await prisma.printJob.deleteMany({
+      where: { OR: [{ sectorId }, { serviceSession: { tableId: { in: createdTableIds } } }] },
+    });
+    await prisma.payment.deleteMany({ where: { paymentMethodId } });
     await prisma.orderItem.deleteMany({ where: { productId } });
     await prisma.order.deleteMany({
       where: { serviceSession: { tableId: { in: createdTableIds } } },
@@ -68,6 +81,7 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     await prisma.serviceSession.deleteMany({ where: { tableId: { in: createdTableIds } } });
     await prisma.table.deleteMany({ where: { id: { in: createdTableIds } } });
     await prisma.printer.deleteMany({ where: { id: printerId } });
+    await prisma.paymentMethod.deleteMany({ where: { id: paymentMethodId } });
     await prisma.product.deleteMany({ where: { id: productId } });
     await prisma.productionSector.deleteMany({ where: { id: sectorId } });
     await prisma.category.deleteMany({ where: { id: categoryId } });
@@ -199,5 +213,112 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
 
     const stillThere = await prisma.printJob.findUnique({ where: { id: original!.id } });
     expect(stillThere?.status).toBe("PRINTED"); // original não foi alterado
+  });
+
+  describe("Imprimir conferência (BILL_SUMMARY)", () => {
+    it("gera o resumo com itens consolidados, total e divisão por pessoa", async () => {
+      const table = await prisma.table.create({
+        data: { restaurantId, number: `PRINT-BILL-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+      });
+      createdTableIds.push(table.id);
+      const session = await openTable({ tableId: table.id, waiterId, guestCount: 3 });
+      await createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-bill-1-${Date.now()}-${Math.random()}`,
+        items: [{ productId, quantity: 2 }], // 2x R$40,00 = R$80,00
+      });
+
+      const { job, printerConfigured } = await createBillSummaryPrintJob(session.id);
+
+      expect(job.type).toBe("BILL_SUMMARY");
+      expect(job.orderId).toBeNull();
+      expect(job.sectorId).toBeNull();
+      expect(job.serviceSessionId).toBe(session.id);
+      expect(job.printerId).toBe(printerId);
+      expect(printerConfigured).toBe(true);
+
+      const content = job.contentSnapshot as Record<string, unknown>;
+      expect(content.type).toBe("BILL_SUMMARY");
+      expect(content.guestCount).toBe(3);
+      expect(content.items).toHaveLength(1);
+      expect((content.items as { quantity: number }[])[0]?.quantity).toBe(2);
+      expect(content.total).toBe(formatBRL("80.00"));
+      expect(content.perPersonShares).toHaveLength(3);
+      // 8000 centavos / 3 = 2666 + resto 2 -> as duas primeiras partes
+      // levam 1 centavo a mais (splitEqually, split.ts).
+      expect(content.perPersonShares).toEqual([
+        formatBRL("26.67"),
+        formatBRL("26.67"),
+        formatBRL("26.66"),
+      ]);
+      expect(content.payments).toEqual([]);
+      expect(content.balance).toBe(formatBRL("80.00"));
+    });
+
+    it("inclui pagamentos já registrados e o saldo restante", async () => {
+      const table = await prisma.table.create({
+        data: { restaurantId, number: `PRINT-BILL-PAY-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+      });
+      createdTableIds.push(table.id);
+      const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+      await createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-bill-2-${Date.now()}-${Math.random()}`,
+        items: [{ productId, quantity: 1 }], // R$40,00
+      });
+      await registerPayment(session.id, waiterId, {
+        paymentMethodId,
+        amount: "15.00",
+        idempotencyKey: `pay-bill-${Date.now()}-${Math.random()}`,
+      });
+
+      const { job } = await createBillSummaryPrintJob(session.id);
+      const content = job.contentSnapshot as Record<string, unknown>;
+
+      expect(content.paidAmount).toBe(formatBRL("15.00"));
+      expect(content.balance).toBe(formatBRL("25.00"));
+      expect(content.payments).toHaveLength(1);
+      expect((content.payments as { amount: string }[])[0]?.amount).toBe(formatBRL("15.00"));
+    });
+
+    it("não é reimprimível — createReprintJob rejeita com mensagem clara", async () => {
+      const table = await prisma.table.create({
+        data: { restaurantId, number: `PRINT-BILL-RE-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+      });
+      createdTableIds.push(table.id);
+      const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+      await createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-bill-3-${Date.now()}-${Math.random()}`,
+        items: [{ productId, quantity: 1 }],
+      });
+      const { job } = await createBillSummaryPrintJob(session.id);
+
+      await expect(createReprintJob(job.id)).rejects.toThrow(PrintJobError);
+    });
+
+    it("claim busca o conteúdo do resumo sem erro de validação", async () => {
+      const table = await prisma.table.create({
+        data: { restaurantId, number: `PRINT-BILL-CLAIM-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+      });
+      createdTableIds.push(table.id);
+      const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+      await createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-bill-4-${Date.now()}-${Math.random()}`,
+        items: [{ productId, quantity: 1 }],
+      });
+      const { job } = await createBillSummaryPrintJob(session.id);
+
+      const claimed = await claimPendingPrintJobs(printerId, 50);
+      const ours = claimed.find((j) => j.id === job.id);
+      expect(ours).toBeTruthy();
+      expect(ours?.type).toBe("BILL_SUMMARY");
+      expect((ours?.content as { total: string }).total).toBeTruthy();
+    });
   });
 });

@@ -27,6 +27,7 @@ import { addGuest } from "./actions";
 import { OpenTableForm } from "./open-table-form";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
+import { PrintBillSummaryButton } from "./print-bill-summary-button";
 
 // Refatoração mobile-first da tela da mesa (foco: garçom em atendimento) —
 // Comanda + Pedidos + Pessoas viviam em 3 páginas/abas separadas; viram uma
@@ -85,6 +86,13 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
   const canRequestClosingPermission = hasAnyPermission(user.permissions, [
     PERMISSIONS.TABLES_CLOSE_REQUEST,
     PERMISSIONS.TABLES_CLOSE,
+  ]);
+  // "Imprimir conferência" (CLAUDE.md seção 10) — Garçom, Caixa ou Admin;
+  // Produção fica de fora (não interage com esta tela).
+  const canPrintBillSummary = hasAnyPermission(user.permissions, [
+    PERMISSIONS.ORDERS_CREATE,
+    PERMISSIONS.PAYMENTS_REGISTER,
+    PERMISSIONS.PRINT_JOBS_MANAGE,
   ]);
 
   // Revisão 2026-08-10 — pagamento e fechamento são conceitos separados:
@@ -193,7 +201,12 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
           falar o consumo pro cliente, diferente do detalhe por pedido
           abaixo, que fica escondido. */}
       <Card>
-        <h2 className="mb-2 text-sm font-semibold text-ink">Resumo da comanda</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ink">Resumo da comanda</h2>
+          {canPrintBillSummary && consolidatedSummary.lines.length > 0 && (
+            <PrintBillSummaryButton tableId={id} sessionId={session.id} />
+          )}
+        </div>
         {consolidatedSummary.lines.length === 0 ? (
           <p className="text-sm text-muted">Nenhum item lançado ainda.</p>
         ) : (

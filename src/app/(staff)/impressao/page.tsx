@@ -34,10 +34,19 @@ export default async function ImpressaoPage() {
     orderBy: { name: "asc" },
   });
 
+  // BILL_SUMMARY não tem `order` (orderId nulo) — filtra pelo restaurante
+  // por qualquer um dos dois vínculos possíveis (order ou serviceSession
+  // direto), senão esses jobs somem da lista inteiros.
   const jobs = await prisma.printJob.findMany({
-    where: { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
+    where: {
+      OR: [
+        { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
+        { serviceSession: { table: { restaurantId: restaurant.id } } },
+      ],
+    },
     include: {
       order: { include: { serviceSession: { include: { table: true } } } },
+      serviceSession: { include: { table: true } },
       sector: true,
     },
     orderBy: { createdAt: "desc" },
@@ -74,50 +83,64 @@ export default async function ImpressaoPage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {jobs.map((job) => (
-          <Card key={job.id} padding="sm" className="text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-semibold text-ink">
-                  {formatTableLabel(job.order.serviceSession.table.number)}
-                </span>
-                <span className="text-xs text-muted">
-                  Pedido #{job.order.sequenceNumber} · {job.sector.name}
-                </span>
+        {jobs.map((job) => {
+          // BILL_SUMMARY não tem order/sector (não é sobre um pedido
+          // específico) — resolve a mesa pelo vínculo que existir.
+          const table = job.order?.serviceSession.table ?? job.serviceSession?.table ?? null;
+
+          return (
+            <Card key={job.id} padding="sm" className="text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-display font-semibold text-ink">
+                    {table ? formatTableLabel(table.number) : "Mesa não identificada"}
+                  </span>
+                  {job.order && (
+                    <span className="text-xs text-muted">
+                      Pedido #{job.order.sequenceNumber}
+                      {job.sector && ` · ${job.sector.name}`}
+                    </span>
+                  )}
+                </div>
+                <StatusBadge tone={PRINT_JOB_STATUS_TONE[job.status]}>
+                  {PRINT_JOB_STATUS_LABELS[job.status]}
+                </StatusBadge>
               </div>
-              <StatusBadge tone={PRINT_JOB_STATUS_TONE[job.status]}>
-                {PRINT_JOB_STATUS_LABELS[job.status]}
-              </StatusBadge>
-            </div>
 
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
-              <span>{PRINT_JOB_TYPE_LABELS[job.type]}</span>
-              <span>{formatDateTime(job.createdAt)}</span>
-              {job.attempts > 0 && <span>{job.attempts} tentativa(s)</span>}
-            </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
+                <span>{PRINT_JOB_TYPE_LABELS[job.type]}</span>
+                <span>{formatDateTime(job.createdAt)}</span>
+                {job.attempts > 0 && <span>{job.attempts} tentativa(s)</span>}
+              </div>
 
-            {job.lastError && (
-              <p className="mt-1 rounded bg-wine/5 px-2 py-1 text-xs text-wine">{job.lastError}</p>
-            )}
-
-            <div className="mt-2 flex gap-2">
-              {job.status === "FAILED" && (
-                <JobActionForm
-                  action={reprocessAction.bind(null, job.id)}
-                  label="Reprocessar"
-                  pendingLabel="Reprocessando..."
-                />
+              {job.lastError && (
+                <p className="mt-1 rounded bg-wine/5 px-2 py-1 text-xs text-wine">{job.lastError}</p>
               )}
-              {(job.status === "PRINTED" || job.status === "FAILED") && (
-                <JobActionForm
-                  action={reprintAction.bind(null, job.id)}
-                  label="Reimprimir"
-                  pendingLabel="Enviando..."
-                />
-              )}
-            </div>
-          </Card>
-        ))}
+
+              <div className="mt-2 flex gap-2">
+                {job.status === "FAILED" && (
+                  <JobActionForm
+                    action={reprocessAction.bind(null, job.id)}
+                    label="Reprocessar"
+                    pendingLabel="Reprocessando..."
+                  />
+                )}
+                {/* Resumo da comanda reflete o saldo do momento em que foi
+                    gerado — reimprimir o conteúdo antigo não faz sentido
+                    (createReprintJob rejeita); pedir um resumo novo pela
+                    tela da mesa é o caminho certo. */}
+                {job.type !== "BILL_SUMMARY" &&
+                  (job.status === "PRINTED" || job.status === "FAILED") && (
+                    <JobActionForm
+                      action={reprintAction.bind(null, job.id)}
+                      label="Reimprimir"
+                      pendingLabel="Enviando..."
+                    />
+                  )}
+              </div>
+            </Card>
+          );
+        })}
         {jobs.length === 0 && (
           <EmptyState icon={Printer} title="Nenhum ticket de impressão ainda." />
         )}

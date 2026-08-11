@@ -106,6 +106,11 @@ enum PrintJobType {
   COMPLEMENT
   CANCELLATION
   REPRINT
+  // "Imprimir conferência" (CLAUDE.md seção 10, ações da tela da mesa) —
+  // resumo do atendimento inteiro (itens consolidados, total, divisão por
+  // pessoa, pagamentos e saldo), não de um Order específico. Ver
+  // PrintJob.serviceSessionId abaixo.
+  BILL_SUMMARY
 }
 
 enum DiscountType {
@@ -364,6 +369,7 @@ model ServiceSession {
   payments       Payment[]
   discounts      Discount[]
   serviceCharges ServiceCharge[]
+  printJobs      PrintJob[]
 
   @@index([tableId])
   @@index([status])
@@ -559,9 +565,16 @@ model OrderItemModifier {
 
 model PrintJob {
   id        String  @id @default(cuid())
-  orderId   String
-  sectorId  String
-  printerId String?
+  // Nulo para BILL_SUMMARY (não é sobre um pedido específico) — todo
+  // outro tipo continua exigindo um Order na prática (validado na camada
+  // de aplicação, não dá pra expressar "obrigatório conforme o type" no
+  // schema).
+  orderId          String?
+  // Só para BILL_SUMMARY — vínculo com o atendimento inteiro, não um pedido.
+  serviceSessionId String?
+  // Nulo para BILL_SUMMARY (não pertence a um setor de produção).
+  sectorId         String?
+  printerId        String?
 
   type            PrintJobType
   status          PrintJobStatus @default(PENDING)
@@ -575,9 +588,10 @@ model PrintJob {
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   printedAt DateTime? @db.Timestamptz(6)
 
-  order   Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  sector  ProductionSector @relation(fields: [sectorId], references: [id], onDelete: Restrict)
-  printer Printer?         @relation(fields: [printerId], references: [id], onDelete: SetNull)
+  order          Order?            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  serviceSession ServiceSession?   @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
+  sector         ProductionSector? @relation(fields: [sectorId], references: [id], onDelete: Restrict)
+  printer        Printer?          @relation(fields: [printerId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([sectorId])
