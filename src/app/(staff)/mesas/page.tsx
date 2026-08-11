@@ -3,6 +3,7 @@ import { Bell, Clock, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
+import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
 import { TABLE_STATUS_LABELS } from "@/domain/table/labels";
 import { Table2 } from "lucide-react";
@@ -15,6 +16,7 @@ import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { restaurantTablesChannel } from "@/lib/realtime/channels";
 import { formatElapsed } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
+import { PrintBillSummaryButton } from "./print-bill-summary-button";
 
 // Visão de mesas (CLAUDE.md seção 10): grid pensado para "bater o olho" e
 // já sair com a maior parte da informação — faixa de cor por status (verde
@@ -22,8 +24,16 @@ import { formatBRL } from "@/lib/money";
 // pronto para retirar e indicação de pagamento parcial, tudo sem precisar
 // entrar na mesa.
 export default async function MesasPage() {
-  await requireUser();
+  const user = await requireUser();
   const restaurant = await getCurrentRestaurant();
+  // "Imprimir conferência" direto do grid (pedido do usuário: não achou o
+  // botão na tela da mesa, quis ele aqui) — mesma permissão do botão na
+  // tela da mesa.
+  const canPrintBillSummary = hasAnyPermission(user.permissions, [
+    PERMISSIONS.ORDERS_CREATE,
+    PERMISSIONS.PAYMENTS_REGISTER,
+    PERMISSIONS.PRINT_JOBS_MANAGE,
+  ]);
 
   const tables = await prisma.table.findMany({
     where: { restaurantId: restaurant.id },
@@ -58,32 +68,51 @@ export default async function MesasPage() {
             session.paidAmount.lessThan(session.totalAmount);
           const tone = TABLE_STATUS_TONE[table.status];
 
+          // Card inteiro clicável (mobile-first: maior área de toque) — mas
+          // precisa deixar de ser <Link> por fora pra caber o botão de
+          // imprimir sem aninhar elemento interativo dentro de outro (HTML
+          // inválido, foco quebrado). Solução: <Link> cobrindo o card todo
+          // por baixo (absolute inset-0) como alvo de toque principal; o
+          // conteúdo visual fica por cima com pointer-events desligado,
+          // exceto no botão de imprimir, que reabilita o próprio clique.
           return (
-            <Link
+            <div
               key={table.id}
-              href={`/mesas/${table.id}`}
               data-testid="mesa-card"
-              className={`group flex flex-col overflow-hidden rounded-card border bg-surface transition-colors ${
+              className={`group relative flex flex-col overflow-hidden rounded-card border bg-surface transition-colors ${
                 occupied ? "border-line hover:border-wine/40" : "border-line hover:border-free/40"
               }`}
             >
+              <Link
+                href={`/mesas/${table.id}`}
+                aria-label={occupied ? `Ver mesa ${table.number}` : `Abrir mesa ${table.number}`}
+                className="absolute inset-0"
+              />
+
               <div className={`h-1.5 w-full ${STATUS_TONE_STRIP_CLASS[tone]}`} aria-hidden />
 
-              <div className="flex flex-1 flex-col gap-2 p-3.5">
+              <div className="pointer-events-none flex flex-1 flex-col gap-2 p-3.5">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-display text-xl font-semibold text-ink">
                     {table.number}
                   </span>
-                  {readyCount > 0 && (
-                    <span
-                      className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold-dark"
-                      title={`${readyCount} item(ns) pronto(s) para entrega`}
-                    >
-                      <Bell className="h-3 w-3" aria-hidden />
-                      {readyCount}
-                      <span className="sr-only"> item(ns) pronto(s) para entrega</span>
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {readyCount > 0 && (
+                      <span
+                        className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold-dark"
+                        title={`${readyCount} item(ns) pronto(s) para entrega`}
+                      >
+                        <Bell className="h-3 w-3" aria-hidden />
+                        {readyCount}
+                        <span className="sr-only"> item(ns) pronto(s) para entrega</span>
+                      </span>
+                    )}
+                    {canPrintBillSummary && session && session.totalAmount.greaterThan(0) && (
+                      <span className="pointer-events-auto">
+                        <PrintBillSummaryButton tableId={table.id} sessionId={session.id} iconOnly />
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <StatusBadge tone={tone}>{TABLE_STATUS_LABELS[table.status]}</StatusBadge>
@@ -117,7 +146,7 @@ export default async function MesasPage() {
                   <span className="mt-auto text-[11px] text-muted">Toque para abrir</span>
                 )}
               </div>
-            </Link>
+            </div>
           );
         })}
         {tables.length === 0 && (

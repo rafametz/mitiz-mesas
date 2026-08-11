@@ -27,7 +27,7 @@ import { addGuest } from "./actions";
 import { OpenTableForm } from "./open-table-form";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
-import { PrintBillSummaryButton } from "./print-bill-summary-button";
+import { PrintBillSummaryButton } from "../print-bill-summary-button";
 
 // Refatoração mobile-first da tela da mesa (foco: garçom em atendimento) —
 // Comanda + Pedidos + Pessoas viviam em 3 páginas/abas separadas; viram uma
