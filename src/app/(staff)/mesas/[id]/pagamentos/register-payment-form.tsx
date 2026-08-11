@@ -74,7 +74,7 @@ export function RegisterPaymentForm({
         ))}
       </SelectField>
       {guests.length > 0 && (
-        <SelectField label="Pessoa (opcional — em branco = pagamento geral)" name="guestId" defaultValue="">
+        <SelectField label="Pessoa (opcional, em branco = pagamento geral)" name="guestId" defaultValue="">
           <option value="">Pagamento geral da mesa</option>
           {guests.map((guest) => (
             <option key={guest.id} value={guest.id}>

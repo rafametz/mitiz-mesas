@@ -215,7 +215,7 @@ export function NewOrderForm({
         >
           {products.map((product) => (
             <option key={product.id} value={product.id}>
-              {product.categoryName} — {product.name} ({formatBRLNumber(Number(product.price))})
+              {product.categoryName} · {product.name} ({formatBRLNumber(Number(product.price))})
             </option>
           ))}
         </SelectField>
@@ -260,7 +260,7 @@ export function NewOrderForm({
 
         {guests.length > 0 && (
           <SelectField
-            label="Pessoa (opcional — em branco = consumo geral)"
+            label="Pessoa (opcional, em branco = consumo geral)"
             name="guestId"
             value={guestId}
             onChange={(e) => setGuestId(e.target.value)}

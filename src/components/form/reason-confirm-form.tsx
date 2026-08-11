@@ -63,7 +63,7 @@ export function ReasonConfirmForm({
         <ConfirmDialog
           open={open}
           title={dialogTitle}
-          description={`${itemLabel} — o motivo fica registrado e a ação não pode ser desfeita.`}
+          description={`${itemLabel}. O motivo fica registrado e a ação não pode ser desfeita.`}
           cancelLabel="Voltar"
           onCancel={() => setOpen(false)}
           confirmSlot={

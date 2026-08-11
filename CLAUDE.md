@@ -647,7 +647,14 @@ Para tarefas grandes:
 - Não fazer refatorações amplas durante uma correção pequena;
 - Não instalar pacotes sem explicar a necessidade;
 - Não alterar schema sem migration;
-- Não editar arquivos gerados manualmente.
+- Não editar arquivos gerados manualmente;
+- Nunca usar travessão (—) no meio de textos visíveis na interface (labels,
+  mensagens de erro, descrições, tooltips, `title`/`description`/metadata)
+  — pedido explícito do usuário (2026-08-11). Preferir ponto, vírgula,
+  dois-pontos ou reformular a frase; para separar itens curtos numa mesma
+  linha, usar " · " (já convenção no app). Comentários de código continuam
+  livres para usar "—" normalmente, essa regra é só sobre texto que o
+  usuário final vê.
 
 ---
 

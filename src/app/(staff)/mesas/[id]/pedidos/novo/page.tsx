@@ -32,7 +32,7 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
       <div className="flex flex-col gap-4 py-4">
         <PageHeader title="Novo pedido" subtitle={`Mesa ${table.number}`} />
         <p className="text-sm text-muted">
-          Nenhum produto disponível — cadastre produtos em Administração antes de lançar pedidos.
+          Nenhum produto disponível. Cadastre produtos em Administração antes de lançar pedidos.
         </p>
       </div>
     );

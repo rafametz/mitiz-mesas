@@ -18,7 +18,7 @@ export default async function ImpressorasPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Impressoras"
-        subtitle="O MVP usa uma impressora térmica única — ver docs/printing/architecture.md."
+        subtitle="O MVP usa uma impressora térmica única. Ver docs/printing/architecture.md."
       />
 
       <Table>
@@ -35,12 +35,12 @@ export default async function ImpressorasPage() {
           {printers.map((printer) => (
             <Tr key={printer.id}>
               <Td>{printer.name}</Td>
-              <Td>{printer.connectionInfo ?? "—"}</Td>
+              <Td>{printer.connectionInfo ?? "-"}</Td>
               <Td>
                 {printer.agentTokenHash ? (
                   <span className="text-ink">Configurado</span>
                 ) : (
-                  <span className="text-gold-dark">Sem token — agente não consegue puxar a fila</span>
+                  <span className="text-gold-dark">Sem token: agente não consegue puxar a fila</span>
                 )}
               </Td>
               <Td>{printer.active ? "Sim" : "Não"}</Td>

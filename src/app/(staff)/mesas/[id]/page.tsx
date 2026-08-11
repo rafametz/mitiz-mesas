@@ -95,11 +95,11 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
   // (rules/frontend-design.md, "Cards de mesa").
   const closingBannerText: string | null =
     session.status === "CLOSING"
-      ? "Fechamento solicitado — revise taxa de serviço, desconto e registre o pagamento."
+      ? "Fechamento solicitado. Revise taxa de serviço, desconto e registre o pagamento."
       : session.paidAmount.greaterThan(0)
         ? session.balanceAmount.greaterThan(0)
-          ? `Pagamento parcial — pago ${formatBRL(session.paidAmount)}, saldo restante ${formatBRL(session.balanceAmount)}.`
-          : `Saldo quitado — pago ${formatBRL(session.paidAmount)}. A mesa continua aberta para novos pedidos.`
+          ? `Pagamento parcial: pago ${formatBRL(session.paidAmount)}, saldo restante ${formatBRL(session.balanceAmount)}.`
+          : `Saldo quitado: pago ${formatBRL(session.paidAmount)}. A mesa continua aberta para novos pedidos.`
         : null;
 
   const addGuestWithIds = addGuest.bind(null, session.id, id);
@@ -237,7 +237,7 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
                     ? "bg-free/10 text-free-dark line-through decoration-1"
                     : "bg-ink/5 text-ink"
                 }`}
-                title={guest.status === "SETTLED" ? `${guest.name} — já quitou a parte dela` : undefined}
+                title={guest.status === "SETTLED" ? `${guest.name}: já quitou a parte dela` : undefined}
               >
                 {guest.name}
               </span>
@@ -364,7 +364,7 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
                           )}
                         {item.status === "CANCELLATION_REQUESTED" && !canAuthorizeCancel && (
                           <p className="mt-1 text-xs text-gold-dark">
-                            Cancelamento solicitado — aguardando autorização.
+                            Cancelamento solicitado. Aguardando autorização.
                           </p>
                         )}
                       </li>

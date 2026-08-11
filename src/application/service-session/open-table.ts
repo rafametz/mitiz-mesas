@@ -49,7 +49,7 @@ export async function openTable(input: OpenTableInput) {
       const table = await tx.table.findUniqueOrThrow({ where: { id: data.tableId } });
 
       if (!canOpenTable(table.status)) {
-        throw new OpenTableError("Esta mesa não está livre — atualize a página e tente de novo.");
+        throw new OpenTableError("Esta mesa não está livre. Atualize a página e tente de novo.");
       }
 
       const created = await tx.serviceSession.create({

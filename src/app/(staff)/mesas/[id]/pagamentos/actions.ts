@@ -128,7 +128,7 @@ export async function registerPaymentAction(
 ): Promise<FormState> {
   const user = await requirePermission(PERMISSIONS.PAYMENTS_REGISTER);
   const idempotencyKey = String(formData.get("idempotencyKey") ?? "");
-  if (!idempotencyKey) return { error: "Falha interna (sem chave de idempotência) — atualize a página." };
+  if (!idempotencyKey) return { error: "Falha interna (sem chave de idempotência). Atualize a página." };
   try {
     await registerPayment(sessionId, user.id, {
       paymentMethodId: String(formData.get("paymentMethodId") ?? ""),

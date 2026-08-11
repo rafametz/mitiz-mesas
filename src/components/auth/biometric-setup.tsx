@@ -57,7 +57,7 @@ export function BiometricSetup({ user }: { user: { id: string; name: string; ema
           <p className="text-sm font-semibold text-ink">Desbloqueio por digital/Face ID</p>
           <p className="text-xs text-muted">
             {enabled
-              ? "Ativado neste aparelho — abrir o app de novo pede a biometria em vez da senha."
+              ? "Ativado neste aparelho. Abrir o app de novo pede a biometria em vez da senha."
               : "Evita digitar a senha de novo ao reabrir o app neste aparelho."}
           </p>
         </div>

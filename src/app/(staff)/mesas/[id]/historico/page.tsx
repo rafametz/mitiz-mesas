@@ -27,8 +27,8 @@ export default async function HistoricoPage({ params }: { params: Promise<{ id: 
             {SERVICE_SESSION_STATUS_LABELS[session.status]}
           </div>
           <div className="text-muted">
-            {formatDateTime(session.openedAt)} —{" "}
-            {session.closedAt ? formatDateTime(session.closedAt) : "—"} · Garçom:{" "}
+            {formatDateTime(session.openedAt)} até{" "}
+            {session.closedAt ? formatDateTime(session.closedAt) : "-"} · Garçom:{" "}
             {session.waiter.name} · {session.guestCount} pessoa(s)
           </div>
         </Card>

@@ -21,7 +21,7 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: "MITIZ Mesas",
-  description: "Gerenciamento de mesas, comandas e produção — MITIZ Boutique de Carnes.",
+  description: "Gerenciamento de mesas, comandas e produção da MITIZ Boutique de Carnes.",
   // manifest.webmanifest é gerado sozinho a partir de src/app/manifest.ts
   // (convenção do App Router) — o Next já injeta o <link rel="manifest">.
   icons: {

@@ -142,7 +142,7 @@ export default async function PagamentosPage({
         {session.status === "CLOSING" ? (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-ink">
-              Fechamento solicitado — revise taxa de serviço, desconto e registre o pagamento antes
+              Fechamento solicitado. Revise taxa de serviço, desconto e registre o pagamento antes
               de finalizar.
             </p>
             {canRequestClosingPermission && (
@@ -152,7 +152,7 @@ export default async function PagamentosPage({
         ) : (
           <div className="flex flex-col items-start gap-2">
             <p className="text-sm text-muted">
-              Atendimento aberto — pedidos continuam sendo aceitos normalmente. Solicite o
+              Atendimento aberto. Pedidos continuam sendo aceitos normalmente. Solicite o
               fechamento quando a mesa estiver pronta para encerrar.
             </p>
             {canRequestClosingPermission ? (
@@ -172,9 +172,9 @@ export default async function PagamentosPage({
           <p className="mb-3 text-xs text-muted">
             {latestServiceCharge
               ? latestServiceCharge.waived
-                ? `Retirada por ${latestServiceCharge.appliedBy.name} — ${latestServiceCharge.waivedReason}`
+                ? `Retirada por ${latestServiceCharge.appliedBy.name}: ${latestServiceCharge.waivedReason}`
                 : `Vigente: ${latestServiceCharge.percent.toString()}% (${formatBRL(latestServiceCharge.amountApplied)}), aplicada por ${latestServiceCharge.appliedBy.name}`
-              : "Nenhuma taxa aplicada ainda — opcional (CLAUDE.md regra 15)."}
+              : "Nenhuma taxa aplicada ainda. Opcional (CLAUDE.md regra 15)."}
           </p>
           <ServiceChargeForm
             tableId={id}
@@ -199,7 +199,7 @@ export default async function PagamentosPage({
                 </span>
               </p>
               <p className="text-xs text-muted">
-                {activeDiscount.reason} — {activeDiscount.appliedBy.name}
+                {activeDiscount.reason} · {activeDiscount.appliedBy.name}
               </p>
               <ReasonConfirmForm
                 action={voidDiscountAction.bind(null, id, activeDiscount.id)}
@@ -305,7 +305,7 @@ export default async function PagamentosPage({
               >
                 <div>
                   <div className="text-ink">
-                    {payment.paymentMethod.name} —{" "}
+                    {payment.paymentMethod.name} ·{" "}
                     <span className="tabular font-medium">{formatBRL(payment.amount)}</span>
                     {payment.guest && (
                       <span className="text-muted"> · {payment.guest.name ?? "pessoa sem nome"}</span>

@@ -46,7 +46,7 @@ export async function createOrderAction(
       JSON.parse(String(formData.get("cartJson") ?? "[]")),
     ) as CreateOrderItemInput[];
   } catch {
-    return { error: "Carrinho inválido — atualize a página e tente de novo." };
+    return { error: "Carrinho inválido. Atualize a página e tente de novo." };
   }
   if (items.length === 0) {
     return { error: "Adicione ao menos um item ao pedido." };
@@ -54,7 +54,7 @@ export async function createOrderAction(
 
   const idempotencyKey = String(formData.get("idempotencyKey") ?? "");
   if (!idempotencyKey) {
-    return { error: "Falha interna (sem chave de idempotência) — atualize a página." };
+    return { error: "Falha interna (sem chave de idempotência). Atualize a página." };
   }
 
   try {

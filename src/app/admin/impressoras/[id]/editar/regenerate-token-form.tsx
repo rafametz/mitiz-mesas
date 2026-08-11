@@ -44,7 +44,7 @@ export function RegenerateTokenForm({ printerId }: { printerId: string }) {
         <ConfirmDialog
           open={confirmOpen}
           title="Gerar novo token?"
-          description="O agente de impressão para de puxar a fila até alguém atualizar o .env dele com o novo token — isso acontece imediatamente, não dá pra desfazer."
+          description="O agente de impressão para de puxar a fila até alguém atualizar o .env dele com o novo token. Isso acontece imediatamente, não dá pra desfazer."
           onCancel={() => setConfirmOpen(false)}
           confirmSlot={
             <SubmitButton variant="danger" pendingLabel="Gerando...">
@@ -57,7 +57,7 @@ export function RegenerateTokenForm({ printerId }: { printerId: string }) {
       {state.token && (
         <div className="rounded-lg border border-gold/40 bg-gold/10 p-3">
           <p className="text-xs font-semibold text-gold-dark">
-            Copie agora — não aparece de novo depois de sair desta tela:
+            Copie agora. Não aparece de novo depois de sair desta tela:
           </p>
           <code className="mt-1 block break-all rounded bg-surface px-2 py-1.5 text-xs text-ink">
             {state.token}

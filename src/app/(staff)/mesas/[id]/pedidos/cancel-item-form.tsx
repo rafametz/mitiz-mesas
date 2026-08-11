@@ -66,7 +66,7 @@ export function CancelItemForm({
         <ConfirmDialog
           open={open}
           title={label}
-          description={`${itemLabel} — o motivo fica registrado e a ação não pode ser desfeita.`}
+          description={`${itemLabel}. O motivo fica registrado e a ação não pode ser desfeita.`}
           // "Voltar" (não "Cancelar") de propósito — o botão de confirmar
           // já se chama "Cancelar"/"Solicitar cancelamento"; os dois
           // dizendo "Cancelar" com significados opostos (desistir do

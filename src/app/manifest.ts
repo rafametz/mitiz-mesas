@@ -9,7 +9,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "MITIZ Mesas",
     short_name: "MITIZ Mesas",
-    description: "Gerenciamento de mesas, comandas e produção — MITIZ Boutique de Carnes.",
+    description: "Gerenciamento de mesas, comandas e produção da MITIZ Boutique de Carnes.",
     start_url: "/",
     display: "standalone",
     orientation: "portrait",

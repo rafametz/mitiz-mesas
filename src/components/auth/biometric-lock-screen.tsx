@@ -68,7 +68,7 @@ export function BiometricLockScreen({
           {verifying
             ? "Confirmando..."
             : failed
-              ? "Não reconhecido — tente de novo."
+              ? "Não reconhecido. Tente de novo."
               : "Confirme com sua digital ou Face ID."}
         </p>
       </div>

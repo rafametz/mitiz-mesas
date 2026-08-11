@@ -20,7 +20,7 @@ const productSchema = z.object({
     .max(500)
     .optional()
     .transform((v) => (v ? v : undefined)),
-  price: z.string().trim().regex(priceRegex, "Preço inválido — use até 2 casas decimais"),
+  price: z.string().trim().regex(priceRegex, "Preço inválido, use até 2 casas decimais"),
   categoryId: z.string().min(1, "Categoria é obrigatória"),
   defaultSectorId: z.string().min(1, "Setor é obrigatório"),
   available: z.boolean(),

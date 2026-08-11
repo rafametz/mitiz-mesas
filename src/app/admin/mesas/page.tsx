@@ -59,7 +59,7 @@ export default async function AdminMesasPage() {
   const counts = { free: 0, occupied: 0, closing: 0, other: 0 };
   for (const row of rows) counts[statusBucket(row.status)] += 1;
   const pct = (n: number) =>
-    total > 0 ? `${((n / total) * 100).toFixed(1).replace(".0", "")}%` : "—";
+    total > 0 ? `${((n / total) * 100).toFixed(1).replace(".0", "")}%` : "-";
 
   const longOpenAlerts = rows
     .filter((r) => r.session)

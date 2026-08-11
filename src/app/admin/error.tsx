@@ -24,7 +24,7 @@ export default function AdminError({
         Não foi possível carregar esta página
       </h1>
       <p className="max-w-xs text-sm text-muted">
-        Algo deu errado. Tente de novo — se continuar acontecendo, avise um administrador.
+        Algo deu errado. Tente de novo. Se continuar acontecendo, avise um administrador.
       </p>
       <div className="mt-2 flex gap-3">
         <Button variant="outline" onClick={() => reset()}>

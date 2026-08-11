@@ -48,7 +48,7 @@ export async function applyDiscount(
     });
     if (existingActive) {
       throw new ApplyDiscountError(
-        "Já existe um desconto ativo nesta comanda — anule antes de aplicar outro.",
+        "Já existe um desconto ativo nesta comanda. Anule antes de aplicar outro.",
       );
     }
 

@@ -96,7 +96,7 @@ export function MoneyField({
             onClick={() => setNegative((n) => !n)}
             aria-pressed={negative}
             aria-label={
-              negative ? "Valor negativo — trocar para positivo" : "Valor positivo — trocar para negativo"
+              negative ? "Valor negativo, trocar para positivo" : "Valor positivo, trocar para negativo"
             }
             title={negative ? "Valor negativo" : "Valor positivo"}
             className={`h-11 w-11 shrink-0 rounded-control-sm border text-base font-semibold transition-colors ${

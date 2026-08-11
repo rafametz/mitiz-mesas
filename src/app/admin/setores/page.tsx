@@ -18,7 +18,7 @@ export default async function SetoresPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         title="Setores de produção"
-        subtitle="Cozinha, Parrilla, Bar, Caixa, Sem impressão etc. — CLAUDE.md seção 6."
+        subtitle="Cozinha, Parrilla, Bar, Caixa, Sem impressão etc. (CLAUDE.md seção 6)."
       />
 
       <Table>

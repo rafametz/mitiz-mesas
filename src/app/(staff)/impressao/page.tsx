@@ -47,7 +47,7 @@ export default async function ImpressaoPage() {
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
       <PageHeader
         title="Impressão"
-        subtitle="Últimos 50 tickets — ver docs/printing/architecture.md"
+        subtitle="Últimos 50 tickets. Ver docs/printing/architecture.md"
       />
 
       <div className="flex flex-col gap-2">

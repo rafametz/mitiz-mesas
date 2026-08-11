@@ -39,7 +39,7 @@ export default async function EditarMesaPage({ params }: { params: Promise<{ id:
           ))}
         </SelectField>
         <p className="text-xs text-muted">
-          Não há como apagar uma mesa (histórico de atendimento fica preservado — CLAUDE.md regra
+          Não há como apagar uma mesa (histórico de atendimento fica preservado, CLAUDE.md regra
           25). Para tirá-la de operação sem apagar, use o status <strong>Bloqueada</strong>.
         </p>
         <SubmitButton>Salvar</SubmitButton>
