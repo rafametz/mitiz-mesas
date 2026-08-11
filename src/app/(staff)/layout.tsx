@@ -13,6 +13,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   const isAdmin = hasPermission(user.permissions, PERMISSIONS.ADMIN_MANAGE);
   const canProduction = hasPermission(user.permissions, PERMISSIONS.PRODUCTION_STATUS_UPDATE);
   const canPrintJobs = hasPermission(user.permissions, PERMISSIONS.PRINT_JOBS_MANAGE);
+  const canViewHistory = hasPermission(user.permissions, PERMISSIONS.AUDIT_VIEW);
 
   return (
     <BiometricLockScreen user={{ id: user.id, name: user.name, email: user.email }}>
@@ -30,7 +31,12 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         <main id="conteudo" className="flex-1">
           {children}
         </main>
-        <BottomNav isAdmin={isAdmin} canProduction={canProduction} canPrintJobs={canPrintJobs} />
+        <BottomNav
+          isAdmin={isAdmin}
+          canProduction={canProduction}
+          canPrintJobs={canPrintJobs}
+          canViewHistory={canViewHistory}
+        />
       </div>
     </BiometricLockScreen>
   );

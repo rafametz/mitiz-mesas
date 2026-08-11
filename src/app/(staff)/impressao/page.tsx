@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Printer } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
@@ -10,7 +11,7 @@ import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AGENT_STATUS_TONE, PRINT_JOB_STATUS_TONE } from "@/components/ui/status-tone";
-import { formatDateTime } from "@/lib/datetime";
+import { formatDateTime, saoPauloDayRange, todaySaoPaulo } from "@/lib/datetime";
 import { reprintAction, reprocessAction } from "./actions";
 import { JobActionForm } from "./job-action-form";
 
@@ -22,26 +23,54 @@ const AGENT_STATUS_LABEL = {
 
 // Fila/histórico de impressão (Módulo 7) — acessível para quem tem
 // PRINT_JOBS_MANAGE (Admin, Caixa, Produção — CLAUDE.md seção 5), por isso
-// fica fora de /admin (que é só pra Administrador). Mostra os últimos 50
-// jobs; não é a fila "ao vivo" que o agente consome, é a visão humana de
-// acompanhamento/reprocessamento.
-export default async function ImpressaoPage() {
+// fica fora de /admin (que é só pra Administrador). Não é a fila "ao vivo"
+// que o agente consome, é a visão humana de acompanhamento/reprocessamento.
+// Sempre filtrada por data (padrão: hoje, pedido do usuário) — sem isso a
+// lista cresce indefinidamente e fica difícil achar o ticket de agora.
+export default async function ImpressaoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ data?: string; mesa?: string }>;
+}) {
   await requirePermission(PERMISSIONS.PRINT_JOBS_MANAGE);
   const restaurant = await getCurrentRestaurant();
+  const sp = await searchParams;
+  const selectedDate = sp.data ?? todaySaoPaulo();
+  const dateRange = saoPauloDayRange(selectedDate);
 
-  const printers = await prisma.printer.findMany({
-    where: { restaurantId: restaurant.id, active: true },
-    orderBy: { name: "asc" },
-  });
+  const [printers, tables] = await Promise.all([
+    prisma.printer.findMany({
+      where: { restaurantId: restaurant.id, active: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.table.findMany({
+      where: { restaurantId: restaurant.id },
+      orderBy: { number: "asc" },
+    }),
+  ]);
 
   // BILL_SUMMARY não tem `order` (orderId nulo) — filtra pelo restaurante
-  // por qualquer um dos dois vínculos possíveis (order ou serviceSession
-  // direto), senão esses jobs somem da lista inteiros.
+  // (e, se escolhida, pela mesa) por qualquer um dos dois vínculos
+  // possíveis (order ou serviceSession direto), senão esses jobs somem da
+  // lista inteiros.
   const jobs = await prisma.printJob.findMany({
     where: {
-      OR: [
-        { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
-        { serviceSession: { table: { restaurantId: restaurant.id } } },
+      AND: [
+        {
+          OR: [
+            { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
+            { serviceSession: { table: { restaurantId: restaurant.id } } },
+          ],
+        },
+        { createdAt: { gte: dateRange.start, lt: dateRange.end } },
+        sp.mesa
+          ? {
+              OR: [
+                { order: { serviceSession: { tableId: sp.mesa } } },
+                { serviceSession: { tableId: sp.mesa } },
+              ],
+            }
+          : {},
       ],
     },
     include: {
@@ -50,15 +79,55 @@ export default async function ImpressaoPage() {
       sector: true,
     },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 100,
   });
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
-      <PageHeader
-        title="Impressão"
-        subtitle="Últimos 50 tickets. Ver docs/printing/architecture.md"
-      />
+      <PageHeader title="Impressão" subtitle="Até 100 tickets do dia filtrado." />
+
+      <Card padding="sm">
+        <form className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs text-muted">Data</span>
+            <input
+              type="date"
+              name="data"
+              defaultValue={selectedDate}
+              className="h-10 rounded-control-sm border border-line bg-surface px-2 text-sm text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs text-muted">Mesa</span>
+            <select
+              name="mesa"
+              defaultValue={sp.mesa ?? ""}
+              className="h-10 rounded-control-sm border border-line bg-surface px-2 text-sm text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
+            >
+              <option value="">Todas</option>
+              {tables.map((table) => (
+                <option key={table.id} value={table.id}>
+                  {formatTableLabel(table.number)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="h-10 rounded-control-sm border border-wine bg-wine px-4 text-sm font-semibold text-bg hover:bg-wine-dark"
+          >
+            Filtrar
+          </button>
+          {sp.mesa && (
+            <Link
+              href={`/impressao?data=${selectedDate}`}
+              className="flex h-10 items-center px-2 text-sm font-medium text-muted hover:text-ink"
+            >
+              Limpar mesa
+            </Link>
+          )}
+        </form>
+      </Card>
 
       <div className="flex flex-col gap-2">
         {printers.map((printer) => {
@@ -142,7 +211,12 @@ export default async function ImpressaoPage() {
           );
         })}
         {jobs.length === 0 && (
-          <EmptyState icon={Printer} title="Nenhum ticket de impressão ainda." />
+          <EmptyState
+            icon={Printer}
+            title={
+              selectedDate === todaySaoPaulo() ? "Nenhum ticket hoje ainda." : "Nenhum ticket neste dia."
+            }
+          />
         )}
       </div>
     </main>
