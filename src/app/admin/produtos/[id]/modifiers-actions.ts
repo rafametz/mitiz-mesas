@@ -63,13 +63,25 @@ export async function createModifierGroup(
   return { error: null, success: true };
 }
 
-export async function updateModifierGroup(groupId: string, formData: FormData) {
+export async function updateModifierGroup(
+  groupId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseGroupForm(formData);
+
+  let data: ReturnType<typeof parseGroupForm>;
+  try {
+    data = parseGroupForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
 
   const group = await prisma.productModifierGroup.update({ where: { id: groupId }, data });
 
   revalidatePath(`/admin/produtos/${group.productId}/editar`);
+  return { error: null, success: true };
 }
 
 const modifierSchema = z.object({
@@ -91,9 +103,21 @@ function parseModifierForm(formData: FormData) {
   });
 }
 
-export async function createModifier(groupId: string, formData: FormData) {
+export async function createModifier(
+  groupId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseModifierForm(formData);
+
+  let data: ReturnType<typeof parseModifierForm>;
+  try {
+    data = parseModifierForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
+
   // O formulário rápido de "novo adicional" não tem campo "Ativo" (fica só
   // na edição, para não poluir o form de criação) — sem isso, `active`
   // sempre viria `false` de parseModifierForm, deixando o adicional
@@ -104,11 +128,23 @@ export async function createModifier(groupId: string, formData: FormData) {
   });
 
   revalidatePath(`/admin/produtos/${parentGroup.productId}/editar`);
+  return { error: null, success: true };
 }
 
-export async function updateModifier(modifierId: string, formData: FormData) {
+export async function updateModifier(
+  modifierId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const data = parseModifierForm(formData);
+
+  let data: ReturnType<typeof parseModifierForm>;
+  try {
+    data = parseModifierForm(formData);
+  } catch (error) {
+    const zodMessage = firstZodMessage(error);
+    return { error: zodMessage ?? "Dados inválidos." };
+  }
 
   const updated = await prisma.productModifier.update({ where: { id: modifierId }, data });
   const parentGroup = await prisma.productModifierGroup.findUniqueOrThrow({
@@ -116,4 +152,5 @@ export async function updateModifier(modifierId: string, formData: FormData) {
   });
 
   revalidatePath(`/admin/produtos/${parentGroup.productId}/editar`);
+  return { error: null, success: true };
 }

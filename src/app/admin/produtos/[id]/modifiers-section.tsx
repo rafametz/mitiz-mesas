@@ -1,13 +1,11 @@
 import { Layers } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { CheckboxField, TextField } from "@/components/form/field";
-import { MoneyField } from "@/components/form/money-field";
-import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatBRL } from "@/lib/money";
-import { createModifier, updateModifier, updateModifierGroup } from "./modifiers-actions";
+import { CreateModifierForm } from "./create-modifier-form";
+import { UpdateGroupForm } from "./update-group-form";
+import { UpdateModifierForm } from "./update-modifier-form";
 
 // Seção de adicionais/modificadores, dentro da edição do produto — não é
 // tela própria porque só faz sentido no contexto de um produto (CLAUDE.md
@@ -30,118 +28,52 @@ export async function ModifiersSection({ productId }: { productId: string }) {
         </Button>
       </div>
 
-      {groups.map((group) => {
-        const updateGroupWithId = updateModifierGroup.bind(null, group.id);
-        const createModifierInGroup = createModifier.bind(null, group.id);
+      {groups.map((group) => (
+        <Card key={group.id}>
+          <UpdateGroupForm groupId={group.id} group={group} />
 
-        return (
-          <Card key={group.id}>
-            <form action={updateGroupWithId} className="flex flex-wrap items-end gap-3">
-              <TextField
-                label="Grupo"
-                name="name"
-                defaultValue={group.name}
-                required
-                maxLength={80}
-              />
-              <TextField
-                label="Mín."
-                name="minSelect"
-                type="number"
-                min={0}
-                defaultValue={group.minSelect}
-                className="w-20"
-              />
-              <TextField
-                label="Máx."
-                name="maxSelect"
-                type="number"
-                min={1}
-                defaultValue={group.maxSelect}
-                className="w-20"
-              />
-              <CheckboxField label="Obrigatório" name="required" defaultChecked={group.required} />
-              <CheckboxField label="Ativo" name="active" defaultChecked={group.active} />
-              <SubmitButton>Salvar grupo</SubmitButton>
-            </form>
-
-            <table className="mt-4 w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Adicional
-                  </th>
-                  <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Valor
-                  </th>
-                  <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    Ativo
-                  </th>
+          <table className="mt-4 w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-line">
+                <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                  Adicional
+                </th>
+                <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                  Valor
+                </th>
+                <th className="py-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                  Ativo
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.modifiers.map((modifier) => (
+                <tr key={modifier.id} className="border-b border-line/60 last:border-b-0">
+                  <td colSpan={3} className="py-2">
+                    <UpdateModifierForm
+                      modifierId={modifier.id}
+                      modifier={{
+                        name: modifier.name,
+                        priceDelta: modifier.priceDelta.toString(),
+                        active: modifier.active,
+                      }}
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {group.modifiers.map((modifier) => {
-                  const updateModifierWithId = updateModifier.bind(null, modifier.id);
-                  return (
-                    <tr key={modifier.id} className="border-b border-line/60 last:border-b-0">
-                      <td colSpan={3} className="py-2">
-                        <form
-                          action={updateModifierWithId}
-                          className="flex flex-wrap items-end gap-3"
-                        >
-                          <TextField
-                            label="Nome"
-                            name="name"
-                            defaultValue={modifier.name}
-                            required
-                            maxLength={80}
-                            className="w-40"
-                          />
-                          <MoneyField
-                            label="Valor"
-                            name="priceDelta"
-                            defaultValue={modifier.priceDelta.toString()}
-                            allowNegative
-                            className="w-40"
-                          />
-                          <CheckboxField
-                            label="Ativo"
-                            name="active"
-                            defaultChecked={modifier.active}
-                          />
-                          <SubmitButton>Salvar</SubmitButton>
-                          <span className="tabular text-xs text-muted">
-                            atual: {formatBRL(modifier.priceDelta)}
-                          </span>
-                        </form>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {group.modifiers.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="py-2 text-muted">
-                      Nenhum adicional neste grupo ainda.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              ))}
+              {group.modifiers.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="py-2 text-muted">
+                    Nenhum adicional neste grupo ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
 
-            <form action={createModifierInGroup} className="mt-4 flex flex-wrap items-end gap-3">
-              <TextField
-                label="Novo adicional"
-                name="name"
-                required
-                maxLength={80}
-                className="w-40"
-              />
-              <MoneyField label="Valor" name="priceDelta" allowNegative className="w-40" />
-              <SubmitButton>Adicionar</SubmitButton>
-            </form>
-          </Card>
-        );
-      })}
+          <CreateModifierForm groupId={group.id} />
+        </Card>
+      ))}
 
       {groups.length === 0 && (
         <EmptyState
