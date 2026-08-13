@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { inputBaseClass } from "@/components/ui/input";
 
 // Campo de valor em Real — pedido do usuário: digitar preenche da direita
@@ -84,6 +84,21 @@ export function MoneyField({
     }
   }, [digits]);
 
+  // Pedido do usuário: ao TOCAR/CLICAR no campo (não só ao digitar), o
+  // cursor já deve pular pro fim (casa decimal). O navegador só define a
+  // posição do cursor de acordo com onde o toque caiu depois que o evento
+  // de foco/clique termina de processar — por isso o ajuste precisa ficar
+  // num próximo frame, senão o navegador sobrescreve de volta pra posição
+  // tocada.
+  const moveCaretToEnd = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
+  }, []);
+
   return (
     <div className={`flex flex-col gap-1.5 ${className ?? ""}`}>
       <label htmlFor={id} className="text-sm font-medium text-ink">
@@ -121,6 +136,8 @@ export function MoneyField({
               const onlyDigits = event.target.value.replace(/\D/g, "");
               setDigits(onlyDigits.slice(0, MAX_DIGITS));
             }}
+            onFocus={moveCaretToEnd}
+            onMouseUp={moveCaretToEnd}
             className={`${inputBaseClass} pl-10 text-right tabular`}
           />
         </div>
