@@ -49,3 +49,25 @@ export function saoPauloDayRange(dateStr: string): { start: Date; end: Date } {
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end };
 }
+
+// Mesma ideia de saoPauloDayRange, mas para um intervalo de dias
+// (relatórios, Módulo 11) — início do primeiro dia até o fim do último
+// (inclusive), os dois em America/Sao_Paulo.
+export function saoPauloDateRange(fromStr: string, toStr: string): { start: Date; end: Date } {
+  return { start: saoPauloDayRange(fromStr).start, end: saoPauloDayRange(toStr).end };
+}
+
+// "AAAA-MM-DD" de N dias atrás, em America/Sao_Paulo — usado para o
+// padrão "últimos 7 dias" dos filtros de relatório.
+export function daysAgoSaoPaulo(days: number): string {
+  const { start } = saoPauloDayRange(todaySaoPaulo());
+  const past = new Date(start.getTime() - days * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(past);
+}
+
+// "AAAA-MM-DD" -> "DD/MM", pra rótulo de eixo/linha de relatório sem
+// precisar de hora (diferente de formatDateTime, que sempre mostra hora).
+export function formatDateKeyShort(dateStr: string): string {
+  const [, month, day] = dateStr.split("-");
+  return `${day}/${month}`;
+}

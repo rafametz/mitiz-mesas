@@ -660,7 +660,7 @@ impressão) existirem.
   build` e `npm test` (119/119) limpos; `npm run test:integration` dos
   arquivos afetados (23/23) limpo.
 
-## Módulo 10 — Histórico
+## Módulo 10 — Histórico ✅
 
 - ✅ Aba "Histórico" na tela da mesa (atendimentos anteriores);
 - ✅ Detalhe completo de um atendimento encerrado (2026-08-11, pedido do
@@ -671,13 +671,43 @@ impressão) existirem.
   (forma, valor, pessoa vinculada quando houver, quem registrou, quando).
   Tela estática de propósito (sem `RealtimeRefresh`): atendimento encerrado
   não muda mais;
-- Consulta de atendimentos encerrados **de todas as mesas** com filtro por
-  data/garçom (visão geral, não por mesa) — ainda não feito.
+- ✅ Consulta de atendimentos encerrados **de todas as mesas** com filtro
+  por data/garçom (2026-08-12, pedido do usuário) — `/historico`, visão
+  geral independente de mesa, data padrão hoje;
+- ✅ `/impressao` ganhou filtro de data (padrão hoje, sempre) e mesa,
+  mesmo pedido.
 
-## Módulo 11 — Relatórios básicos
+## Módulo 11 — Relatórios básicos ✅
 
-- Relatórios simples de vendas por período/produto/setor (escopo a definir
-  com o usuário quando chegar a vez — não antecipar métricas não pedidas).
+- ✅ 4 relatórios pedidos pelo usuário (2026-08-13), todos dentro de
+  `/admin/relatorios` (`ADMIN_MANAGE`), com filtro De/Até compartilhado
+  (padrão: últimos 7 dias) e abas entre eles:
+  - **Vendas por período** (`/admin/relatorios`) — faturamento por dia,
+    ticket médio, atendimentos fechados;
+  - **Vendas por produto** (`/produtos`) — ranking de faturamento por
+    produto, top 20;
+  - **Tempo de mesas abertas** (`/mesas`) — duração de cada atendimento
+    fechado (abertura até fechamento), do mais demorado pro mais rápido,
+    com média;
+  - **Horários de pico** (`/horarios-pico`) — atendimentos abertos e
+    faturamento por hora do dia, pra saber quando chega mais gente e em
+    que horário sai mais venda.
+  Todos os 4 usam só atendimentos `CLOSED` (mesa cancelada nunca foi
+  venda). Os 3 primeiros filtram/agrupam por `closedAt` (quando a venda se
+  conclui); "horários de pico" é a exceção deliberada e usa `openedAt`
+  (é sobre chegada, não sobre conclusão da venda) — decisão documentada
+  no próprio `src/domain/reports/peak-hours.ts`;
+- ✅ Sem biblioteca de gráfico nova: barras horizontais simples
+  (`src/components/ui/bar-row.tsx`), mesmo racional do `DonutChart`
+  existente, só com os tokens de cor da marca (dourado pra dinheiro,
+  vinho pra contagem de pessoas);
+- Fora de escopo por pedido explícito do usuário (não selecionados): vendas
+  por setor, vendas por forma de pagamento. Não implementar sem novo
+  pedido.
+- **Testes**: 10 unitários novos (`reports.test.ts`, as 4 funções de
+  agregação) + 3 novos em `datetime.test.ts` (helpers de intervalo).
+  `tsc --noEmit`, `npm run lint`, `npm run build` e `npm test` (134/134)
+  limpos. Sem migration (nenhuma mudança de schema).
 
 ## Módulo 12 — Integração futura com PDV (preparação)
 

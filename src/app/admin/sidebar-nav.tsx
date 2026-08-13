@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Beef, ChefHat, Printer, Tags, Table2 } from "lucide-react";
+import { BarChart3, Beef, ChefHat, Printer, Tags, Table2 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/mesas", label: "Mesas", icon: Table2 },
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/admin/categorias", label: "Categorias", icon: Tags },
   { href: "/admin/produtos", label: "Produtos", icon: Beef },
   { href: "/admin/impressoras", label: "Impressoras", icon: Printer },
+  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
 
 export function SidebarNav() {
