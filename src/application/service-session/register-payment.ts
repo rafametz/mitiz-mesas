@@ -92,6 +92,7 @@ export async function registerPayment(
       await writeAuditLog(tx, {
         restaurantId: session.table.restaurantId,
         userId: actorUserId,
+        tableId: session.tableId,
         action: "payment.registered",
         entityType: "Payment",
         entityId: payment.id,
@@ -164,6 +165,7 @@ export async function voidPayment(paymentId: string, actorUserId: string, reason
     await writeAuditLog(tx, {
       restaurantId: payment.serviceSession.table.restaurantId,
       userId: actorUserId,
+      tableId: payment.serviceSession.tableId,
       action: "payment.voided",
       entityType: "Payment",
       entityId: payment.id,

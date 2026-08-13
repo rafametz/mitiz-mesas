@@ -11,6 +11,11 @@ export async function writeAuditLog(
   params: {
     restaurantId: string;
     userId: string | null;
+    // Desnormalizado pra tela de auditoria conseguir filtrar por mesa sem
+    // uma junção diferente por entityType (ver comentário no schema).
+    // Obrigatório: toda ação auditada até hoje pertence a uma mesa; uma
+    // futura ação sem mesa passaria null explicitamente, não omitiria.
+    tableId: string | null;
     action: string;
     entityType: string;
     entityId: string;
@@ -21,6 +26,7 @@ export async function writeAuditLog(
     data: {
       restaurantId: params.restaurantId,
       userId: params.userId,
+      tableId: params.tableId,
       action: params.action,
       entityType: params.entityType,
       entityId: params.entityId,

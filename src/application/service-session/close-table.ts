@@ -39,6 +39,7 @@ export async function closeTable(serviceSessionId: string, actorUserId: string) 
     await writeAuditLog(tx, {
       restaurantId: session.table.restaurantId,
       userId: actorUserId,
+      tableId: session.tableId,
       action: "service_session.closed",
       entityType: "ServiceSession",
       entityId: session.id,

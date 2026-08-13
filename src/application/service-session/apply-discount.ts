@@ -76,6 +76,7 @@ export async function applyDiscount(
     await writeAuditLog(tx, {
       restaurantId: session.table.restaurantId,
       userId: actorUserId,
+      tableId: session.tableId,
       action: "discount.applied",
       entityType: "Discount",
       entityId: discount.id,
@@ -135,6 +136,7 @@ export async function voidDiscount(discountId: string, actorUserId: string, reas
     await writeAuditLog(tx, {
       restaurantId: discount.serviceSession.table.restaurantId,
       userId: actorUserId,
+      tableId: discount.serviceSession.tableId,
       action: "discount.voided",
       entityType: "Discount",
       entityId: discount.id,

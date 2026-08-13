@@ -90,6 +90,7 @@ describe("cancelamento de item de pedido", () => {
     });
     expect(auditLog).not.toBeNull();
     expect(auditLog?.userId).toBe(waiterId);
+    expect(auditLog?.tableId).toBe(session.tableId);
 
     const updatedSession = await prisma.serviceSession.findUniqueOrThrow({
       where: { id: session.id },

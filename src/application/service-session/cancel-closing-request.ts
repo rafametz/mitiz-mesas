@@ -35,6 +35,7 @@ export async function cancelClosingRequest(serviceSessionId: string, actorUserId
     await writeAuditLog(tx, {
       restaurantId: session.table.restaurantId,
       userId: actorUserId,
+      tableId: session.tableId,
       action: "service_session.closing_cancelled",
       entityType: "ServiceSession",
       entityId: session.id,

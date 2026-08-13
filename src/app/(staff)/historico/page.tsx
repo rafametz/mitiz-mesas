@@ -10,6 +10,7 @@ import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL } from "@/lib/money";
 import { formatDateTime, saoPauloDayRange } from "@/lib/datetime";
+import { HistoricoTabs } from "./tabs";
 
 // Consulta geral de atendimentos encerrados de todas as mesas (Módulo 10,
 // pedido do usuário) — diferente da aba "Histórico" da tela da mesa
@@ -54,6 +55,7 @@ export default async function HistoricoGeralPage({
         title="Histórico"
         subtitle="Atendimentos encerrados de todas as mesas. Últimos 100."
       />
+      <HistoricoTabs active="atendimentos" />
 
       <Card padding="sm">
         <form className="flex flex-wrap items-end gap-2">

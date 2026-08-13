@@ -68,6 +68,7 @@ export async function applyServiceCharge(
     await writeAuditLog(tx, {
       restaurantId: session.table.restaurantId,
       userId: actorUserId,
+      tableId: session.tableId,
       action: data.waived ? "service_charge.waived" : "service_charge.applied",
       entityType: "ServiceCharge",
       entityId: serviceCharge.id,

@@ -68,6 +68,7 @@ async function transitionItem(params: {
       await writeAuditLog(tx, {
         restaurantId: item.order.serviceSession.table.restaurantId,
         userId: params.actorUserId,
+        tableId: item.order.serviceSession.tableId,
         action: params.auditAction,
         entityType: "OrderItem",
         entityId: item.id,

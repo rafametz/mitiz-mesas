@@ -317,6 +317,7 @@ model Table {
 
   restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
   serviceSessions ServiceSession[]
+  auditLogs       AuditLog[]
 
   @@unique([restaurantId, number])
   @@map("tables")
@@ -701,6 +702,13 @@ model AuditLog {
   id           String   @id @default(cuid())
   restaurantId String
   userId       String?
+  // Desnormalizado de propósito (Módulo 9, tela de auditoria — filtro por
+  // mesa): a entidade auditada (OrderItem, Discount, ServiceCharge,
+  // ServiceSession, Payment, Guest...) sempre pertence a uma mesa, mas por
+  // caminhos de relação diferentes conforme o tipo — resolver isso em
+  // tempo de consulta exigiria uma junção diferente por `entityType`.
+  // Nulo em registros anteriores a esta coluna (sem backfill).
+  tableId      String?
   // Ex.: "order_item.cancelled", "service_session.discount_applied".
   action       String
   // Ex.: "OrderItem", "ServiceSession".
@@ -711,8 +719,10 @@ model AuditLog {
 
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
   user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  table      Table?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
 
   @@index([restaurantId])
   @@index([entityType, entityId])
+  @@index([tableId])
   @@map("audit_logs")
 }

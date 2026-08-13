@@ -47,6 +47,7 @@ async function setGuestStatus(
     await writeAuditLog(tx, {
       restaurantId: guest.serviceSession.table.restaurantId,
       userId: actorUserId,
+      tableId: guest.serviceSession.tableId,
       action,
       entityType: "Guest",
       entityId: guest.id,

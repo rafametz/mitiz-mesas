@@ -630,14 +630,35 @@ impressão) existirem.
   casos acima.
 - **Saída**: fluxo de fechamento completo, ponta a ponta.
 
-## Módulo 9 — Cancelamentos e auditoria (consolidação)
+## Módulo 9 — Cancelamentos e auditoria (consolidação) ✅
 
-- `AuditLog` transversal, se ainda não cobrindo todos os módulos anteriores;
-- Tela de auditoria no admin (filtrar por usuário, mesa, tipo de ação, data);
-- Revisão de que todo cancelamento/desconto/reabertura já registrado nos
-  módulos anteriores aparece corretamente aqui.
-- **Testes**: cada ação crítica gera exatamente um registro de auditoria
-  coerente.
+- ✅ `AuditLog` já era transversal desde os módulos anteriores (cancelamento
+  de item, desconto aplicado/anulado, taxa aplicada/retirada, fechamento
+  solicitado/cancelado/finalizado, pagamento registrado/estornado, pessoa
+  quitada/reaberta — 14 ações via `writeAuditLog`, sempre dentro da mesma
+  transação da operação);
+- ✅ Tela de auditoria (2026-08-11, `/historico/auditoria`) com os 4 filtros
+  pedidos: usuário, mesa, tipo de ação, data. **Fora** de `/admin` de
+  propósito — `/admin` inteiro é gated só pra `ADMIN_MANAGE`, mas Caixa
+  também tem `AUDIT_VIEW` (business-rules.md §7: "ver auditoria/
+  relatórios" — Admin sim, Caixa parcial), então fica junto de
+  `/historico` (mesmo público, abas "Atendimentos"/"Auditoria" em vez de
+  um sétimo ícone na barra inferior);
+- ✅ `AuditLog.tableId` novo (migration só de adição), desnormalizado de
+  propósito: a entidade auditada (`OrderItem`, `Discount`, `ServiceCharge`,
+  `ServiceSession`, `Payment`, `Guest`) chega na mesa por relação diferente
+  conforme o tipo — resolver isso em tempo de consulta exigiria uma junção
+  diferente por `entityType`. Todos os 8 pontos que chamam `writeAuditLog`
+  atualizados para passar o `tableId` (parâmetro obrigatório de propósito,
+  não opcional — typecheck garante que nenhum foi esquecido);
+- ✅ `src/domain/audit/labels.ts` (catálogo de rótulo em português por
+  ação) e `src/domain/audit/metadata.ts` (formata o `metadata` variável de
+  cada ação pra exibição genérica, sem dicionário por campo).
+- **Testes**: 6 unitários novos (`audit-labels.test.ts`) + asserção de
+  `tableId` adicionada ao teste de integração de cancelamento já existente
+  (`cancel-order-item.test.ts`). `tsc --noEmit`, `npm run lint`, `npm run
+  build` e `npm test` (119/119) limpos; `npm run test:integration` dos
+  arquivos afetados (23/23) limpo.
 
 ## Módulo 10 — Histórico
 
