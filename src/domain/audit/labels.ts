@@ -19,6 +19,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "guest.reopened": "Pessoa reaberta",
   "user.created": "Usuário criado",
   "user.updated": "Usuário atualizado",
+  "user.password_reset": "Senha redefinida",
 };
 
 // Ação registrada antes deste catálogo existir (ou por uma versão futura

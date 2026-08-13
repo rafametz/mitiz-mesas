@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { EditUserForm } from "./edit-user-form";
+import { ResetPasswordForm } from "./reset-password-form";
 
 export default async function EditarUsuarioPage({
   params,
@@ -30,6 +31,8 @@ export default async function EditarUsuarioPage({
         user={{ id: user.id, name: user.name, email: user.email, roleId: user.roleId, active: user.active }}
         roles={roles.map((role) => ({ id: role.id, label: role.label }))}
       />
+
+      <ResetPasswordForm userId={user.id} />
     </div>
   );
 }

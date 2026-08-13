@@ -215,3 +215,57 @@ export async function updateUser(
   revalidatePath(`/admin/usuarios/${id}/editar`);
   return { error: null, success: true };
 }
+
+// Redefinir senha (pedido do usuário 2026-08-13, depois do Módulo 13):
+// admin digita uma senha nova direto na tela, sem precisar do painel do
+// Supabase. Só troca a senha no Supabase Auth — não mexe em nome/perfil/
+// ativo, então não passa pelo guard de "último admin" (não afeta acesso).
+// A senha em si nunca entra no log/auditoria (CLAUDE.md seção 14 — não
+// registrar senha em log), só o fato de que foi redefinida.
+export async function resetUserPassword(
+  id: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const currentUser = await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+
+  let password: string;
+  try {
+    password = passwordSchema.parse(formData.get("password"));
+  } catch (error) {
+    return { error: firstZodMessage(error) ?? "Senha inválida." };
+  }
+
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) {
+    return { error: "Usuário não encontrado." };
+  }
+
+  const serviceRole = createServiceRoleClient();
+  const { error: authError } = await serviceRole.auth.admin.updateUserById(target.authUserId, {
+    password,
+  });
+  if (authError) {
+    return { error: authError.message || "Não foi possível redefinir a senha." };
+  }
+
+  try {
+    await prisma.$transaction((tx) =>
+      writeAuditLog(tx, {
+        restaurantId: target.restaurantId,
+        userId: currentUser.id,
+        tableId: null,
+        action: "user.password_reset",
+        entityType: "User",
+        entityId: id,
+        metadata: { name: target.name, email: target.email },
+      }),
+    );
+  } catch {
+    // A senha já foi trocada de verdade no Supabase Auth (não dá pra
+    // desfazer isso com segurança) — só a auditoria falhou. Avisa mesmo
+    // assim como sucesso, já que o efeito pedido (senha nova) aconteceu.
+  }
+
+  return { error: null, success: true };
+}
