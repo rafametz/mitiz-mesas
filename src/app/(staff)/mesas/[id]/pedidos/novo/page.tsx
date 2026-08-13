@@ -55,6 +55,7 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
           id: product.id,
           name: product.name,
           price: product.price.toString(),
+          categoryId: product.categoryId,
           categoryName: product.category.name,
           modifierGroups: product.modifierGroups.map((group) => ({
             id: group.id,

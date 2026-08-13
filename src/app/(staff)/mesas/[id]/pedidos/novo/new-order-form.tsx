@@ -25,6 +25,7 @@ type ProductOption = {
   id: string;
   name: string;
   price: string;
+  categoryId: string;
   categoryName: string;
   modifierGroups: ModifierGroupOption[];
 };
@@ -107,7 +108,29 @@ export function NewOrderForm({
   }, [isPending, state.success]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  // Filtro por categoria (pedido do usuário 2026-08-13): com muitos
+  // produtos cadastrados, rolar uma lista/select única fica difícil e
+  // sujeito a erro de seleção. Categorias na mesma ordem já configurada em
+  // Administração (products vem ordenado por category.sortOrder — ver
+  // page.tsx), primeira categoria com produto já entra selecionada, então
+  // a lista mostrada sempre começa curta.
+  const categories = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const product of products) {
+      if (!seen.has(product.categoryId)) seen.set(product.categoryId, product.categoryName);
+    }
+    return Array.from(seen, ([id, name]) => ({ id, name }));
+  }, [products]);
+
+  const [selectedCategoryId, setSelectedCategoryId] = useState(categories[0]?.id ?? "");
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
+
+  const categoryProducts = useMemo(
+    () => products.filter((product) => product.categoryId === selectedCategoryId),
+    [products, selectedCategoryId],
+  );
+
   // String, não number — bug de usabilidade no celular: com o campo
   // controlado por um `number` que voltava pra "1" a cada tecla vazia
   // (Number("") é 0, que é falsy), o garçom nunca conseguia apagar o "1"
@@ -136,6 +159,17 @@ export function NewOrderForm({
     setSelectedModifierIds((prev) =>
       prev.includes(modifierId) ? prev.filter((id) => id !== modifierId) : [...prev, modifierId],
     );
+  }
+
+  function selectCategory(categoryId: string) {
+    setSelectedCategoryId(categoryId);
+    setSelectedProductId(products.find((product) => product.categoryId === categoryId)?.id ?? "");
+    setSelectedModifierIds([]);
+  }
+
+  function selectProduct(productId: string) {
+    setSelectedProductId(productId);
+    setSelectedModifierIds([]);
   }
 
   function addToCart() {
@@ -204,21 +238,66 @@ export function NewOrderForm({
       <Card className="flex flex-col gap-4">
         <h2 className="font-display text-base font-semibold text-ink">Adicionar item</h2>
 
-        <SelectField
-          label="Produto"
-          name="productId"
-          value={selectedProductId}
-          onChange={(e) => {
-            setSelectedProductId(e.target.value);
-            setSelectedModifierIds([]);
-          }}
-        >
-          {products.map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.categoryName} · {product.name} ({formatBRLNumber(Number(product.price))})
-            </option>
-          ))}
-        </SelectField>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Categoria</span>
+          <div
+            role="tablist"
+            aria-label="Filtrar produtos por categoria"
+            className="flex gap-2 overflow-x-auto pb-1"
+          >
+            {categories.map((category) => {
+              const isActive = category.id === selectedCategoryId;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => selectCategory(category.id)}
+                  className={`h-11 shrink-0 rounded-full px-4 text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-wine text-bg"
+                      : "border border-line text-ink hover:bg-ink/5"
+                  }`}
+                >
+                  {category.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Produto</span>
+          <div
+            role="radiogroup"
+            aria-label="Produto"
+            className="flex max-h-64 flex-col gap-1 overflow-y-auto rounded-control-sm border border-line p-1.5"
+          >
+            {categoryProducts.map((product) => {
+              const isSelected = product.id === selectedProductId;
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() => selectProduct(product.id)}
+                  className={`flex min-h-11 items-center justify-between gap-2 rounded-control-sm px-3 py-2.5 text-left text-sm transition-colors ${
+                    isSelected
+                      ? "bg-wine/10 text-wine ring-1 ring-inset ring-wine"
+                      : "text-ink hover:bg-ink/5"
+                  }`}
+                >
+                  <span className="truncate">{product.name}</span>
+                  <span className="tabular shrink-0 text-xs text-muted">
+                    {formatBRLNumber(Number(product.price))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-ink">Quantidade</span>
