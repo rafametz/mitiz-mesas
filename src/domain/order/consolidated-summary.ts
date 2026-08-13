@@ -21,6 +21,11 @@ export type ConsolidatedLine = {
   label: string;
   quantity: number;
   lineTotal: Prisma.Decimal;
+  // lineTotal / quantity — produto + adicionais já embutidos, já que a
+  // linha só agrupa itens com exatamente os mesmos adicionais (chave do
+  // grupo). Pedido do usuário 2026-08-13: resumo impresso da comanda
+  // mostra valor unitário além do total da linha.
+  unitPrice: Prisma.Decimal;
 };
 
 export type ConsolidatedSummary = {
@@ -80,7 +85,7 @@ export function buildConsolidatedSummary(items: ConsolidatedItemInput[]): Consol
   }
 
   const lines = [...groups.entries()]
-    .map(([key, group]) => ({ key, ...group }))
+    .map(([key, group]) => ({ key, ...group, unitPrice: group.lineTotal.div(group.quantity) }))
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
   const total = sumDecimals(lines.map((line) => line.lineTotal));

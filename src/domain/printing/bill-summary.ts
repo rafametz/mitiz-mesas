@@ -16,6 +16,11 @@ import { z } from "zod";
 export const billSummaryItemSchema = z.object({
   label: z.string(),
   quantity: z.number().int().positive(),
+  // Valor unitário (produto + adicionais, já dividido pela quantidade) —
+  // pedido do usuário 2026-08-13: a lista de itens do resumo impresso
+  // precisa mostrar quantidade, nome, valor unitário e total, não só o
+  // total da linha.
+  unitPrice: z.string(),
   lineTotal: z.string(),
 });
 
@@ -40,10 +45,14 @@ export const billSummaryContentSchema = z.object({
   discount: z.string().nullable(),
   total: z.string(),
   guestCount: z.number().int().positive(),
-  // Divisão igual (splitEqually) já formatada, uma posição por pessoa —
-  // pode variar 1 centavo entre partes (resto da divisão inteira), por
-  // isso é uma lista, não um valor único "total / pessoas".
-  perPersonShares: z.array(z.string()),
+  // Valor de referência "total / pessoas", já formatado — pedido do
+  // usuário 2026-08-13: o resumo impresso não precisa listar "Parte 1,
+  // Parte 2..." (isso é o splitEqually de split.ts, usado de verdade no
+  // fechamento/pagamento por pessoa), só mostrar quantas pessoas e quanto
+  // seria cada parte. Pode não ser centavo-perfeito quando o total não é
+  // múltiplo exato da quantidade de pessoas — é só informativo no papel,
+  // não vira registro de pagamento.
+  perPersonShare: z.string(),
   payments: z.array(billSummaryPaymentSchema),
   paidAmount: z.string(),
   balance: z.string(),
@@ -71,7 +80,7 @@ export function buildBillSummaryContent(
     discount: input.discount,
     total: input.total,
     guestCount: input.guestCount,
-    perPersonShares: input.perPersonShares,
+    perPersonShare: input.perPersonShare,
     payments: input.payments,
     paidAmount: input.paidAmount,
     balance: input.balance,

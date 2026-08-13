@@ -15,7 +15,7 @@ import {
 } from "@/application/printing/print-queue";
 import { createBillSummaryPrintJob } from "@/application/printing/create-bill-summary-print-job";
 import { generatePrinterToken, hashPrinterToken } from "@/lib/printing/token";
-import { formatBRL } from "@/lib/money";
+import { formatBRL, toDecimal } from "@/lib/money";
 
 describe("PrintJob (Módulo 7 — impressão)", () => {
   let restaurantId: string;
@@ -243,15 +243,11 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
       expect(content.guestCount).toBe(3);
       expect(content.items).toHaveLength(1);
       expect((content.items as { quantity: number }[])[0]?.quantity).toBe(2);
+      expect((content.items as { unitPrice: string }[])[0]?.unitPrice).toBe(formatBRL("40.00"));
       expect(content.total).toBe(formatBRL("80.00"));
-      expect(content.perPersonShares).toHaveLength(3);
-      // 8000 centavos / 3 = 2666 + resto 2 -> as duas primeiras partes
-      // levam 1 centavo a mais (splitEqually, split.ts).
-      expect(content.perPersonShares).toEqual([
-        formatBRL("26.67"),
-        formatBRL("26.67"),
-        formatBRL("26.66"),
-      ]);
+      // Valor de referência "total / pessoas" (não é mais uma lista de
+      // partes, pedido do usuário 2026-08-13) — 80 / 3 = 26,666... -> 26,67.
+      expect(content.perPersonShare).toBe(formatBRL(toDecimal("80.00").div(3).toDecimalPlaces(2)));
       expect(content.payments).toEqual([]);
       expect(content.balance).toBe(formatBRL("80.00"));
     });

@@ -91,7 +91,7 @@ function renderBillSummary(content) {
     printer.bold(true);
     printer.println(`${item.quantity}x ${item.label}`);
     printer.bold(false);
-    printer.println(`  ${item.lineTotal}`);
+    printer.leftRight(`  ${item.unitPrice} cada`, item.lineTotal);
   }
   printer.drawLine();
 
@@ -103,10 +103,7 @@ function renderBillSummary(content) {
   printer.bold(false);
   printer.drawLine();
 
-  printer.println(`Dividido por ${content.guestCount} pessoa(s):`);
-  content.perPersonShares.forEach((share, index) => {
-    printer.leftRight(`  Parte ${index + 1}`, share);
-  });
+  printer.leftRight(`Dividido por ${content.guestCount} pessoa(s)`, content.perPersonShare);
 
   if (content.payments.length > 0) {
     printer.drawLine();

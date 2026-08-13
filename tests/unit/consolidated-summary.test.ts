@@ -65,6 +65,16 @@ describe("buildConsolidatedSummary", () => {
 
     // (50 + 3) * 2 = 106 — mesma fórmula do subtotal oficial da comanda.
     expect(summary.lines[0]!.lineTotal.toString()).toBe("106");
+    // Unitário = total da linha / quantidade (produto + adicional já
+    // embutidos): 106 / 2 = 53.
+    expect(summary.lines[0]!.unitPrice.toString()).toBe("53");
+  });
+
+  it("calcula o valor unitário mesmo quando o mesmo item vem de pedidos diferentes", () => {
+    const summary = buildConsolidatedSummary([item({ quantity: 1 }), item({ quantity: 1 })]);
+
+    expect(summary.lines[0]!.quantity).toBe(2);
+    expect(summary.lines[0]!.unitPrice.toString()).toBe("50");
   });
 
   it("ignora item cancelado, mas conta cancelamento só solicitado", () => {

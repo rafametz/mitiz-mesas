@@ -2,8 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { buildBillSummaryContent } from "@/domain/printing/bill-summary";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
-import { splitEqually } from "@/domain/service-session/split";
-import { formatBRL } from "@/lib/money";
+import { formatBRL, toDecimal } from "@/lib/money";
 
 export class BillSummaryPrintError extends Error {}
 
@@ -53,7 +52,12 @@ export async function createBillSummaryPrintJob(serviceSessionId: string) {
     ),
   );
 
-  const perPersonShares = splitEqually(session.totalAmount, session.guestCount).map(formatBRL);
+  // Valor de referência pro papel, não o split de verdade (splitEqually,
+  // usado no fechamento) — pedido do usuário 2026-08-13: só "dividido por
+  // N pessoas: R$ X,XX", sem listar parte a parte.
+  const perPersonShare = formatBRL(
+    toDecimal(session.totalAmount).div(session.guestCount).toDecimalPlaces(2),
+  );
 
   const printer = await prisma.printer.findFirst({
     where: { restaurantId: session.table.restaurantId, active: true },
@@ -66,6 +70,7 @@ export async function createBillSummaryPrintJob(serviceSessionId: string) {
     items: consolidated.lines.map((line) => ({
       label: line.label,
       quantity: line.quantity,
+      unitPrice: formatBRL(line.unitPrice),
       lineTotal: formatBRL(line.lineTotal),
     })),
     subtotal: formatBRL(session.subtotalAmount),
@@ -75,7 +80,7 @@ export async function createBillSummaryPrintJob(serviceSessionId: string) {
     discount: session.discountAmount.greaterThan(0) ? formatBRL(session.discountAmount) : null,
     total: formatBRL(session.totalAmount),
     guestCount: session.guestCount,
-    perPersonShares,
+    perPersonShare,
     payments: session.payments.map((payment) => ({
       methodName: payment.paymentMethod.name,
       amount: formatBRL(payment.amount),
