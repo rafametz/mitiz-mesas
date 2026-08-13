@@ -138,7 +138,7 @@ export function MoneyField({
             }}
             onFocus={moveCaretToEnd}
             onMouseUp={moveCaretToEnd}
-            className={`${inputBaseClass} pl-10 text-right tabular`}
+            className={`${inputBaseClass} w-full pl-10 text-right tabular`}
           />
         </div>
       </div>
