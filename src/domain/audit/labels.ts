@@ -17,6 +17,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "payment.voided": "Pagamento estornado",
   "guest.settled": "Pessoa marcada como quitada",
   "guest.reopened": "Pessoa reaberta",
+  "user.created": "Usuário criado",
+  "user.updated": "Usuário atualizado",
 };
 
 // Ação registrada antes deste catálogo existir (ou por uma versão futura

@@ -716,6 +716,52 @@ impressão) existirem.
   um fornecedor real até a API oficial ser analisada (seção 21 do
   `CLAUDE.md`).
 
+## Módulo 13 — Administração de usuários ✅
+
+Não estava no roteiro original nem no backlog (CLAUDE.md §4/§23) — pedido
+novo do usuário (2026-08-13): tela de admin pra cadastrar usuário, dar/tirar
+permissão e ter controle de quem usa o sistema.
+
+- ✅ `/admin/usuarios` (lista, `ADMIN_MANAGE`), `+ Novo usuário` e link
+  "Editar" por linha, com badge Ativo/Inativo (`StatusBadge`);
+- ✅ Decisão confirmada com o usuário (`AskUserQuestion`): permissão por
+  **perfil fixo** (Administrador/Caixa/Garçom/Produção, já existentes desde
+  o Módulo 1 — CLAUDE.md §5), não permissão avulsa por pessoa. Não muda
+  nada do modelo `Role`/`Permission`/`RolePermission` que já existia, só
+  constrói a tela por cima;
+- ✅ `/admin/usuarios/novo` já cria o login de verdade (Supabase Auth, via
+  `createServiceRoleClient()` já existente) junto com o cadastro interno
+  (`User`) — decisão confirmada com o usuário. Nome, e-mail, senha
+  temporária (mín. 8 caracteres, o admin repassa pra pessoa), perfil e
+  ativo/inativo. Se o registro interno falhar depois do login criado,
+  desfaz o login (`auth.admin.deleteUser`) pra não sobrar conta órfã sem
+  cadastro correspondente;
+- ✅ `/admin/usuarios/[id]/editar`: nome, perfil e ativo/inativo. E-mail
+  não é editável aqui (é a identidade da conta no Supabase Auth, mudar
+  isso mexe nos dois sistemas juntos, fora do pedido); troca de senha
+  também não entrou nesta primeira versão (não pedido, e não existe hoje
+  tela de "trocar minha senha" pro próprio usuário — ficaria um recurso
+  pela metade);
+- ✅ `src/domain/auth/user-guard.ts` (`wouldLeaveNoActiveAdmin`, pura):
+  bloqueia qualquer mudança (desativar ou trocar de perfil) que deixasse o
+  restaurante sem nenhum administrador ativo — cobre tanto "removi meu
+  próprio acesso sem querer" quanto "desativei o último admin que sobrava";
+- ✅ Auditoria (CLAUDE.md regra 22): `user.created` e `user.updated`
+  (nome/perfil/ativo antes e depois) em `AuditLog`, aparecem em
+  `/historico/auditoria` como qualquer outra ação;
+- **Fora de escopo** (não pedido, não implementado): permissão avulsa por
+  pessoa além do perfil; edição de e-mail; redefinição/troca de senha;
+  autocadastro.
+- **Testes**: 5 unitários novos (`user-guard.test.ts`, a regra do último
+  admin). Sem teste de integração automatizado pra criação de usuário — a
+  parte que chama `auth.admin.createUser` de verdade cria uma conta real no
+  Supabase Auth compartilhado (mesmo banco de dev e produção, ADR 0002),
+  então a verificação foi manual em produção (login com o usuário criado)
+  em vez de automatizada, pra não deixar contas de teste acumulando no
+  `auth.users` real. `tsc --noEmit`, `npm run lint`, `npm run build` e
+  `npm test` (140/140) limpos. Sem migration (`User`/`Role`/`Permission` já
+  existiam desde o Módulo 1).
+
 ---
 
 ## Ordem de execução recomendada
