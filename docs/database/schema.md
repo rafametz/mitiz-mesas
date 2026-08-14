@@ -24,7 +24,7 @@ item 6) e as tabelas de junção necessárias (`RolePermission`).
 | `ProductionSector`                        | Cozinha, Parrilla, Bar, Caixa, Sem impressão — configurável.                  |
 | `Printer`                                 | Impressora física. Um único registro ativo no MVP (impressora térmica única). |
 | `Table`                                   | Mesa física.                                                                  |
-| `ServiceSession`                          | Atendimento — o agregado central do sistema.                                  |
+| `ServiceSession`                          | Atendimento — o agregado central do sistema. Pode ser de mesa (`type: TABLE`, com `tableId`) ou de retirada (`type: PICKUP`, sem mesa — `customerName`/`pickupNumber`/etc.). |
 | `Guest`                                   | Pessoa dentro de um atendimento (opcional, nome/apelido).                     |
 | `Category`, `Product`                     | Cardápio.                                                                     |
 | `ProductModifierGroup`, `ProductModifier` | Adicionais/modificadores por produto.                                         |
@@ -139,22 +139,23 @@ pública (`anon`)/API do Supabase. Detalhe e justificativa em
 ## 4. Regra de integridade que precisa de SQL manual
 
 **Uma mesa só pode ter um atendimento ativo por vez** (regra 1 do
-`CLAUDE.md`) é uma unicidade _condicional_ (`status IN ('OPEN',
-'WAITING_CLOSING', 'PARTIALLY_PAID')`), que o Prisma Schema Language não
-expressa de forma declarativa (não suporta índice único parcial). Essa
-constraint deve ser adicionada como SQL puro na primeira migration que tocar
-`service_sessions` (Módulo 3 do backlog):
+`CLAUDE.md`) é uma unicidade _condicional_ (`table_id IS NOT NULL AND status
+IN ('OPEN', 'CLOSING')`), que o Prisma Schema Language não expressa de forma
+declarativa (não suporta índice único parcial):
 
 ```sql
 CREATE UNIQUE INDEX service_sessions_one_active_per_table
   ON service_sessions (table_id)
-  WHERE status IN ('OPEN', 'WAITING_CLOSING', 'PARTIALLY_PAID');
+  WHERE table_id IS NOT NULL AND status IN ('OPEN', 'CLOSING');
 ```
 
-Até lá, a regra também precisa ser validada na camada de aplicação, dentro
-de uma transação (checar se já existe sessão ativa antes de criar uma nova).
-O banco é a rede de segurança final; a aplicação não deve depender só dele
-nem só da validação de UI (regra 24).
+A regra também é validada na camada de aplicação, dentro de uma transação
+(checar se já existe sessão ativa antes de criar uma nova). O banco é a
+rede de segurança final; a aplicação não deve depender só dele nem só da
+validação de UI (regra 24). Essa regra nunca se aplica a atendimento de
+retirada (`type: PICKUP`) — `table_id` é sempre nulo nesse caso, e o
+predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
+(módulo Retiradas, 2026-08-14; ver `20260814120000_pickup_sessions`).
 
 ## 5. O que ainda não está no schema (de propósito)
 
@@ -190,6 +191,16 @@ nem só da validação de UI (regra 24).
    migration), remove `PARTIALLY_PAID` de `TableStatus`, adiciona
    `Guest.status` (`GuestStatus`) e `Payment.guestId` opcional
    (pagamento por pessoa).
+7. ✅ Módulo Retiradas —
+   `prisma/migrations/20260814120000_pickup_sessions`: `ServiceSession`
+   passa a cobrir também atendimento sem mesa. Adiciona
+   `ServiceSession.type` (`ServiceSessionType`: `TABLE`/`PICKUP`),
+   `restaurantId` denormalizado (backfill a partir de `table.restaurantId`,
+   agora obrigatório e independente de `tableId`), `tableId` opcional,
+   campos de retirada (`customerName`, `customerPhone`, `pickupOrigin`,
+   `requestedAt`, `pickupNote`, `pickupNumber` sequencial por restaurante
+   que nunca reinicia) e reescreve o índice único parcial da seção 4 para
+   excluir explicitamente linhas sem mesa.
 
 ## 7. Fluxo de migration usado na prática
 

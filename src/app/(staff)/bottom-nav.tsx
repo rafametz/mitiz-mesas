@@ -42,7 +42,13 @@ export function BottomNav({
     >
       <div className="mx-auto flex max-w-3xl">
         {items.map((item) => {
-          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          // "Mesas" também fica ativo em /retiradas — são abas irmãs da
+          // mesma seção (AtendimentoTabs), módulo Retiradas 2026-08-14.
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href) ||
+                (item.href === "/mesas" && pathname.startsWith("/retiradas"));
           const Icon = item.icon;
           return (
             <Link

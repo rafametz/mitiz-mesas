@@ -65,6 +65,26 @@ function formatDateTimeBR(iso) {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+// Módulo Retiradas (2026-08-14): "Mesa: X" vira "RETIRADA #N" + dados do
+// cliente quando o atendimento não tem mesa — usado tanto no ticket de
+// pedido quanto no resumo da comanda (mesmo formato de content.pickup nos
+// dois, ver src/domain/printing/ticket.ts). Deixa "muito evidente que se
+// trata de uma retirada" (pedido do usuário), sem outro fluxo de status.
+function printPickupOrTableHeader(content) {
+  if (content.pickup) {
+    printer.bold(true);
+    printer.println(`RETIRADA #${content.pickup.number}`);
+    printer.bold(false);
+    printer.println(`Cliente: ${content.pickup.customerName}`);
+    if (content.pickup.customerPhone) printer.println(`Telefone: ${content.pickup.customerPhone}`);
+    if (content.pickup.requestedTimeLabel) {
+      printer.println(`Horario retirada: ${content.pickup.requestedTimeLabel}`);
+    }
+  } else {
+    printer.println(`Mesa: ${content.tableNumber}`);
+  }
+}
+
 // "Imprimir conferência" (formato em src/domain/printing/bill-summary.ts
 // no projeto principal) — resumo do atendimento inteiro, não de um pedido:
 // itens consolidados, totais, divisão igual por pessoa e, se já houver,
@@ -82,7 +102,7 @@ function renderBillSummary(content) {
   printer.drawLine();
 
   printer.alignLeft();
-  printer.println(`Mesa: ${content.tableNumber}`);
+  printPickupOrTableHeader(content);
   printer.println(`Garcom: ${content.waiterName}`);
   printer.println(`Hora: ${formatDateTimeBR(content.generatedAt)}`);
   printer.drawLine();
@@ -149,7 +169,7 @@ function renderTicket(content) {
   printer.drawLine();
 
   printer.alignLeft();
-  printer.println(`Mesa: ${content.tableNumber}`);
+  printPickupOrTableHeader(content);
   printer.println(`Pedido: #${content.orderSequenceNumber}`);
   printer.println(`Garcom: ${content.waiterName}`);
   printer.println(`Setor: ${content.sectorName}`);

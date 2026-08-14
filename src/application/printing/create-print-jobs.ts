@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { buildTicketContent, type TicketItem } from "@/domain/printing/ticket";
 import { MEAT_POINT_LABELS } from "@/domain/order/labels";
+import type { TicketHeaderFields } from "./ticket-header";
 
 type OrderWithItemsForPrint = Prisma.OrderGetPayload<{
   include: { items: { include: { modifiers: true; guest: true } } };
@@ -27,7 +28,7 @@ export async function createPrintJobsForOrder(
     order: OrderWithItemsForPrint;
     restaurantId: string;
     restaurantName: string;
-    tableNumber: string;
+    header: TicketHeaderFields;
     waiterName: string;
     responsibleName: string | null;
   },
@@ -78,7 +79,8 @@ export async function createPrintJobsForOrder(
       const content = buildTicketContent({
         type,
         restaurantName: params.restaurantName,
-        tableNumber: params.tableNumber,
+        tableNumber: params.header.tableNumber,
+        pickup: params.header.pickup,
         waiterName: params.waiterName,
         sectorName: sectorById.get(sectorId)?.name ?? "Setor",
         orderSequenceNumber: params.order.sequenceNumber,

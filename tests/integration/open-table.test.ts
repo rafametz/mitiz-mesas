@@ -67,7 +67,7 @@ describe("openTable", () => {
     const table = await createFreeTable();
 
     await prisma.serviceSession.create({
-      data: { tableId: table.id, waiterId, guestCount: 1, status: "OPEN" },
+      data: { restaurantId, tableId: table.id, waiterId, guestCount: 1, status: "OPEN" },
     });
 
     // Insert direto via Prisma, sem passar pelo canOpenTable() da
@@ -75,7 +75,7 @@ describe("openTable", () => {
     // (docs/database/schema.md §4).
     await expect(
       prisma.serviceSession.create({
-        data: { tableId: table.id, waiterId, guestCount: 1, status: "CLOSING" },
+        data: { restaurantId, tableId: table.id, waiterId, guestCount: 1, status: "CLOSING" },
       }),
     ).rejects.toThrow();
   });

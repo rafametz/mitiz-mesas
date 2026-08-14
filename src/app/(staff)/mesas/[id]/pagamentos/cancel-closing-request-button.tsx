@@ -8,13 +8,13 @@ import { cancelClosingRequestAction } from "./actions";
 // diferente de RequestClosingButton/CloseTableButton (confirmação
 // proporcional ao risco).
 export function CancelClosingRequestButton({
-  tableId,
+  redirectPath,
   sessionId,
 }: {
-  tableId: string;
+  redirectPath: string;
   sessionId: string;
 }) {
-  const action = cancelClosingRequestAction.bind(null, tableId, sessionId);
+  const action = cancelClosingRequestAction.bind(null, redirectPath, sessionId);
   return (
     <form action={action}>
       <SubmitButton variant="outline" pendingLabel="Cancelando...">

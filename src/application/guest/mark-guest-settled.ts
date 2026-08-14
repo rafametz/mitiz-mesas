@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { publishChange } from "@/lib/realtime/publish";
-import { tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class GuestSettlementError extends Error {}
@@ -33,7 +33,7 @@ async function setGuestStatus(
   const result = await prisma.$transaction(async (tx) => {
     const guest = await tx.guest.findUniqueOrThrow({
       where: { id: guestId },
-      include: { serviceSession: { include: { table: true } } },
+      include: { serviceSession: true },
     });
 
     if (guest.status === status) {
@@ -45,7 +45,7 @@ async function setGuestStatus(
     await tx.guest.update({ where: { id: guestId }, data: { status } });
 
     await writeAuditLog(tx, {
-      restaurantId: guest.serviceSession.table.restaurantId,
+      restaurantId: guest.serviceSession.restaurantId,
       userId: actorUserId,
       tableId: guest.serviceSession.tableId,
       action,
@@ -54,10 +54,10 @@ async function setGuestStatus(
       metadata: { guestName: guest.name },
     });
 
-    return { tableId: guest.serviceSession.tableId };
+    return guest.serviceSession;
   });
 
-  await runAfterResponse(() => publishChange([tableChannel(result.tableId)], "guest.status_changed"));
+  await runAfterResponse(() => publishChange(sessionRealtimeChannels(result), "guest.status_changed"));
 
-  return result;
+  return { tableId: result.tableId };
 }

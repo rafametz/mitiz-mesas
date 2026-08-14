@@ -28,12 +28,16 @@ import { closeTable, CloseTableError } from "@/application/service-session/close
 
 export type FormState = { error: string | null; success?: boolean };
 
-function revalidateMesa(tableId: string) {
-  revalidatePath(`/mesas/${tableId}`);
-  revalidatePath(`/mesas/${tableId}/pagamentos`);
+// `redirectPath`/`listPath` são `/mesas/{id}` ou `/retiradas/{id}` (módulo
+// Retiradas, 2026-08-14) — só usados para revalidar/redirecionar; as
+// ações em si só dependem de serviceSessionId. Mesmas ações servem os
+// dois fluxos (reaproveitamento pedido pelo usuário).
+function revalidateAtendimento(redirectPath: string) {
+  revalidatePath(redirectPath);
+  revalidatePath(`${redirectPath}/pagamentos`);
 }
 
-export async function requestClosingAction(tableId: string, sessionId: string) {
+export async function requestClosingAction(redirectPath: string, sessionId: string) {
   const user = await requireAnyPermission([PERMISSIONS.TABLES_CLOSE_REQUEST, PERMISSIONS.TABLES_CLOSE]);
   try {
     await requestClosing(sessionId, user.id);
@@ -41,14 +45,14 @@ export async function requestClosingAction(tableId: string, sessionId: string) {
     if (error instanceof RequestClosingError) throw error;
     throw new Error("Não foi possível solicitar o fechamento.");
   }
-  revalidateMesa(tableId);
-  redirect(`/mesas/${tableId}/pagamentos`);
+  revalidateAtendimento(redirectPath);
+  redirect(`${redirectPath}/pagamentos`);
 }
 
 // Volta CLOSING -> OPEN (revisão 2026-08-10) — "pedi a conta por engano"
 // ou o cliente quer pedir mais alguma coisa. Mesma permissão de quem pode
 // solicitar o fechamento.
-export async function cancelClosingRequestAction(tableId: string, sessionId: string) {
+export async function cancelClosingRequestAction(redirectPath: string, sessionId: string) {
   const user = await requireAnyPermission([PERMISSIONS.TABLES_CLOSE_REQUEST, PERMISSIONS.TABLES_CLOSE]);
   try {
     await cancelClosingRequest(sessionId, user.id);
@@ -56,12 +60,12 @@ export async function cancelClosingRequestAction(tableId: string, sessionId: str
     if (error instanceof CancelClosingRequestError) throw error;
     throw new Error("Não foi possível cancelar a solicitação de fechamento.");
   }
-  revalidateMesa(tableId);
-  redirect(`/mesas/${tableId}`);
+  revalidateAtendimento(redirectPath);
+  redirect(redirectPath);
 }
 
 export async function applyDiscountAction(
-  tableId: string,
+  redirectPath: string,
   sessionId: string,
   _prevState: FormState,
   formData: FormData,
@@ -77,12 +81,12 @@ export async function applyDiscountAction(
     if (error instanceof ApplyDiscountError) return { error: error.message };
     return { error: "Não foi possível aplicar o desconto." };
   }
-  revalidateMesa(tableId);
+  revalidateAtendimento(redirectPath);
   return { error: null, success: true };
 }
 
 export async function voidDiscountAction(
-  tableId: string,
+  redirectPath: string,
   discountId: string,
   _prevState: FormState,
   formData: FormData,
@@ -94,12 +98,12 @@ export async function voidDiscountAction(
     if (error instanceof ApplyDiscountError) return { error: error.message };
     return { error: "Não foi possível anular o desconto." };
   }
-  revalidateMesa(tableId);
+  revalidateAtendimento(redirectPath);
   return { error: null, success: true };
 }
 
 export async function applyServiceChargeAction(
-  tableId: string,
+  redirectPath: string,
   sessionId: string,
   _prevState: FormState,
   formData: FormData,
@@ -116,12 +120,12 @@ export async function applyServiceChargeAction(
     if (error instanceof ApplyServiceChargeError) return { error: error.message };
     return { error: "Não foi possível aplicar a taxa de serviço." };
   }
-  revalidateMesa(tableId);
+  revalidateAtendimento(redirectPath);
   return { error: null, success: true };
 }
 
 export async function registerPaymentAction(
-  tableId: string,
+  redirectPath: string,
   sessionId: string,
   _prevState: FormState,
   formData: FormData,
@@ -140,12 +144,12 @@ export async function registerPaymentAction(
     if (error instanceof RegisterPaymentError) return { error: error.message };
     return { error: "Não foi possível registrar o pagamento." };
   }
-  revalidateMesa(tableId);
+  revalidateAtendimento(redirectPath);
   return { error: null, success: true };
 }
 
 export async function voidPaymentAction(
-  tableId: string,
+  redirectPath: string,
   paymentId: string,
   _prevState: FormState,
   formData: FormData,
@@ -157,11 +161,11 @@ export async function voidPaymentAction(
     if (error instanceof RegisterPaymentError) return { error: error.message };
     return { error: "Não foi possível estornar o pagamento." };
   }
-  revalidateMesa(tableId);
+  revalidateAtendimento(redirectPath);
   return { error: null, success: true };
 }
 
-export async function closeTableAction(tableId: string, sessionId: string) {
+export async function closeTableAction(redirectPath: string, sessionId: string) {
   const user = await requirePermission(PERMISSIONS.TABLES_CLOSE);
   try {
     await closeTable(sessionId, user.id);
@@ -169,7 +173,11 @@ export async function closeTableAction(tableId: string, sessionId: string) {
     if (error instanceof CloseTableError) throw error;
     throw new Error("Não foi possível finalizar o atendimento.");
   }
-  revalidatePath(`/mesas/${tableId}`);
-  revalidatePath("/mesas");
-  redirect("/mesas");
+  revalidatePath(redirectPath);
+  // Lista geral — `/mesas` para atendimento de mesa, `/retiradas` para
+  // retirada (módulo Retiradas, 2026-08-14): derivada do redirectPath
+  // (primeiro segmento), não precisa de um parâmetro a mais.
+  const listPath = "/" + redirectPath.split("/")[1];
+  revalidatePath(listPath);
+  redirect(listPath);
 }

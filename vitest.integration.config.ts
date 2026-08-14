@@ -16,6 +16,16 @@ export default defineConfig({
     // Mesmo motivo do vitest.config.ts: latência de rede real do Supabase
     // + transações que gravam PrintJob passam do padrão de 5s.
     testTimeout: 15000,
+    // Todos os arquivos compartilham o mesmo Restaurant real (banco único,
+    // dev=prod) — rodar os arquivos em paralelo faz várias transações
+    // Serializable colidirem entre si (createOrder já tem retry de até 3
+    // tentativas pra isso, mas sob paralelismo de 7+ arquivos às vezes
+    // estoura o orçamento — observado ao acrescentar pickup.test.ts,
+    // módulo Retiradas 2026-08-14: mesmos testes já existentes passaram a
+    // falhar de forma intermitente, sem relação com o código deles).
+    // Arquivos ainda rodam um de cada vez (mais lento, mas confiável);
+    // testes dentro de um mesmo arquivo continuam paralelos entre si.
+    fileParallelism: false,
   },
   resolve: {
     alias: {

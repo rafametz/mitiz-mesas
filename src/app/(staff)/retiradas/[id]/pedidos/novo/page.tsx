@@ -1,0 +1,75 @@
+import { requirePermission } from "@/application/auth/get-current-user";
+import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
+import { getPickupSession } from "@/application/service-session/get-pickup-with-session";
+import { prisma } from "@/lib/prisma";
+import { PERMISSIONS } from "@/domain/auth/permissions";
+import { PageHeader } from "@/components/ui/card";
+import { NewOrderForm } from "../../../../mesas/[id]/pedidos/novo/new-order-form";
+
+// Mesmo carrinho de produtos usado nas mesas (NewOrderForm) — só muda
+// serviceSessionId/redirectPath e não há pessoas pra selecionar (retirada
+// não tem esse conceito). Módulo Retiradas, 2026-08-14.
+export default async function NovoPedidoRetiradaPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  await requirePermission(PERMISSIONS.ORDERS_CREATE);
+  const session = await getPickupSession(id);
+
+  const restaurant = await getCurrentRestaurant();
+  const products = await prisma.product.findMany({
+    where: { restaurantId: restaurant.id, active: true, available: true },
+    include: {
+      category: true,
+      modifierGroups: {
+        where: { active: true },
+        include: { modifiers: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+    orderBy: [{ category: { sortOrder: "asc" } }, { name: "asc" }],
+  });
+
+  if (products.length === 0) {
+    return (
+      <div className="flex flex-col gap-4 py-4">
+        <PageHeader title="Novo pedido" subtitle={`Retirada #${session.pickupNumber}`} />
+        <p className="text-sm text-muted">
+          Nenhum produto disponível. Cadastre produtos em Administração antes de lançar pedidos.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Novo pedido" subtitle={`Retirada #${session.pickupNumber}`} />
+      <NewOrderForm
+        redirectPath={`/retiradas/${id}`}
+        serviceSessionId={session.id}
+        guests={[]}
+        products={products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          price: product.price.toString(),
+          categoryId: product.categoryId,
+          categoryName: product.category.name,
+          modifierGroups: product.modifierGroups.map((group) => ({
+            id: group.id,
+            name: group.name,
+            required: group.required,
+            minSelect: group.minSelect,
+            maxSelect: group.maxSelect,
+            modifiers: group.modifiers.map((modifier) => ({
+              id: modifier.id,
+              name: modifier.name,
+              priceDelta: modifier.priceDelta.toString(),
+            })),
+          })),
+        }))}
+      />
+    </div>
+  );
+}

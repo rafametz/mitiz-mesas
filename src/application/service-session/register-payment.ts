@@ -6,7 +6,7 @@ import { recalculateSessionTotals } from "./recalculate-totals";
 import { canRegisterPayment } from "@/domain/service-session/closing";
 import { sumDecimals, toDecimal } from "@/lib/money";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class RegisterPaymentError extends Error {}
@@ -48,20 +48,18 @@ export async function registerPayment(
       const existing = await tx.payment.findUnique({
         where: { idempotencyKey: data.idempotencyKey },
       });
-      if (existing)
-        return { payment: existing, created: false as const, tableId: null, restaurantId: null };
+      if (existing) return { payment: existing, created: false as const, session: null };
 
       const session = await tx.serviceSession.findUniqueOrThrow({
         where: { id: serviceSessionId },
-        include: { table: true },
       });
 
       if (!canRegisterPayment(session.status)) {
-        throw new RegisterPaymentError("Esta mesa não tem atendimento ativo para receber pagamento.");
+        throw new RegisterPaymentError("Este atendimento não está ativo para receber pagamento.");
       }
 
       const method = await tx.paymentMethod.findFirst({
-        where: { id: data.paymentMethodId, restaurantId: session.table.restaurantId, active: true },
+        where: { id: data.paymentMethodId, restaurantId: session.restaurantId, active: true },
       });
       if (!method) throw new RegisterPaymentError("Forma de pagamento inválida ou inativa.");
 
@@ -90,7 +88,7 @@ export async function registerPayment(
       });
 
       await writeAuditLog(tx, {
-        restaurantId: session.table.restaurantId,
+        restaurantId: session.restaurantId,
         userId: actorUserId,
         tableId: session.tableId,
         action: "payment.registered",
@@ -106,30 +104,22 @@ export async function registerPayment(
 
       // Só recalcula os totais (saldo sobe/desce com consumo e pagamento,
       // sempre) — nunca mexe em ServiceSession.status/Table.status. Quem
-      // decide fechar a mesa é requestClosing/closeTable, ações
-      // explícitas e separadas (docs/product/business-rules.md §6).
+      // decide fechar é requestClosing/closeTable, ações explícitas e
+      // separadas (docs/product/business-rules.md §6).
       await recalculateSessionTotals(tx, serviceSessionId, {
         discountAmount: session.discountAmount,
         serviceChargeAmount: session.serviceChargeAmount,
         paidAmount,
       });
 
-      return {
-        payment,
-        created: true as const,
-        tableId: session.tableId,
-        restaurantId: session.table.restaurantId,
-      };
+      return { payment, created: true as const, session };
     },
     { maxWait: 5000, timeout: 15000 },
   );
 
-  if (result.created && result.tableId && result.restaurantId) {
+  if (result.created && result.session) {
     await runAfterResponse(() =>
-      publishChange(
-        [tableChannel(result.tableId!), restaurantTablesChannel(result.restaurantId!)],
-        "service_session.payment_registered",
-      ),
+      publishChange(sessionRealtimeChannels(result.session!), "service_session.payment_registered"),
     );
   }
 
@@ -152,7 +142,7 @@ export async function voidPayment(paymentId: string, actorUserId: string, reason
   const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUniqueOrThrow({
       where: { id: paymentId },
-      include: { serviceSession: { include: { table: true } } },
+      include: { serviceSession: true },
     });
 
     if (payment.voidedAt) throw new RegisterPaymentError("Este pagamento já foi estornado.");
@@ -163,7 +153,7 @@ export async function voidPayment(paymentId: string, actorUserId: string, reason
     });
 
     await writeAuditLog(tx, {
-      restaurantId: payment.serviceSession.table.restaurantId,
+      restaurantId: payment.serviceSession.restaurantId,
       userId: actorUserId,
       tableId: payment.serviceSession.tableId,
       action: "payment.voided",
@@ -183,18 +173,12 @@ export async function voidPayment(paymentId: string, actorUserId: string, reason
       paidAmount,
     });
 
-    return {
-      tableId: payment.serviceSession.tableId,
-      restaurantId: payment.serviceSession.table.restaurantId,
-    };
+    return payment.serviceSession;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.payment_voided",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.payment_voided"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

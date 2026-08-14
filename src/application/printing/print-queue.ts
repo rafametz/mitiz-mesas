@@ -106,7 +106,7 @@ export async function reprocessPrintJob(jobId: string) {
 export async function createReprintJob(originalJobId: string) {
   const original = await prisma.printJob.findUniqueOrThrow({
     where: { id: originalJobId },
-    include: { order: { include: { serviceSession: { include: { table: true } } } } },
+    include: { order: { include: { serviceSession: true } } },
   });
 
   // Resumo da comanda reflete o saldo no momento em que foi gerado — ao
@@ -126,15 +126,17 @@ export async function createReprintJob(originalJobId: string) {
   const originalContent = ticketContentSchema.parse(original.contentSnapshot);
 
   const printer = await prisma.printer.findFirst({
-    where: { restaurantId: original.order.serviceSession.table.restaurantId, active: true },
+    where: { restaurantId: original.order.serviceSession.restaurantId, active: true },
   });
 
   // generatedAt não vem do original — reimpressão mostra a hora de agora,
-  // não a do pedido original (o conteúdo em si, esse sim, é idêntico).
+  // não a do pedido original (o conteúdo em si, esse sim, é idêntico,
+  // incluindo tableNumber/pickup — módulo Retiradas).
   const content = buildTicketContent({
     type: "REPRINT",
     restaurantName: originalContent.restaurantName,
     tableNumber: originalContent.tableNumber,
+    pickup: originalContent.pickup,
     waiterName: originalContent.waiterName,
     sectorName: originalContent.sectorName,
     orderSequenceNumber: originalContent.orderSequenceNumber,

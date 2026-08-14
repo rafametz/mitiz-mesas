@@ -17,6 +17,7 @@ import { restaurantTablesChannel } from "@/lib/realtime/channels";
 import { formatElapsed } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
 import { PrintBillSummaryButton } from "./print-bill-summary-button";
+import { AtendimentoTabs } from "../atendimento-tabs";
 
 // Visão de mesas (CLAUDE.md seção 10): grid pensado para "bater o olho" e
 // já sair com a maior parte da informação — faixa de cor por status (verde
@@ -55,6 +56,7 @@ export default async function MesasPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-5 p-4 pt-6">
       <RealtimeRefresh channels={[restaurantTablesChannel(restaurant.id)]} />
+      <AtendimentoTabs active="mesas" />
       <PageHeader title="Mesas" subtitle={`${tables.length} cadastrada(s)`} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -109,7 +111,11 @@ export default async function MesasPage() {
                     )}
                     {canPrintBillSummary && session && session.totalAmount.greaterThan(0) && (
                       <span className="pointer-events-auto">
-                        <PrintBillSummaryButton tableId={table.id} sessionId={session.id} iconOnly />
+                        <PrintBillSummaryButton
+                          redirectPath={`/mesas/${table.id}`}
+                          sessionId={session.id}
+                          iconOnly
+                        />
                       </span>
                     )}
                   </div>

@@ -73,19 +73,23 @@ function formatBRLNumber(value: number): string {
 }
 
 export function NewOrderForm({
-  tableId,
+  redirectPath,
   serviceSessionId,
   products,
   guests,
 }: {
-  tableId: string;
+  // URL da tela principal do atendimento (`/mesas/{id}` ou
+  // `/retiradas/{id}` — módulo Retiradas, 2026-08-14): pra onde volta
+  // depois de enviar o pedido. O carrinho em si não sabe (nem precisa
+  // saber) se é mesa ou retirada.
+  redirectPath: string;
   serviceSessionId: string;
   products: ProductOption[];
   guests: GuestOption[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const action = createOrderAction.bind(null, tableId, serviceSessionId);
+  const action = createOrderAction.bind(null, redirectPath, serviceSessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
@@ -99,13 +103,13 @@ export function NewOrderForm({
   useEffect(() => {
     if (wasPending.current && !isPending && state.success) {
       showToast("Pedido enviado.");
-      // A lista de pedidos vive na tela principal da mesa desde a
+      // A lista de pedidos vive na tela principal do atendimento desde a
       // refatoração mobile-first (não existe mais "/pedidos" própria).
-      router.push(`/mesas/${tableId}`);
+      router.push(redirectPath);
     }
     wasPending.current = isPending;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPending, state.success]);
+  }, [isPending, state.success, redirectPath]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
 

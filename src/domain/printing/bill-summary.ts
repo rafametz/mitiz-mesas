@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ticketPickupHeaderSchema, type TicketPickupHeader } from "./ticket";
 
 // Formato do `PrintJob.contentSnapshot` para o ticket de "Imprimir
 // conferência" (CLAUDE.md seção 10, ações da tela da mesa). Schema
@@ -33,7 +34,11 @@ export const billSummaryPaymentSchema = z.object({
 export const billSummaryContentSchema = z.object({
   type: z.literal("BILL_SUMMARY"),
   restaurantName: z.string(),
-  tableNumber: z.string(),
+  // Exatamente um entre tableNumber/pickup, mesmo racional de ticket.ts
+  // (módulo Retiradas, 2026-08-14). `.nullish()` para não quebrar ao
+  // reparsear resumos impressos antes deste campo existir.
+  tableNumber: z.string().nullish(),
+  pickup: ticketPickupHeaderSchema.nullish(),
   waiterName: z.string(),
   generatedAt: z.string(),
   items: z.array(billSummaryItemSchema),
@@ -66,12 +71,17 @@ export type BillSummaryContent = z.infer<typeof billSummaryContentSchema>;
 // resolvido (nomes e valores formatados, não IDs/Decimal) — quem chama já
 // buscou e calculou tudo.
 export function buildBillSummaryContent(
-  input: Omit<BillSummaryContent, "type" | "generatedAt"> & { generatedAt?: Date },
+  input: Omit<BillSummaryContent, "type" | "generatedAt" | "tableNumber" | "pickup"> & {
+    generatedAt?: Date;
+    tableNumber?: string | null;
+    pickup?: TicketPickupHeader | null;
+  },
 ): BillSummaryContent {
   return billSummaryContentSchema.parse({
     type: "BILL_SUMMARY",
     restaurantName: input.restaurantName,
-    tableNumber: input.tableNumber,
+    tableNumber: input.tableNumber ?? null,
+    pickup: input.pickup ?? null,
     waiterName: input.waiterName,
     generatedAt: (input.generatedAt ?? new Date()).toISOString(),
     items: input.items,

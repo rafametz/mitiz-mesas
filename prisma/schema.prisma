@@ -129,6 +129,26 @@ enum GuestStatus {
   SETTLED
 }
 
+// Módulo Retiradas (2026-08-14): um atendimento pode ser vinculado a uma
+// mesa física (como sempre foi) ou ser um pedido avulso para retirada
+// (cliente no balcão, WhatsApp ou telefone que vem buscar depois, sem
+// ocupar mesa). Um único modelo (ServiceSession) cobre os dois — todo o
+// motor de pedido/impressão/pagamento/fechamento já opera em cima de
+// serviceSessionId, não de Table, então não há necessidade de duplicar
+// nada disso para retirada (ver campos de retirada no próprio
+// ServiceSession, abaixo).
+enum ServiceSessionType {
+  TABLE
+  PICKUP
+}
+
+// Como o cliente fez o pedido de retirada (tela "Nova retirada").
+enum PickupOrigin {
+  COUNTER
+  WHATSAPP
+  PHONE
+}
+
 // Ponto da carne (CLAUDE.md seção 4/9). NAO_SE_APLICA cobre itens que não
 // são carne (bebidas, acompanhamentos).
 enum MeatPoint {
@@ -160,6 +180,10 @@ model Restaurant {
   printers          Printer[]
   paymentMethods    PaymentMethod[]
   auditLogs         AuditLog[]
+  // Denormalizado direto aqui (não só via Table) desde o módulo Retiradas —
+  // um atendimento de retirada não tem mesa, então precisa de um caminho
+  // próprio até o restaurante (ver ServiceSession.restaurantId).
+  serviceSessions   ServiceSession[]
 
   @@map("restaurants")
 }
@@ -270,7 +294,7 @@ model ProductionSector {
 // (impressora térmica única, ADR 0001 item 3) — o modelo já suporta mais de
 // uma para não exigir migração quando isso mudar.
 model Printer {
-  id             String  @id @default(cuid())
+  id             String    @id @default(cuid())
   restaurantId   String
   name           String
   // Detalhe de conexão do agente local (host/porta/identificador) — definido
@@ -281,14 +305,14 @@ model Printer {
   // de senha). Nulo até alguém gerar um token pela tela /admin/impressoras;
   // sem token, essa impressora não consegue puxar a fila.
   agentTokenHash String?
-  active         Boolean @default(true)
+  active         Boolean   @default(true)
   // Heartbeat do agente local — atualizado a cada chamada autenticada dele
   // (GET /api/print-jobs/pending, PATCH /api/print-jobs/:id), não é
   // "impressora existe", é "o processo node agent.js está vivo e
   // conversando com o servidor agora". Nulo = nunca conectou. Usado na
   // tela /impressao para mostrar se o agente está ativo ou parado, sem
   // esperar um ticket sumir para alguém perceber.
-  lastSeenAt DateTime? @db.Timestamptz(6)
+  lastSeenAt     DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -326,22 +350,45 @@ model Table {
 // Um atendimento por mesa. A regra "uma mesa só pode ter um atendimento
 // ativo por vez" (CLAUDE.md regra 1) não é totalmente expressável em uma
 // constraint declarativa do Prisma (ela é condicional ao status). Fica
-// registrada aqui e deve ser reforçada com um índice único parcial em SQL
-// na primeira migration real (ver docs/database/schema.md):
+// registrada aqui e é reforçada com um índice único parcial em SQL (ver
+// docs/database/schema.md):
 //
 //   CREATE UNIQUE INDEX service_sessions_one_active_per_table
 //     ON service_sessions (table_id)
-//     WHERE status IN ('OPEN', 'WAITING_CLOSING', 'PARTIALLY_PAID');
+//     WHERE table_id IS NOT NULL AND status IN ('OPEN', 'CLOSING');
 //
 // até lá, a regra deve ser validada também na camada de aplicação dentro de
 // uma transação.
+//
+// Módulo Retiradas (2026-08-14): "atendimento" deixou de significar
+// exclusivamente "mesa ocupada". `type` distingue os dois; `tableId` só
+// existe quando type = TABLE (regra acima só se aplica a esses); os campos
+// de retirada (customerName em diante) só existem quando type = PICKUP.
+// `restaurantId` é gravado direto aqui (não só via table.restaurantId)
+// porque retirada não tem mesa para derivar isso.
 model ServiceSession {
   id              String               @id @default(cuid())
-  tableId         String
+  restaurantId    String
+  type            ServiceSessionType   @default(TABLE)
+  tableId         String?
   waiterId        String
   status          ServiceSessionStatus @default(OPEN)
   guestCount      Int
   responsibleName String?
+
+  // Campos de retirada (CLAUDE.md — módulo Retiradas). Só preenchidos
+  // quando type = PICKUP; nulos em atendimento de mesa.
+  customerName  String?
+  customerPhone String?
+  pickupOrigin  PickupOrigin?
+  // Horário previsto para retirada (opcional — nem todo cliente informa).
+  requestedAt   DateTime?     @db.Timestamptz(6)
+  pickupNote    String?
+  // "RETIRADA #047" — sequencial por restaurante, nunca reinicia (decisão
+  // do usuário 2026-08-14). Calculado na aplicação (mesmo padrão de
+  // Order.sequenceNumber), não por SEQUENCE do banco — volume baixo o
+  // suficiente para não precisar disso.
+  pickupNumber  Int?
 
   // Valores em cache, recalculados de forma transacional a cada mutação
   // relevante (pedido, pagamento, desconto, taxa) — evita recomputar toda a
@@ -362,8 +409,9 @@ model ServiceSession {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
-  table  Table @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  waiter User  @relation("SessionWaiter", fields: [waiterId], references: [id], onDelete: Restrict)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  table      Table?     @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  waiter     User       @relation("SessionWaiter", fields: [waiterId], references: [id], onDelete: Restrict)
 
   guests         Guest[]
   orders         Order[]
@@ -372,6 +420,8 @@ model ServiceSession {
   serviceCharges ServiceCharge[]
   printJobs      PrintJob[]
 
+  @@unique([restaurantId, pickupNumber])
+  @@index([restaurantId, type])
   @@index([tableId])
   @@index([status])
   // getTableWithActiveSession (chamada em quase toda tela) filtra pelos
@@ -565,7 +615,7 @@ model OrderItemModifier {
 // ---------------------------------------------------------------------------
 
 model PrintJob {
-  id        String  @id @default(cuid())
+  id               String  @id @default(cuid())
   // Nulo para BILL_SUMMARY (não é sobre um pedido específico) — todo
   // outro tipo continua exigindo um Order na prática (validado na camada
   // de aplicação, não dá pra expressar "obrigatório conforme o type" no

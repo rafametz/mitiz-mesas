@@ -1,4 +1,5 @@
-import { AlertTriangle, CircleDot, DoorOpen, Table2, Timer } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CircleDot, DoorOpen, ShoppingBag, Table2, Timer } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
@@ -20,6 +21,19 @@ const LONG_SESSION_ALERT_MINUTES = 120;
 
 export default async function AdminMesasPage() {
   const restaurant = await getCurrentRestaurant();
+
+  // Contador cruzado pro card "Retiradas em andamento" abaixo — Mesas e
+  // Retiradas são dois fluxos de atendimento paralelos e independentes
+  // (módulo Retiradas, 2026-08-14); este painel continua só sobre mesas
+  // físicas, o contador é só um atalho visível pra quem não sabia que a
+  // seção de retiradas existe.
+  const activePickupsCount = await prisma.serviceSession.count({
+    where: {
+      restaurantId: restaurant.id,
+      type: "PICKUP",
+      status: { in: [...ACTIVE_SERVICE_SESSION_STATUSES] },
+    },
+  });
 
   const tables = await prisma.table.findMany({
     where: { restaurantId: restaurant.id },
@@ -129,6 +143,23 @@ export default async function AdminMesasPage() {
         </div>
 
         <div className="flex flex-col gap-4">
+          <Link href="/admin/retiradas" className="block">
+            <Card className="flex items-center justify-between gap-3 transition-colors hover:border-wine/30">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-wine/10">
+                  <ShoppingBag className="h-4.5 w-4.5 text-wine" />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-ink">Retiradas em andamento</div>
+                  <div className="text-xs text-muted">Pedidos avulsos, sem ocupar mesa</div>
+                </div>
+              </div>
+              <span className="font-display text-xl font-semibold text-ink">
+                {activePickupsCount}
+              </span>
+            </Card>
+          </Link>
+
           <Card>
             <h2 className="font-display text-sm font-semibold text-ink">Resumo do salão</h2>
             <div className="mt-3 flex items-center justify-center">

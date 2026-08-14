@@ -3,7 +3,8 @@ import type { OrderItemStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { canTransitionOrderItem, deriveOrderProgressStatus } from "@/domain/order/states";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, sectorChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
+import { sectorChannel } from "@/lib/realtime/channels";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 // Erro de negócio (transição inválida — item já avançou/foi cancelado por
@@ -26,7 +27,7 @@ export async function updateOrderItemStatus(orderItemId: string, toStatus: Order
     const item = await tx.orderItem.findUniqueOrThrow({
       where: { id: orderItemId },
       include: {
-        order: { include: { serviceSession: { include: { table: true } } } },
+        order: { include: { serviceSession: true } },
       },
     });
 
@@ -50,17 +51,12 @@ export async function updateOrderItemStatus(orderItemId: string, toStatus: Order
 
     return {
       updatedItem,
-      tableId: item.order.serviceSession.tableId,
-      restaurantId: item.order.serviceSession.table.restaurantId,
+      session: item.order.serviceSession,
       sectorId: item.sectorId,
     };
   });
 
-  const channels = [
-    tableChannel(result.tableId),
-    restaurantTablesChannel(result.restaurantId),
-    sectorChannel(result.sectorId),
-  ];
+  const channels = [...sessionRealtimeChannels(result.session), sectorChannel(result.sectorId)];
   await runAfterResponse(() => publishChange(channels, "order_item.status_changed"));
 
   return result.updatedItem;

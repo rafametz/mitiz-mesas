@@ -19,6 +19,17 @@ export function sectorChannel(sectorId: string): string {
   return `sector:${sectorId}`;
 }
 
+// Módulo Retiradas (2026-08-14) — mesmo par table/restaurantTables, só que
+// para atendimento sem mesa: um canal por retirada (tela de detalhe) e um
+// por restaurante (lista /retiradas e /admin/retiradas).
+export function pickupChannel(serviceSessionId: string): string {
+  return `pickup:${serviceSessionId}`;
+}
+
+export function restaurantPickupsChannel(restaurantId: string): string {
+  return `restaurant:${restaurantId}:pickups`;
+}
+
 // Nome do evento de broadcast em todos os canais acima. Um só nome — o
 // payload carrega só um `type` textual (ex.: "table.opened",
 // "order.created"), nunca dado de negócio (ver src/lib/realtime/publish.ts).

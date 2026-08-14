@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@/domain/auth/permissions";
 import { PRINT_JOB_STATUS_LABELS, PRINT_JOB_TYPE_LABELS } from "@/domain/printing/labels";
 import { getAgentStatus, formatElapsedSince } from "@/domain/printing/agent-status";
 import { formatTableLabel } from "@/domain/table/labels";
+import { formatSessionLabel } from "@/domain/service-session/labels";
 import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -52,14 +53,16 @@ export default async function ImpressaoPage({
   // BILL_SUMMARY não tem `order` (orderId nulo) — filtra pelo restaurante
   // (e, se escolhida, pela mesa) por qualquer um dos dois vínculos
   // possíveis (order ou serviceSession direto), senão esses jobs somem da
-  // lista inteiros.
+  // lista inteira. restaurantId direto na ServiceSession (módulo
+  // Retiradas, 2026-08-14) — via table.restaurantId excluiria todo ticket
+  // de retirada, que não tem mesa.
   const jobs = await prisma.printJob.findMany({
     where: {
       AND: [
         {
           OR: [
-            { order: { serviceSession: { table: { restaurantId: restaurant.id } } } },
-            { serviceSession: { table: { restaurantId: restaurant.id } } },
+            { order: { serviceSession: { restaurantId: restaurant.id } } },
+            { serviceSession: { restaurantId: restaurant.id } },
           ],
         },
         { createdAt: { gte: dateRange.start, lt: dateRange.end } },
@@ -154,15 +157,16 @@ export default async function ImpressaoPage({
       <div className="flex flex-col gap-2">
         {jobs.map((job) => {
           // BILL_SUMMARY não tem order/sector (não é sobre um pedido
-          // específico) — resolve a mesa pelo vínculo que existir.
-          const table = job.order?.serviceSession.table ?? job.serviceSession?.table ?? null;
+          // específico) — resolve pelo vínculo que existir. Rótulo cobre
+          // mesa ou retirada (módulo Retiradas, 2026-08-14).
+          const session = job.order?.serviceSession ?? job.serviceSession ?? null;
 
           return (
             <Card key={job.id} padding="sm" className="text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="font-display font-semibold text-ink">
-                    {table ? formatTableLabel(table.number) : "Mesa não identificada"}
+                    {session ? formatSessionLabel(session, session.table?.number) : "Não identificado"}
                   </span>
                   {job.order && (
                     <span className="text-xs text-muted">

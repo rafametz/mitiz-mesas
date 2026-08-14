@@ -12,7 +12,7 @@ import {
 } from "@/domain/service-session/closing";
 import { splitEqually, type SplitItemInput } from "@/domain/service-session/split";
 import { deriveGuestParticipation } from "@/domain/service-session/guest-participation";
-import { DISCOUNT_TYPE_LABELS } from "@/domain/service-session/labels";
+import { DISCOUNT_TYPE_LABELS, formatSessionLabel } from "@/domain/service-session/labels";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { GUEST_STATUS_TONE } from "@/components/ui/status-tone";
@@ -146,7 +146,7 @@ export default async function PagamentosPage({
               de finalizar.
             </p>
             {canRequestClosingPermission && (
-              <CancelClosingRequestButton tableId={id} sessionId={session.id} />
+              <CancelClosingRequestButton redirectPath={`/mesas/${id}`} sessionId={session.id} />
             )}
           </div>
         ) : (
@@ -156,7 +156,11 @@ export default async function PagamentosPage({
               fechamento quando a mesa estiver pronta para encerrar.
             </p>
             {canRequestClosingPermission ? (
-              <RequestClosingButton tableId={id} sessionId={session.id} tableNumber={table.number} />
+              <RequestClosingButton
+                redirectPath={`/mesas/${id}`}
+                sessionId={session.id}
+                itemLabel={formatSessionLabel(session, table.number)}
+              />
             ) : (
               <p className="text-xs text-muted">
                 Peça para o garçom ou o caixa solicitar o fechamento.
@@ -177,7 +181,7 @@ export default async function PagamentosPage({
               : "Nenhuma taxa aplicada ainda. Opcional (CLAUDE.md regra 15)."}
           </p>
           <ServiceChargeForm
-            tableId={id}
+            redirectPath={`/mesas/${id}`}
             sessionId={session.id}
             defaultPercent={latestServiceCharge?.waived ? "0" : (latestServiceCharge?.percent.toString() ?? "10")}
           />
@@ -202,7 +206,7 @@ export default async function PagamentosPage({
                 {activeDiscount.reason} · {activeDiscount.appliedBy.name}
               </p>
               <ReasonConfirmForm
-                action={voidDiscountAction.bind(null, id, activeDiscount.id)}
+                action={voidDiscountAction.bind(null, `/mesas/${id}`, activeDiscount.id)}
                 triggerLabel="Anular desconto"
                 dialogTitle="Anular desconto"
                 itemLabel={`Desconto de ${formatBRL(activeDiscount.amountApplied)}`}
@@ -211,7 +215,7 @@ export default async function PagamentosPage({
               />
             </div>
           ) : (
-            <ApplyDiscountForm tableId={id} sessionId={session.id} />
+            <ApplyDiscountForm redirectPath={`/mesas/${id}`} sessionId={session.id} />
           )}
         </Card>
       )}
@@ -317,7 +321,7 @@ export default async function PagamentosPage({
                 </div>
                 {canVoidPayment && (
                   <ReasonConfirmForm
-                    action={voidPaymentAction.bind(null, id, payment.id)}
+                    action={voidPaymentAction.bind(null, `/mesas/${id}`, payment.id)}
                     triggerLabel="Estornar"
                     dialogTitle="Estornar pagamento"
                     itemLabel={`Pagamento de ${formatBRL(payment.amount)} em ${payment.paymentMethod.name}`}
@@ -332,7 +336,7 @@ export default async function PagamentosPage({
 
         {canRegisterPaymentPermission && session.balanceAmount.greaterThan(ZERO) && (
           <RegisterPaymentForm
-            tableId={id}
+            redirectPath={`/mesas/${id}`}
             sessionId={session.id}
             paymentMethods={paymentMethods}
             guests={activeGuests.map((g, i) => ({ id: g.id, name: g.name ?? `Pessoa ${i + 1}` }))}
@@ -343,9 +347,9 @@ export default async function PagamentosPage({
 
       {canClosePermission && (
         <CloseTableButton
-          tableId={id}
+          redirectPath={`/mesas/${id}`}
           sessionId={session.id}
-          tableNumber={table.number}
+          itemLabel={formatSessionLabel(session, table.number)}
           disabled={!readyToClose}
           disabledReason={
             readyToClose
