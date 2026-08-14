@@ -39,7 +39,16 @@ export async function createPrintJobsForOrder(
     tx.productionSector.findMany({ where: { id: { in: sectorIds } } }),
     tx.printer.findFirst({ where: { restaurantId: params.restaurantId, active: true } }),
   ]);
-  const sectorNameById = new Map(sectors.map((s) => [s.id, s.name]));
+  const sectorById = new Map(sectors.map((s) => [s.id, s]));
+
+  // "Sem impressão" é um setor válido, mas o mesmo campo (hasPrinting)
+  // também vale pra qualquer outro setor com a impressão desligada na
+  // tela de Setores (ex.: Bar) — antes esse campo só era usado pra exibir
+  // a tela, nunca checado aqui, então todo pedido gerava PrintJob pra
+  // TODOS os setores, mesmo os desmarcados (bug relatado pelo usuário
+  // 2026-08-13). Setor não encontrado (não deveria acontecer, FK garante)
+  // também não imprime, por segurança.
+  const printableSectorIds = sectorIds.filter((id) => sectorById.get(id)?.hasPrinting);
 
   // Primeiro pedido do atendimento é "novo"; os seguintes na mesma mesa
   // são "complemento" — mesmo formato de ticket, tipo diferente impresso
@@ -51,7 +60,7 @@ export async function createPrintJobsForOrder(
   // vez, já que isto não está mais dentro da transação principal do
   // pedido e não precisa mais ser sequencial por segurança.
   await Promise.all(
-    sectorIds.map((sectorId) => {
+    printableSectorIds.map((sectorId) => {
       const sectorItems = activeItems.filter((item) => item.sectorId === sectorId);
       const ticketItems: TicketItem[] = sectorItems.map((item) => ({
         productName: item.productNameAtOrder,
@@ -70,7 +79,7 @@ export async function createPrintJobsForOrder(
         restaurantName: params.restaurantName,
         tableNumber: params.tableNumber,
         waiterName: params.waiterName,
-        sectorName: sectorNameById.get(sectorId) ?? "Setor",
+        sectorName: sectorById.get(sectorId)?.name ?? "Setor",
         orderSequenceNumber: params.order.sequenceNumber,
         items: ticketItems,
       });

@@ -26,6 +26,12 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
   let printerId: string;
   let printerToken: string;
   let paymentMethodId: string;
+  // Setor com impressão desligada (hasPrinting: false) — pedido do
+  // usuário 2026-08-13: desmarcar "gerar impressão" pro Bar continuava
+  // imprimindo ticket normalmente, porque esse campo só era checado na
+  // tela de Setores, nunca na hora de criar o PrintJob de verdade.
+  let noPrintSectorId: string;
+  let noPrintProductId: string;
   const createdTableIds: string[] = [];
 
   beforeAll(async () => {
@@ -67,14 +73,37 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
         data: { restaurantId, name: `Forma print ${suffix}` },
       })
     ).id;
+
+    noPrintSectorId = (
+      await prisma.productionSector.create({
+        data: { restaurantId, name: `Setor sem impressão ${suffix}`, hasPrinting: false },
+      })
+    ).id;
+    noPrintProductId = (
+      await prisma.product.create({
+        data: {
+          restaurantId,
+          categoryId,
+          defaultSectorId: noPrintSectorId,
+          name: `Produto sem impressão ${suffix}`,
+          price: "12.00",
+        },
+      })
+    ).id;
   });
 
   afterAll(async () => {
     await prisma.printJob.deleteMany({
-      where: { OR: [{ sectorId }, { serviceSession: { tableId: { in: createdTableIds } } }] },
+      where: {
+        OR: [
+          { sectorId },
+          { sectorId: noPrintSectorId },
+          { serviceSession: { tableId: { in: createdTableIds } } },
+        ],
+      },
     });
     await prisma.payment.deleteMany({ where: { paymentMethodId } });
-    await prisma.orderItem.deleteMany({ where: { productId } });
+    await prisma.orderItem.deleteMany({ where: { productId: { in: [productId, noPrintProductId] } } });
     await prisma.order.deleteMany({
       where: { serviceSession: { tableId: { in: createdTableIds } } },
     });
@@ -82,8 +111,8 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     await prisma.table.deleteMany({ where: { id: { in: createdTableIds } } });
     await prisma.printer.deleteMany({ where: { id: printerId } });
     await prisma.paymentMethod.deleteMany({ where: { id: paymentMethodId } });
-    await prisma.product.deleteMany({ where: { id: productId } });
-    await prisma.productionSector.deleteMany({ where: { id: sectorId } });
+    await prisma.product.deleteMany({ where: { id: { in: [productId, noPrintProductId] } } });
+    await prisma.productionSector.deleteMany({ where: { id: { in: [sectorId, noPrintSectorId] } } });
     await prisma.category.deleteMany({ where: { id: categoryId } });
     await prisma.$disconnect();
   });
@@ -143,6 +172,50 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     expect(cancellationJob).not.toBeNull();
     const content = cancellationJob?.contentSnapshot as Record<string, unknown>;
     expect(content.cancelReason).toBe("Cliente desistiu do prato");
+  });
+
+  it("setor com hasPrinting: false não gera PrintJob ao enviar pedido", async () => {
+    const table = await prisma.table.create({
+      data: {
+        restaurantId,
+        number: `PRINT-NOPRINT-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+    const order = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `key-noprint-${Date.now()}-${Math.random()}`,
+      items: [{ productId: noPrintProductId, quantity: 1 }],
+    });
+
+    const jobs = await prisma.printJob.findMany({ where: { orderId: order.id } });
+    expect(jobs).toHaveLength(0);
+  });
+
+  it("setor com hasPrinting: false não gera PrintJob CANCELLATION ao cancelar item", async () => {
+    const table = await prisma.table.create({
+      data: {
+        restaurantId,
+        number: `PRINT-NOPRINT-CANC-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+    const order = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `key-noprint-cancel-${Date.now()}-${Math.random()}`,
+      items: [{ productId: noPrintProductId, quantity: 1 }],
+    });
+
+    await authorizeCancelOrderItem(order.items[0]!.id, waiterId, "Teste setor sem impressão");
+
+    const cancellationJob = await prisma.printJob.findFirst({
+      where: { orderId: order.id, type: "CANCELLATION" },
+    });
+    expect(cancellationJob).toBeNull();
   });
 
   it("findPrinterByToken autentica com o token certo e rejeita token errado", async () => {

@@ -143,6 +143,11 @@ async function transitionItem(params: {
             where: { restaurantId: printTicket.restaurantId, active: true },
           }),
         ]);
+        // Setor com impressão desligada (hasPrinting: false) não gera
+        // ticket de cancelamento nenhum — mesmo bug do pedido novo,
+        // consertado junto (usuário 2026-08-13): este campo só era
+        // checado na tela de Setores, nunca aqui.
+        if (!sector?.hasPrinting) return;
         const content = buildTicketContent({
           type: "CANCELLATION",
           restaurantName: printTicket.restaurantName,
