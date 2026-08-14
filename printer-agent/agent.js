@@ -154,6 +154,13 @@ function renderTicket(content) {
   printer.println(`Garcom: ${content.waiterName}`);
   printer.println(`Setor: ${content.sectorName}`);
   printer.println(`Hora: ${formatDateTimeBR(content.generatedAt)}`);
+  // Responsável da mesa (preenchido opcional na abertura) — pedido do
+  // usuário 2026-08-14: só aparece quando de fato preenchido, embaixo da
+  // hora. Diferente de "Para:" de cada item (pessoa daquele item
+  // específico) — este é sobre a mesa inteira.
+  if (content.responsibleName) {
+    printer.println(`Responsavel: ${content.responsibleName}`);
+  }
   printer.drawLine();
 
   for (const item of content.items) {

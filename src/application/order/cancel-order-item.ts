@@ -108,6 +108,7 @@ async function transitionItem(params: {
                 restaurantName: item.order.serviceSession.table.restaurant.name,
                 tableNumber: item.order.serviceSession.table.number,
                 waiterName: item.order.waiter.name,
+                responsibleName: item.order.serviceSession.responsibleName,
                 orderSequenceNumber: item.order.sequenceNumber,
                 productName: item.productNameAtOrder,
                 quantity: item.quantity,
@@ -155,6 +156,7 @@ async function transitionItem(params: {
           waiterName: printTicket.waiterName,
           sectorName: sector?.name ?? "Setor",
           orderSequenceNumber: printTicket.orderSequenceNumber,
+          responsibleName: printTicket.responsibleName,
           items: [
             {
               productName: printTicket.productName,

@@ -138,6 +138,7 @@ export async function createReprintJob(originalJobId: string) {
     waiterName: originalContent.waiterName,
     sectorName: originalContent.sectorName,
     orderSequenceNumber: originalContent.orderSequenceNumber,
+    responsibleName: originalContent.responsibleName,
     items: originalContent.items,
     cancelReason: originalContent.cancelReason,
   });

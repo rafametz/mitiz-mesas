@@ -212,6 +212,7 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
         restaurantName: session.table.restaurant.name,
         tableNumber: session.table.number,
         waiterName: waiter.name,
+        responsibleName: session.responsibleName,
         sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
       };
     },
@@ -270,6 +271,7 @@ export async function createOrder(input: CreateOrderInput) {
           restaurantName: result.restaurantName,
           tableNumber: result.tableNumber,
           waiterName: result.waiterName,
+          responsibleName: result.responsibleName,
         };
         const channels = [
           tableChannel(result.tableId),

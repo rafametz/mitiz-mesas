@@ -47,4 +47,14 @@ describe("buildTicketContent", () => {
     const content = buildTicketContent({ ...baseInput, generatedAt: fixedDate });
     expect(content.generatedAt).toBe(fixedDate.toISOString());
   });
+
+  it("responsável da mesa vira null quando não informado", () => {
+    const content = buildTicketContent(baseInput);
+    expect(content.responsibleName).toBeNull();
+  });
+
+  it("carrega o responsável da mesa quando informado", () => {
+    const content = buildTicketContent({ ...baseInput, responsibleName: "Rafael" });
+    expect(content.responsibleName).toBe("Rafael");
+  });
 });

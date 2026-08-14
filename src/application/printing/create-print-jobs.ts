@@ -29,6 +29,7 @@ export async function createPrintJobsForOrder(
     restaurantName: string;
     tableNumber: string;
     waiterName: string;
+    responsibleName: string | null;
   },
 ) {
   const activeItems = params.order.items;
@@ -81,6 +82,7 @@ export async function createPrintJobsForOrder(
         waiterName: params.waiterName,
         sectorName: sectorById.get(sectorId)?.name ?? "Setor",
         orderSequenceNumber: params.order.sequenceNumber,
+        responsibleName: params.responsibleName,
         items: ticketItems,
       });
 

@@ -145,6 +145,43 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     const content = jobs[0]?.contentSnapshot as Record<string, unknown>;
     expect(content.tableNumber).toBeTruthy();
     expect(content.items).toHaveLength(1);
+    // Mesa aberta sem responsável (openTableWithOrder não informa) — vira
+    // null, não some do conteúdo (pedido do usuário 2026-08-14).
+    expect(content.responsibleName).toBeNull();
+  });
+
+  it("responsável da mesa aparece no cabeçalho do ticket quando preenchido", async () => {
+    const table = await prisma.table.create({
+      data: {
+        restaurantId,
+        number: `PRINT-RESP-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({
+      tableId: table.id,
+      waiterId,
+      guestCount: 1,
+      responsibleName: "Rafael",
+    });
+    const order = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `key-resp-${Date.now()}-${Math.random()}`,
+      items: [{ productId, quantity: 1 }],
+    });
+
+    const job = await prisma.printJob.findFirstOrThrow({ where: { orderId: order.id } });
+    const content = job.contentSnapshot as Record<string, unknown>;
+    expect(content.responsibleName).toBe("Rafael");
+
+    // Cancelamento do mesmo item também carrega o responsável no ticket.
+    await authorizeCancelOrderItem(order.items[0]!.id, waiterId, "Teste responsável");
+    const cancellationJob = await prisma.printJob.findFirstOrThrow({
+      where: { orderId: order.id, type: "CANCELLATION" },
+    });
+    const cancellationContent = cancellationJob.contentSnapshot as Record<string, unknown>;
+    expect(cancellationContent.responsibleName).toBe("Rafael");
   });
 
   it("segundo pedido da mesma mesa cria PrintJob do tipo COMPLEMENT", async () => {
