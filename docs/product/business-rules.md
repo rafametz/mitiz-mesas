@@ -175,3 +175,33 @@ Disponível a qualquer momento do atendimento ativo (`OPEN` ou `CLOSING`):
 
 Detalhamento completo em seção 5 do `CLAUDE.md`; qualquer divergência, o
 `CLAUDE.md` prevalece.
+
+## 8. Fluxo — Retirada (módulo Retiradas, 2026-08-14)
+
+Pedido avulso para retirada (balcão, WhatsApp, telefone), sem ocupar mesa
+física. Decisão de arquitetura completa em ADR 0005
+(`docs/architecture/decisions/0005-modulo-retiradas.md`): é o mesmo
+`ServiceSession` das seções 1-6 acima, com `type = PICKUP` em vez de
+`TABLE` — todo o fluxo de pedido, cancelamento, pagamento e fechamento
+(seções 4-6) vale igual, só sem mesa.
+
+1. Criar retirada — nome do cliente (obrigatório), telefone, origem
+   (balcão/WhatsApp/telefone) e horário previsto (opcionais). Recebe um
+   número sequencial por restaurante que nunca reinicia ("RETIRADA
+   #047" — decisão do usuário);
+2. Lançar pedidos normalmente (seções 4-5) — mesmo carrinho de produtos
+   das mesas;
+3. Ticket impresso mostra "RETIRADA #047 / Cliente / Telefone / Horário"
+   no lugar de "Mesa: X" — sem novo fluxo de status de preparo (nenhum
+   "em preparo"/"pronto" específico de retirada; os itens aparecem na
+   fila de produção normal, junto com os de mesa);
+4. Pagamento e fechamento seguem a seção 6a/6b, sem a etapa "liberar
+   mesa" (não existe) e sem divisão por pessoa (retirada é sempre um
+   único cliente, não um grupo à mesa);
+5. Histórico mantido igual — aparece em `/historico` com o rótulo
+   "Retirada #N", distinto de um atendimento de mesa.
+
+Fora de escopo nesta primeira versão (decisão explícita do usuário):
+status de preparo/pronto/entregue próprio de retirada, painel de cozinha
+dedicado, delivery, rastreamento, integração com WhatsApp, notificação
+ao cliente.

@@ -1,5 +1,13 @@
-import { DiscountType, ServiceSessionStatus, type ServiceSession } from "@prisma/client";
+import { DiscountType, PickupOrigin, ServiceSessionStatus, type ServiceSession } from "@prisma/client";
 import { formatTableLabel } from "@/domain/table/labels";
+
+// Origem do pedido de retirada (tela "Nova retirada" — módulo Retiradas,
+// 2026-08-14).
+export const PICKUP_ORIGIN_LABELS: Record<PickupOrigin, string> = {
+  COUNTER: "Balcão",
+  WHATSAPP: "WhatsApp",
+  PHONE: "Telefone",
+};
 
 export const SERVICE_SESSION_STATUS_LABELS: Record<ServiceSessionStatus, string> = {
   OPEN: "Aberto",

@@ -762,6 +762,56 @@ permissão e ter controle de quem usa o sistema.
   `npm test` (140/140) limpos. Sem migration (`User`/`Role`/`Permission` já
   existiam desde o Módulo 1).
 
+## Módulo 14 — Retiradas ✅
+
+- Pedido do usuário: pedido avulso para retirada (balcão, WhatsApp,
+  telefone), sem ocupar mesa física, reaproveitando ao máximo o que já
+  existia — decisão de arquitetura completa em ADR 0005
+  (`docs/architecture/decisions/0005-modulo-retiradas.md`);
+- ✅ `ServiceSession.type` (`TABLE`/`PICKUP`), `restaurantId`
+  denormalizado, `tableId` opcional, campos de retirada (`customerName`,
+  `customerPhone`, `pickupOrigin`, `requestedAt`, `pickupNote`,
+  `pickupNumber` sequencial por restaurante que nunca reinicia — decisão
+  do usuário) — migration `20260814120000_pickup_sessions`;
+- ✅ `createPickup` (análogo a `openTable`); `createOrder`,
+  `cancelOrderItem`, `registerPayment`, `applyDiscount`,
+  `applyServiceCharge`, `requestClosing`, `cancelClosingRequest`,
+  `closeTable`, `updateOrderItemStatus` adaptados para funcionar com ou
+  sem mesa, sem duplicar nenhuma dessas funções;
+- ✅ Ticket impresso ganha cabeçalho de retirada ("RETIRADA #047 /
+  Cliente / Telefone / Horário") no lugar de "Mesa: X" — mesmo
+  `PrintJobType`, sem novo fluxo de status (nenhum "em preparo"/"pronto"
+  para retirada, fora de escopo por pedido explícito do usuário);
+- ✅ Telas do garçom: abas "Mesas"/"Retiradas" (`AtendimentoTabs`, mesmo
+  padrão de Histórico/Auditoria — não um ícone novo na barra inferior),
+  `/retiradas` (lista + "Nova retirada"), `/retiradas/[id]` (mesma
+  anatomia da tela da mesa, sem aba Pessoas), `/retiradas/[id]/pedidos/
+  novo` (mesmo carrinho `NewOrderForm` das mesas) e `/retiradas/[id]/
+  pagamentos` (mesmos 7 formulários/botões financeiros das mesas, sem
+  divisão por pessoa);
+- ✅ Painel do administrador: `/admin/retiradas` (cards, alertas de
+  retirada aberta há muito tempo) + item na sidebar + card "Retiradas em
+  andamento" em `/admin/mesas`, sem misturar contagem com mesas físicas;
+- ✅ `/historico` (geral) e `/impressao` passam a incluir retiradas
+  (rótulo "Retirada #N", link para `/retiradas/[id]`) — os dois
+  filtravam por `table.restaurantId`, o que excluiria retirada
+  silenciosamente; corrigido junto;
+- ✅ Permissão: reaproveita `TABLES_OPEN` para abrir retirada — hipótese
+  reversível confirmada com o usuário, sem código de permissão novo;
+- Fora de escopo por pedido explícito do usuário: status de preparo/
+  pronto/entregue específico de retirada, painel de cozinha dedicado
+  (itens de retirada aparecem no `/producao` normal), delivery,
+  rastreamento, integração com WhatsApp, notificações ao cliente.
+- **Testes**: 5 integração novos (`tests/integration/pickup.test.ts` —
+  numeração sequencial, pedido/impressão/cancelamento com cabeçalho de
+  retirada, pagamento e fechamento sem mesa). `vitest.integration.config.ts`
+  ganhou `fileParallelism: false` (todos os arquivos de integração
+  compartilham o mesmo `Restaurant` real — rodar em paralelo já causava
+  conflito de transação `Serializable` intermitente antes deste módulo;
+  ficou mais visível ao acrescentar um arquivo de teste a mais). `tsc
+  --noEmit`, `npm run lint`, `npm run build`, `npm test` (142/142) e `npm
+  run test:integration` (56/56) limpos.
+
 ---
 
 ## Ordem de execução recomendada
