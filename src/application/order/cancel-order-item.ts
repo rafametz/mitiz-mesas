@@ -4,10 +4,11 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
+import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
 import { canTransitionOrderItem, deriveOrderStatus } from "@/domain/order/states";
 import { buildTicketContent } from "@/domain/printing/ticket";
+import { buildTicketHeader } from "@/application/printing/ticket-header";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CancelOrderItemError extends Error {}
@@ -34,7 +35,7 @@ async function transitionItem(params: {
         include: {
           order: {
             include: {
-              serviceSession: { include: { table: { include: { restaurant: true } } } },
+              serviceSession: { include: { table: true, restaurant: true } },
               waiter: true,
             },
           },
@@ -66,7 +67,7 @@ async function transitionItem(params: {
       });
 
       await writeAuditLog(tx, {
-        restaurantId: item.order.serviceSession.table.restaurantId,
+        restaurantId: item.order.serviceSession.restaurantId,
         userId: params.actorUserId,
         tableId: item.order.serviceSession.tableId,
         action: params.auditAction,
@@ -97,16 +98,18 @@ async function transitionItem(params: {
       // precisar pra montar o ticket, sem precisar buscar tudo de novo.
       return {
         updatedItem,
-        tableId: item.order.serviceSession.tableId,
-        restaurantId: item.order.serviceSession.table.restaurantId,
+        session: item.order.serviceSession,
         printTicket:
           params.toStatus === "CANCELLED"
             ? {
                 orderId: item.orderId,
                 sectorId: item.sectorId,
-                restaurantId: item.order.serviceSession.table.restaurantId,
-                restaurantName: item.order.serviceSession.table.restaurant.name,
-                tableNumber: item.order.serviceSession.table.number,
+                restaurantId: item.order.serviceSession.restaurantId,
+                restaurantName: item.order.serviceSession.restaurant.name,
+                header: buildTicketHeader(
+                  item.order.serviceSession,
+                  item.order.serviceSession.table?.number ?? null,
+                ),
                 waiterName: item.order.waiter.name,
                 responsibleName: item.order.serviceSession.responsibleName,
                 orderSequenceNumber: item.order.sequenceNumber,
@@ -125,7 +128,7 @@ async function transitionItem(params: {
     { maxWait: 5000, timeout: 15000 },
   );
 
-  const channels = [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)];
+  const channels = sessionRealtimeChannels(result.session);
   const eventType =
     params.toStatus === "CANCELLED" ? "order_item.cancelled" : "order_item.cancellation_requested";
 
@@ -152,7 +155,8 @@ async function transitionItem(params: {
         const content = buildTicketContent({
           type: "CANCELLATION",
           restaurantName: printTicket.restaurantName,
-          tableNumber: printTicket.tableNumber,
+          tableNumber: printTicket.header.tableNumber,
+          pickup: printTicket.header.pickup,
           waiterName: printTicket.waiterName,
           sectorName: sector?.name ?? "Setor",
           orderSequenceNumber: printTicket.orderSequenceNumber,

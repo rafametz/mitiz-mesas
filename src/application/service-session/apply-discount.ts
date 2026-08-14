@@ -7,7 +7,7 @@ import { recalculateSessionTotals } from "./recalculate-totals";
 import { canModifyClosingCharges } from "@/domain/service-session/closing";
 import { clampDecimal, toDecimal, ZERO } from "@/lib/money";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class ApplyDiscountError extends Error {}
@@ -36,11 +36,10 @@ export async function applyDiscount(
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.serviceSession.findUniqueOrThrow({
       where: { id: serviceSessionId },
-      include: { table: true },
     });
 
     if (!canModifyClosingCharges(session.status)) {
-      throw new ApplyDiscountError("Solicite o fechamento da mesa antes de aplicar um desconto.");
+      throw new ApplyDiscountError("Solicite o fechamento antes de aplicar um desconto.");
     }
 
     const existingActive = await tx.discount.findFirst({
@@ -74,7 +73,7 @@ export async function applyDiscount(
     });
 
     await writeAuditLog(tx, {
-      restaurantId: session.table.restaurantId,
+      restaurantId: session.restaurantId,
       userId: actorUserId,
       tableId: session.tableId,
       action: "discount.applied",
@@ -94,17 +93,14 @@ export async function applyDiscount(
       paidAmount: session.paidAmount,
     });
 
-    return { tableId: session.tableId, restaurantId: session.table.restaurantId };
+    return session;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.discount_applied",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.discount_applied"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }
 
 const voidSchema = z
@@ -121,7 +117,7 @@ export async function voidDiscount(discountId: string, actorUserId: string, reas
   const result = await prisma.$transaction(async (tx) => {
     const discount = await tx.discount.findUniqueOrThrow({
       where: { id: discountId },
-      include: { serviceSession: { include: { table: true } } },
+      include: { serviceSession: true },
     });
 
     if (discount.voidedAt) {
@@ -134,7 +130,7 @@ export async function voidDiscount(discountId: string, actorUserId: string, reas
     });
 
     await writeAuditLog(tx, {
-      restaurantId: discount.serviceSession.table.restaurantId,
+      restaurantId: discount.serviceSession.restaurantId,
       userId: actorUserId,
       tableId: discount.serviceSession.tableId,
       action: "discount.voided",
@@ -149,18 +145,12 @@ export async function voidDiscount(discountId: string, actorUserId: string, reas
       paidAmount: discount.serviceSession.paidAmount,
     });
 
-    return {
-      tableId: discount.serviceSession.tableId,
-      restaurantId: discount.serviceSession.table.restaurantId,
-    };
+    return discount.serviceSession;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.discount_voided",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.discount_voided"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

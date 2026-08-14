@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { buildBillSummaryContent } from "@/domain/printing/bill-summary";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
+import { buildTicketHeader } from "./ticket-header";
 import { formatBRL, toDecimal } from "@/lib/money";
 
 export class BillSummaryPrintError extends Error {}
@@ -18,7 +19,8 @@ export async function createBillSummaryPrintJob(serviceSessionId: string) {
   const session = await prisma.serviceSession.findUnique({
     where: { id: serviceSessionId },
     include: {
-      table: { include: { restaurant: true } },
+      table: true,
+      restaurant: true,
       waiter: true,
       orders: {
         include: { items: { include: { modifiers: true } } },
@@ -60,12 +62,15 @@ export async function createBillSummaryPrintJob(serviceSessionId: string) {
   );
 
   const printer = await prisma.printer.findFirst({
-    where: { restaurantId: session.table.restaurantId, active: true },
+    where: { restaurantId: session.restaurantId, active: true },
   });
 
+  const header = buildTicketHeader(session, session.table?.number ?? null);
+
   const content = buildBillSummaryContent({
-    restaurantName: session.table.restaurant.name,
-    tableNumber: session.table.number,
+    restaurantName: session.restaurant.name,
+    tableNumber: header.tableNumber,
+    pickup: header.pickup,
     waiterName: session.waiter.name,
     items: consolidated.lines.map((line) => ({
       label: line.label,

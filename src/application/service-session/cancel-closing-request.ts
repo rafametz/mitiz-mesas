@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { canCancelClosingRequest } from "@/domain/service-session/closing";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CancelClosingRequestError extends Error {}
@@ -18,11 +18,10 @@ export async function cancelClosingRequest(serviceSessionId: string, actorUserId
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.serviceSession.findUniqueOrThrow({
       where: { id: serviceSessionId },
-      include: { table: true },
     });
 
     if (!canCancelClosingRequest(session.status)) {
-      throw new CancelClosingRequestError("Esta mesa não está com fechamento solicitado.");
+      throw new CancelClosingRequestError("Este atendimento não está com fechamento solicitado.");
     }
 
     await tx.serviceSession.update({
@@ -30,10 +29,12 @@ export async function cancelClosingRequest(serviceSessionId: string, actorUserId
       data: { status: "OPEN" },
     });
 
-    await tx.table.update({ where: { id: session.tableId }, data: { status: "OCCUPIED" } });
+    if (session.tableId) {
+      await tx.table.update({ where: { id: session.tableId }, data: { status: "OCCUPIED" } });
+    }
 
     await writeAuditLog(tx, {
-      restaurantId: session.table.restaurantId,
+      restaurantId: session.restaurantId,
       userId: actorUserId,
       tableId: session.tableId,
       action: "service_session.closing_cancelled",
@@ -41,15 +42,12 @@ export async function cancelClosingRequest(serviceSessionId: string, actorUserId
       entityId: session.id,
     });
 
-    return { tableId: session.tableId, restaurantId: session.table.restaurantId };
+    return session;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.closing_cancelled",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.closing_cancelled"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

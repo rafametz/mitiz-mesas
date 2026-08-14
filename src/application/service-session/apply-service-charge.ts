@@ -6,7 +6,7 @@ import { recalculateSessionTotals } from "./recalculate-totals";
 import { canModifyClosingCharges } from "@/domain/service-session/closing";
 import { toDecimal, ZERO } from "@/lib/money";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class ApplyServiceChargeError extends Error {}
@@ -40,12 +40,11 @@ export async function applyServiceCharge(
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.serviceSession.findUniqueOrThrow({
       where: { id: serviceSessionId },
-      include: { table: true },
     });
 
     if (!canModifyClosingCharges(session.status)) {
       throw new ApplyServiceChargeError(
-        "Solicite o fechamento da mesa antes de aplicar a taxa de serviço.",
+        "Solicite o fechamento antes de aplicar a taxa de serviço.",
       );
     }
 
@@ -66,7 +65,7 @@ export async function applyServiceCharge(
     });
 
     await writeAuditLog(tx, {
-      restaurantId: session.table.restaurantId,
+      restaurantId: session.restaurantId,
       userId: actorUserId,
       tableId: session.tableId,
       action: data.waived ? "service_charge.waived" : "service_charge.applied",
@@ -86,15 +85,12 @@ export async function applyServiceCharge(
       paidAmount: session.paidAmount,
     });
 
-    return { tableId: session.tableId, restaurantId: session.table.restaurantId };
+    return session;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.service_charge_applied",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.service_charge_applied"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

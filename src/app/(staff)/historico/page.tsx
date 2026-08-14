@@ -4,8 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
-import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
-import { formatTableLabel } from "@/domain/table/labels";
+import { SERVICE_SESSION_STATUS_LABELS, formatSessionLabel } from "@/domain/service-session/labels";
 import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatBRL } from "@/lib/money";
@@ -37,7 +36,7 @@ export default async function HistoricoGeralPage({
 
   const sessions = await prisma.serviceSession.findMany({
     where: {
-      table: { restaurantId: restaurant.id },
+      restaurantId: restaurant.id,
       status: { in: ["CLOSED", "CANCELLED"] },
       ...(sp.garcomId ? { waiterId: sp.garcomId } : {}),
       ...(dateRange ? { openedAt: { gte: dateRange.start, lt: dateRange.end } } : {}),
@@ -114,7 +113,11 @@ export default async function HistoricoGeralPage({
         {sessions.map((session) => (
           <Link
             key={session.id}
-            href={`/mesas/${session.tableId}/historico/${session.id}`}
+            href={
+              session.type === "PICKUP"
+                ? `/retiradas/${session.id}`
+                : `/mesas/${session.tableId}/historico/${session.id}`
+            }
             className="block"
           >
             <Card
@@ -123,7 +126,7 @@ export default async function HistoricoGeralPage({
             >
               <div className="min-w-0">
                 <div className="font-medium text-ink">
-                  {formatTableLabel(session.table.number)}
+                  {formatSessionLabel(session, session.table?.number)}
                   <span className="ml-2 text-xs font-normal text-muted">
                     {SERVICE_SESSION_STATUS_LABELS[session.status]}
                   </span>

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { canRequestClosing } from "@/domain/service-session/closing";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class RequestClosingError extends Error {}
@@ -11,17 +11,17 @@ export class RequestClosingError extends Error {}
 // Garçom solicita (TABLES_CLOSE_REQUEST); Caixa/Admin também podem chamar
 // isto direto antes de mexer em taxa/desconto/pagamento — o fechamento em
 // si (fechar de fato) é uma ação separada (close-table.ts), controlada por
-// permissão própria na camada de servidor.
+// permissão própria na camada de servidor. Vale igual para retirada
+// (módulo Retiradas, 2026-08-14) — só não mexe em Table quando não existe.
 export async function requestClosing(serviceSessionId: string, actorUserId: string) {
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.serviceSession.findUniqueOrThrow({
       where: { id: serviceSessionId },
-      include: { table: true },
     });
 
     if (!canRequestClosing(session.status)) {
       throw new RequestClosingError(
-        "Esta mesa não está com atendimento aberto para solicitar fechamento.",
+        "Este atendimento não está aberto para solicitar fechamento.",
       );
     }
 
@@ -30,10 +30,12 @@ export async function requestClosing(serviceSessionId: string, actorUserId: stri
       data: { status: "CLOSING" },
     });
 
-    await tx.table.update({ where: { id: session.tableId }, data: { status: "WAITING_CLOSING" } });
+    if (session.tableId) {
+      await tx.table.update({ where: { id: session.tableId }, data: { status: "WAITING_CLOSING" } });
+    }
 
     await writeAuditLog(tx, {
-      restaurantId: session.table.restaurantId,
+      restaurantId: session.restaurantId,
       userId: actorUserId,
       tableId: session.tableId,
       action: "service_session.closing_requested",
@@ -41,15 +43,12 @@ export async function requestClosing(serviceSessionId: string, actorUserId: stri
       entityId: session.id,
     });
 
-    return { tableId: session.tableId, restaurantId: session.table.restaurantId };
+    return session;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.closing_requested",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.closing_requested"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

@@ -71,3 +71,17 @@ export function formatDateKeyShort(dateStr: string): string {
   const [, month, day] = dateStr.split("-");
   return `${day}/${month}`;
 }
+
+// "HH:mm" (horário previsto de retirada, tela "Nova retirada" — módulo
+// Retiradas) -> instante UTC do dia civil de hoje em America/Sao_Paulo.
+// Mesmo offset fixo -03:00 de saoPauloDayRange (Brasil não tem mais
+// horário de verão). Retirada é sempre combinada para o mesmo dia — não
+// existe agendamento com data futura neste MVP (CLAUDE.md, fora de
+// escopo).
+export function combineTodayTimeSaoPaulo(hhmm: string): Date {
+  const { start } = saoPauloDayRange(todaySaoPaulo());
+  const [hoursStr, minutesStr] = hhmm.split(":");
+  const hours = Number(hoursStr ?? 0);
+  const minutes = Number(minutesStr ?? 0);
+  return new Date(start.getTime() + (hours * 60 + minutes) * 60 * 1000);
+}

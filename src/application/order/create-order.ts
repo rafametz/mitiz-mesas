@@ -3,9 +3,11 @@ import { z } from "zod";
 import { MeatPoint, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
+import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
+import { buildTicketHeader } from "@/application/printing/ticket-header";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, sectorChannel, tableChannel } from "@/lib/realtime/channels";
+import { sectorChannel } from "@/lib/realtime/channels";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CreateOrderError extends Error {}
@@ -60,10 +62,10 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
 
       const session = await tx.serviceSession.findUniqueOrThrow({
         where: { id: data.serviceSessionId },
-        include: { table: { include: { restaurant: true } } },
+        include: { table: true, restaurant: true },
       });
       if (session.status !== "OPEN") {
-        throw new CreateOrderError("Esta mesa não está com atendimento aberto para novos pedidos.");
+        throw new CreateOrderError("Este atendimento não está aberto para novos pedidos.");
       }
 
       const waiter = await tx.user.findUniqueOrThrow({ where: { id: data.waiterId } });
@@ -82,7 +84,7 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
       // no que veio do cliente (CLAUDE.md seção 9, "Enviar para produção").
       const productIds = [...new Set(data.items.map((i) => i.productId))];
       const products = await tx.product.findMany({
-        where: { id: { in: productIds }, restaurantId: session.table.restaurantId },
+        where: { id: { in: productIds }, restaurantId: session.restaurantId },
       });
       const productsById = new Map(products.map((p) => [p.id, p]));
 
@@ -207,10 +209,10 @@ async function runTransaction(data: z.infer<typeof createOrderSchema>) {
       return {
         order,
         created: true as const,
-        tableId: session.tableId,
-        restaurantId: session.table.restaurantId,
-        restaurantName: session.table.restaurant.name,
-        tableNumber: session.table.number,
+        session,
+        restaurantId: session.restaurantId,
+        restaurantName: session.restaurant.name,
+        header: buildTicketHeader(session, session.table?.number ?? null),
         waiterName: waiter.name,
         responsibleName: session.responsibleName,
         sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
@@ -269,13 +271,12 @@ export async function createOrder(input: CreateOrderInput) {
           order: result.order,
           restaurantId: result.restaurantId,
           restaurantName: result.restaurantName,
-          tableNumber: result.tableNumber,
+          header: result.header,
           waiterName: result.waiterName,
           responsibleName: result.responsibleName,
         };
         const channels = [
-          tableChannel(result.tableId),
-          restaurantTablesChannel(result.restaurantId),
+          ...sessionRealtimeChannels(result.session),
           ...result.sectorIds.map(sectorChannel),
         ];
 

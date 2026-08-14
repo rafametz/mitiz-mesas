@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { canCloseTable } from "@/domain/service-session/closing";
 import { publishChange } from "@/lib/realtime/publish";
-import { restaurantTablesChannel, tableChannel } from "@/lib/realtime/channels";
+import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 
 export class CloseTableError extends Error {}
@@ -13,19 +13,20 @@ export class CloseTableError extends Error {}
 // regra 24), finaliza o atendimento e libera a mesa. Ação explícita
 // separada de "o saldo zerou" (registerPayment já leva pra PAID sozinho) —
 // alguém com TABLES_CLOSE ainda precisa confirmar, dando espaço pra
-// conferir antes de liberar a mesa pro próximo cliente.
+// conferir antes de liberar a mesa pro próximo cliente. Mesmo racional
+// vale para finalizar uma retirada (módulo Retiradas, 2026-08-14) — só que
+// aí não existe mesa física para liberar.
 export async function closeTable(serviceSessionId: string, actorUserId: string) {
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.serviceSession.findUniqueOrThrow({
       where: { id: serviceSessionId },
-      include: { table: true },
     });
 
     if (!canCloseTable(session.status, session.balanceAmount)) {
       throw new CloseTableError(
         session.status === "CLOSING"
           ? "Saldo da comanda ainda não está zerado."
-          : "Solicite o fechamento da mesa antes de finalizar.",
+          : "Solicite o fechamento antes de finalizar.",
       );
     }
 
@@ -34,10 +35,12 @@ export async function closeTable(serviceSessionId: string, actorUserId: string) 
       data: { status: "CLOSED", closedAt: new Date() },
     });
 
-    await tx.table.update({ where: { id: session.tableId }, data: { status: "FREE" } });
+    if (session.tableId) {
+      await tx.table.update({ where: { id: session.tableId }, data: { status: "FREE" } });
+    }
 
     await writeAuditLog(tx, {
-      restaurantId: session.table.restaurantId,
+      restaurantId: session.restaurantId,
       userId: actorUserId,
       tableId: session.tableId,
       action: "service_session.closed",
@@ -46,15 +49,12 @@ export async function closeTable(serviceSessionId: string, actorUserId: string) 
       metadata: { totalAmount: session.totalAmount.toString() },
     });
 
-    return { tableId: session.tableId, restaurantId: session.table.restaurantId };
+    return session;
   });
 
   await runAfterResponse(() =>
-    publishChange(
-      [tableChannel(result.tableId), restaurantTablesChannel(result.restaurantId)],
-      "service_session.closed",
-    ),
+    publishChange(sessionRealtimeChannels(result), "service_session.closed"),
   );
 
-  return result;
+  return { tableId: result.tableId, restaurantId: result.restaurantId };
 }

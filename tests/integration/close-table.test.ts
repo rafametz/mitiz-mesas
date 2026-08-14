@@ -246,7 +246,7 @@ describe("Módulo 8 — Caixa e pagamentos (pagamento separado de fechamento)", 
     expect(current.status).toBe("CLOSED");
     expect(current.closedAt).not.toBeNull();
 
-    const table = await prisma.table.findUniqueOrThrow({ where: { id: session.tableId } });
+    const table = await prisma.table.findUniqueOrThrow({ where: { id: session.tableId! } });
     expect(table.status).toBe("FREE");
   });
 
@@ -275,7 +275,7 @@ describe("Módulo 8 — Caixa e pagamentos (pagamento separado de fechamento)", 
       items: [{ productId, quantity: 1 }],
     });
 
-    const table = await prisma.table.findUniqueOrThrow({ where: { id: session.tableId } });
+    const table = await prisma.table.findUniqueOrThrow({ where: { id: session.tableId! } });
     expect(table.status).toBe("OCCUPIED");
   });
 

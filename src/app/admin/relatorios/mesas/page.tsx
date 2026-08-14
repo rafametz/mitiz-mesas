@@ -31,9 +31,15 @@ export default async function RelatorioTempoDeMesasPage({
   const to = sp.ate ?? todaySaoPaulo();
   const range = saoPauloDateRange(from, to);
 
+  // Relatório é especificamente sobre mesa física — retirada (módulo
+  // Retiradas, 2026-08-14) não tem "tempo aberto" com o mesmo significado
+  // operacional (não ocupa espaço físico), então fica fora deste relatório
+  // por escolha, não por esquecimento. type: "TABLE" torna isso explícito
+  // (antes disso já acontecia de forma implícita via `table: {...}`).
   const sessions = await prisma.serviceSession.findMany({
     where: {
-      table: { restaurantId: restaurant.id },
+      restaurantId: restaurant.id,
+      type: "TABLE",
       status: "CLOSED",
       closedAt: { gte: range.start, lt: range.end },
     },
@@ -43,7 +49,10 @@ export default async function RelatorioTempoDeMesasPage({
 
   const report = buildTableOpenDuration(
     sessions
-      .filter((s): s is typeof s & { closedAt: Date } => s.closedAt !== null)
+      .filter(
+        (s): s is typeof s & { closedAt: Date; table: NonNullable<typeof s.table> } =>
+          s.closedAt !== null && s.table !== null,
+      )
       .map((s) => ({
         id: s.id,
         tableNumber: s.table.number,

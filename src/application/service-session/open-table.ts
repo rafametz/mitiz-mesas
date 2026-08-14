@@ -54,6 +54,8 @@ export async function openTable(input: OpenTableInput) {
 
       const created = await tx.serviceSession.create({
         data: {
+          restaurantId: table.restaurantId,
+          type: "TABLE",
           tableId: data.tableId,
           waiterId: data.waiterId,
           guestCount: data.guestCount,
