@@ -12,16 +12,16 @@ const initialState: FormState = { error: null };
 // 8/17), então "aplicar de novo" e "trocar o percentual" são a mesma ação;
 // não existe botão de anular separado como em Discount.
 export function ServiceChargeForm({
-  tableId,
+  redirectPath,
   sessionId,
   defaultPercent,
 }: {
-  tableId: string;
+  redirectPath: string;
   sessionId: string;
   defaultPercent: string;
 }) {
   const { showToast } = useToast();
-  const action = applyServiceChargeAction.bind(null, tableId, sessionId);
+  const action = applyServiceChargeAction.bind(null, redirectPath, sessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [waived, setWaived] = useState(false);
 

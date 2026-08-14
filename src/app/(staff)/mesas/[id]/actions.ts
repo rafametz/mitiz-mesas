@@ -149,8 +149,11 @@ export async function reopenGuestAction(
 // o toast certo sem duplicar essa checagem no cliente.
 export type PrintBillSummaryState = { error: string | null; printerConfigured: boolean | null };
 
+// `redirectPath` (`/mesas/{id}` ou `/retiradas/{id}` — módulo Retiradas,
+// 2026-08-14) só é usado para `revalidatePath` — reusa o mesmo botão nos
+// dois fluxos.
 export async function printBillSummaryAction(
-  tableId: string,
+  redirectPath: string,
   sessionId: string,
   _prevState: PrintBillSummaryState, // eslint-disable-line @typescript-eslint/no-unused-vars
   _formData: FormData, // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -162,7 +165,7 @@ export async function printBillSummaryAction(
   ]);
   try {
     const { printerConfigured } = await createBillSummaryPrintJob(sessionId);
-    revalidatePath(`/mesas/${tableId}`);
+    revalidatePath(redirectPath);
     return { error: null, printerConfigured };
   } catch (error) {
     if (error instanceof BillSummaryPrintError) return { error: error.message, printerConfigured: null };

@@ -4,27 +4,28 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SubmitButton } from "@/components/form/submit-button";
-import { bareTableNumber } from "@/domain/table/labels";
 import { closeTableAction } from "./actions";
 
 // Passo final (business-rules.md §6, passos 7-9) — irreversível (libera a
-// mesa pro próximo cliente), por isso confirmação, mesmo sem exigir motivo
-// (não é uma anulação, é a conclusão normal do fluxo).
+// mesa pro próximo cliente ou encerra a retirada, módulo Retiradas
+// 2026-08-14), por isso confirmação, mesmo sem exigir motivo (não é uma
+// anulação, é a conclusão normal do fluxo).
 export function CloseTableButton({
-  tableId,
+  redirectPath,
   sessionId,
-  tableNumber,
+  itemLabel,
   disabled,
   disabledReason,
 }: {
-  tableId: string;
+  redirectPath: string;
   sessionId: string;
-  tableNumber: string;
+  // "Mesa 3" ou "Retirada #47" — já formatado (formatSessionLabel).
+  itemLabel: string;
   disabled: boolean;
   disabledReason?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const action = closeTableAction.bind(null, tableId, sessionId);
+  const action = closeTableAction.bind(null, redirectPath, sessionId);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -37,10 +38,10 @@ export function CloseTableButton({
         <ConfirmDialog
           open={open}
           title="Finalizar atendimento"
-          description={`A mesa ${bareTableNumber(tableNumber)} será liberada para um novo atendimento. Esta ação não pode ser desfeita.`}
+          description={`${itemLabel} será finalizada e encerrada. Esta ação não pode ser desfeita.`}
           cancelLabel="Voltar"
           onCancel={() => setOpen(false)}
-          confirmSlot={<SubmitButton>Finalizar e liberar mesa</SubmitButton>}
+          confirmSlot={<SubmitButton>Finalizar atendimento</SubmitButton>}
         />
       </form>
     </div>

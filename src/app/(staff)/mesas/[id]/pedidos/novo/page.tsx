@@ -43,7 +43,7 @@ export default async function NovoPedidoPage({ params }: { params: Promise<{ id:
     <div className="flex flex-col gap-4">
       <PageHeader title="Novo pedido" subtitle={formatTableLabel(table.number)} />
       <NewOrderForm
-        tableId={id}
+        redirectPath={`/mesas/${id}`}
         serviceSessionId={session.id}
         // Pessoa SETTLED (já quitou a parte dela — pagamento por pessoa,
         // revisão 2026-08-10) some do seletor por padrão, mas nada do que

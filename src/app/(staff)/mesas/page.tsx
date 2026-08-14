@@ -109,7 +109,11 @@ export default async function MesasPage() {
                     )}
                     {canPrintBillSummary && session && session.totalAmount.greaterThan(0) && (
                       <span className="pointer-events-auto">
-                        <PrintBillSummaryButton tableId={table.id} sessionId={session.id} iconOnly />
+                        <PrintBillSummaryButton
+                          redirectPath={`/mesas/${table.id}`}
+                          sessionId={session.id}
+                          iconOnly
+                        />
                       </span>
                     )}
                   </div>

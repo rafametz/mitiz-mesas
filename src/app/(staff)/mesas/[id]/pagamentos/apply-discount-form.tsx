@@ -10,9 +10,15 @@ import { applyDiscountAction, type FormState } from "./actions";
 
 const initialState: FormState = { error: null };
 
-export function ApplyDiscountForm({ tableId, sessionId }: { tableId: string; sessionId: string }) {
+export function ApplyDiscountForm({
+  redirectPath,
+  sessionId,
+}: {
+  redirectPath: string;
+  sessionId: string;
+}) {
   const { showToast } = useToast();
-  const action = applyDiscountAction.bind(null, tableId, sessionId);
+  const action = applyDiscountAction.bind(null, redirectPath, sessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [type, setType] = useState<DiscountType>("PERCENTAGE");
 

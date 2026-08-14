@@ -26,13 +26,13 @@ function formatBRLNumber(value: number): string {
 // mais de um pagamento seguido pra fechar a mesma comanda (regra 13, mais de
 // uma forma de pagamento).
 export function RegisterPaymentForm({
-  tableId,
+  redirectPath,
   sessionId,
   paymentMethods,
   guests,
   balance,
 }: {
-  tableId: string;
+  redirectPath: string;
   sessionId: string;
   paymentMethods: PaymentMethodOption[];
   // Pessoas ativas da mesa — pagamento por pessoa (revisão 2026-08-10),
@@ -46,7 +46,7 @@ export function RegisterPaymentForm({
   balance: string;
 }) {
   const { showToast } = useToast();
-  const action = registerPaymentAction.bind(null, tableId, sessionId);
+  const action = registerPaymentAction.bind(null, redirectPath, sessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 

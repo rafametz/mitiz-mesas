@@ -14,16 +14,17 @@ const initialState: PrintBillSummaryState = { error: null, printerConfigured: nu
 // ícone compacto no card pra imprimir sem precisar entrar na mesa, um
 // botão com rótulo junto do que está sendo impresso.
 export function PrintBillSummaryButton({
-  tableId,
+  redirectPath,
   sessionId,
   iconOnly = false,
 }: {
-  tableId: string;
+  // `/mesas/{id}` ou `/retiradas/{id}` (módulo Retiradas, 2026-08-14).
+  redirectPath: string;
   sessionId: string;
   iconOnly?: boolean;
 }) {
   const { showToast } = useToast();
-  const action = printBillSummaryAction.bind(null, tableId, sessionId);
+  const action = printBillSummaryAction.bind(null, redirectPath, sessionId);
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   const wasPending = useRef(false);

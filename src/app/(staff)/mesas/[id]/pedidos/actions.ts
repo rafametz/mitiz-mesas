@@ -32,8 +32,13 @@ const cartSchema = z.array(
   }),
 );
 
+// `redirectPath` é a URL da tela principal do atendimento (`/mesas/{id}`
+// ou `/retiradas/{id}` — módulo Retiradas, 2026-08-14): usado só para
+// `revalidatePath`, a ação em si só depende de `serviceSessionId`. Reusa
+// exatamente este componente/action nos dois fluxos, sem duplicar o
+// carrinho de produtos (NewOrderForm).
 export async function createOrderAction(
-  tableId: string,
+  redirectPath: string,
   serviceSessionId: string,
   _prevState: FormState,
   formData: FormData,
@@ -80,9 +85,9 @@ export async function createOrderAction(
   // o cliente navegar buscar dado fresco, mas quem decide navegar — e
   // mostra a confirmação — é o componente cliente, imediatamente ao ver
   // este retorno, sem esperar uma navegação completa do servidor primeiro.
-  // A lista de pedidos vive na tela principal da mesa desde a refatoração
-  // mobile-first (não existe mais uma página "/pedidos" própria).
-  revalidatePath(`/mesas/${tableId}`);
+  // A lista de pedidos vive na tela principal do atendimento desde a
+  // refatoração mobile-first (não existe mais uma página "/pedidos" própria).
+  revalidatePath(redirectPath);
   return { error: null, success: true };
 }
 
@@ -93,7 +98,7 @@ function firstZodMessage(error: unknown): string | null {
 
 export async function requestCancelAction(
   itemId: string,
-  tableId: string,
+  redirectPath: string,
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
@@ -106,13 +111,13 @@ export async function requestCancelAction(
     if (zodMessage) return { error: zodMessage };
     return { error: "Não foi possível solicitar o cancelamento." };
   }
-  revalidatePath(`/mesas/${tableId}`);
+  revalidatePath(redirectPath);
   return { error: null };
 }
 
 export async function authorizeCancelAction(
   itemId: string,
-  tableId: string,
+  redirectPath: string,
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
@@ -125,6 +130,6 @@ export async function authorizeCancelAction(
     if (zodMessage) return { error: zodMessage };
     return { error: "Não foi possível cancelar o item." };
   }
-  revalidatePath(`/mesas/${tableId}`);
+  revalidatePath(redirectPath);
   return { error: null };
 }

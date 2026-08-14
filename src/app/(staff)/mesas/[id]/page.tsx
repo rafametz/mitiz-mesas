@@ -205,7 +205,7 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
         <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-ink">Resumo da comanda</h2>
           {canPrintBillSummary && consolidatedSummary.lines.length > 0 && (
-            <PrintBillSummaryButton tableId={id} sessionId={session.id} />
+            <PrintBillSummaryButton redirectPath={`/mesas/${id}`} sessionId={session.id} />
           )}
         </div>
         {consolidatedSummary.lines.length === 0 ? (
@@ -334,8 +334,8 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
                 <ul className="flex flex-col gap-3">
                   {order.items.map((item) => {
                     const isCancellable = CANCELLABLE_ORDER_ITEM_STATUSES.includes(item.status);
-                    const requestWithIds = requestCancelAction.bind(null, item.id, id);
-                    const authorizeWithIds = authorizeCancelAction.bind(null, item.id, id);
+                    const requestWithIds = requestCancelAction.bind(null, item.id, `/mesas/${id}`);
+                    const authorizeWithIds = authorizeCancelAction.bind(null, item.id, `/mesas/${id}`);
                     const itemLabel = `${item.quantity}x ${item.productNameAtOrder}`;
 
                     return (
