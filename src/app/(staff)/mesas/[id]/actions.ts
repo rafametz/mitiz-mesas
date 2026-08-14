@@ -73,6 +73,35 @@ export async function addGuest(sessionId: string, tableId: string, formData: For
   revalidatePath(`/mesas/${tableId}`);
 }
 
+const responsibleNameSchema = z
+  .string()
+  .trim()
+  .max(120)
+  .optional()
+  .transform((v) => (v ? v : null));
+
+// Editar o responsável depois que a mesa já está aberta (pedido do usuário
+// 2026-08-14) — antes só dava pra informar na abertura; se a mesa abrisse
+// sem esse dado (ex.: garçom ainda não sabia o nome), não tinha como
+// preencher depois, ficava "Não informado" pro atendimento inteiro. Mesma
+// permissão de mexer em pessoas da mesa (TABLES_OPEN). Pode apagar de
+// novo (não é obrigatório).
+export async function updateResponsibleName(
+  sessionId: string,
+  tableId: string,
+  formData: FormData,
+) {
+  await requirePermission(PERMISSIONS.TABLES_OPEN);
+  const responsibleName = responsibleNameSchema.parse(formData.get("responsibleName"));
+
+  await prisma.serviceSession.update({
+    where: { id: sessionId },
+    data: { responsibleName },
+  });
+
+  revalidatePath(`/mesas/${tableId}`);
+}
+
 // Pagamento por pessoa (revisão 2026-08-10): marcar/desmarcar quitada é
 // manual, sem cálculo obrigatório (decisão confirmada com o usuário) —
 // mesma permissão de mexer em pessoas da mesa (TABLES_OPEN).

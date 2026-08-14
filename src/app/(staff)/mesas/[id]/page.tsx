@@ -23,7 +23,7 @@ import { SummaryField } from "@/components/ui/summary-field";
 import { ORDER_ITEM_STATUS_TONE, ORDER_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatTime } from "@/lib/datetime";
 import { formatBRL } from "@/lib/money";
-import { addGuest } from "./actions";
+import { addGuest, updateResponsibleName } from "./actions";
 import { OpenTableForm } from "./open-table-form";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
@@ -111,6 +111,7 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
         : null;
 
   const addGuestWithIds = addGuest.bind(null, session.id, id);
+  const updateResponsibleNameWithIds = updateResponsibleName.bind(null, session.id, id);
 
   // Totalizador tipo nota: junta os itens de todos os pedidos ("2x Anjo",
   // "1x Panceta"...) numa única lista, em vez do garçom somar pedido por
@@ -263,8 +264,26 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
         </summary>
         <div className="flex flex-col gap-3 border-t border-line px-3 py-3">
           <div>
-            <span className="text-xs text-muted">Responsável</span>
-            <p className="text-sm text-ink">{session.responsibleName ?? "Não informado"}</p>
+            {canAddGuest ? (
+              // Editável mesmo com a mesa já aberta (pedido do usuário
+              // 2026-08-14) — antes só dava pra informar na abertura; se
+              // ficasse em branco ali, não tinha como preencher depois.
+              <form action={updateResponsibleNameWithIds} className="flex items-end gap-2">
+                <TextField
+                  label="Responsável"
+                  name="responsibleName"
+                  defaultValue={session.responsibleName ?? ""}
+                  maxLength={120}
+                  placeholder="Nome do responsável"
+                />
+                <SubmitButton>Salvar</SubmitButton>
+              </form>
+            ) : (
+              <>
+                <span className="text-xs text-muted">Responsável</span>
+                <p className="text-sm text-ink">{session.responsibleName ?? "Não informado"}</p>
+              </>
+            )}
           </div>
           {canAddGuest && (
             <form action={addGuestWithIds} className="flex items-end gap-2">
