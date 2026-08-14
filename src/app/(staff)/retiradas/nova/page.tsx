@@ -18,7 +18,7 @@ export default async function NovaRetiradaPage() {
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
       <PageHeader title="Nova retirada" subtitle="Pedido avulso, sem ocupar mesa" />
       <NewPickupForm
         waiters={waiters.map((w) => ({ id: w.id, name: w.name }))}
