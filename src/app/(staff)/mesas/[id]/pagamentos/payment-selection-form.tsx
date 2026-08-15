@@ -231,8 +231,11 @@ function UnitsLineCard({
   onChange: (entry: CartEntry) => void;
   onRemove: (key: string) => void;
 }) {
+  // Sempre começa zerado (pedido do usuário 2026-08-15: mostrar "1" sem
+  // nada no carrinho confundia, parecia que já tinha 1 selecionado). Só
+  // reflete o que já está de fato no carrinho.
   const alreadySelected = cartEntry?.payload.type === "UNITS" ? cartEntry.payload.quantity : 0;
-  const [quantity, setQuantity] = useState(alreadySelected || Math.min(1, line.openQuantity));
+  const [quantity, setQuantity] = useState(alreadySelected);
 
   function commit(nextQuantity: number) {
     if (nextQuantity <= 0) {
