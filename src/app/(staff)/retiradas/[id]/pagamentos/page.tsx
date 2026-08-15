@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
@@ -9,7 +10,10 @@ import {
   canRegisterPayment,
 } from "@/domain/service-session/closing";
 import { DISCOUNT_TYPE_LABELS, formatSessionLabel } from "@/domain/service-session/labels";
+import { buildItemPaymentStatuses, type PayableOrderItemInput } from "@/domain/payment/item-allocation";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { SummaryField } from "@/components/ui/summary-field";
 import { ReasonConfirmForm } from "@/components/form/reason-confirm-form";
 import { formatDateTime } from "@/lib/datetime";
@@ -39,7 +43,7 @@ export default async function PagamentosRetiradaPage({
 
   const restaurant = await getCurrentRestaurant();
 
-  const [activeDiscount, latestServiceCharge, payments, paymentMethods] = await Promise.all([
+  const [activeDiscount, latestServiceCharge, payments, paymentMethods, items] = await Promise.all([
     prisma.discount.findFirst({
       where: { serviceSessionId: session.id, voidedAt: null },
       include: { appliedBy: true },
@@ -52,13 +56,47 @@ export default async function PagamentosRetiradaPage({
     prisma.payment.findMany({
       where: { serviceSessionId: session.id, voidedAt: null },
       orderBy: { createdAt: "desc" },
-      include: { paymentMethod: true, registeredBy: true },
+      include: {
+        paymentMethod: true,
+        registeredBy: true,
+        allocations: { include: { orderItem: true } },
+      },
     }),
     prisma.paymentMethod.findMany({
       where: { restaurantId: restaurant.id, active: true },
       orderBy: { sortOrder: "asc" },
     }),
+    prisma.orderItem.findMany({
+      where: { order: { serviceSessionId: session.id }, status: { not: "CANCELLED" } },
+      include: {
+        modifiers: true,
+        guest: true,
+        allocations: { include: { payment: { select: { voidedAt: true } } } },
+      },
+    }),
   ]);
+
+  const payableItems: PayableOrderItemInput[] = items.map((item) => ({
+    id: item.id,
+    productId: item.productId,
+    productNameAtOrder: item.productNameAtOrder,
+    meatPoint: item.meatPoint,
+    guestId: item.guestId,
+    guestName: item.guest?.name ?? null,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    modifiers: item.modifiers,
+    openShareParts: item.openShareParts,
+    createdAt: item.createdAt,
+    allocations: item.allocations.map((a) => ({
+      kind: a.kind,
+      quantity: a.quantity,
+      amount: a.amount,
+      voided: a.payment.voidedAt !== null,
+    })),
+  }));
+  const itemStatuses = buildItemPaymentStatuses(payableItems);
+  const hasOpenItemBalance = itemStatuses.some((status) => status.openAmount.greaterThan(ZERO));
 
   const canRequestClosingPermission = hasAnyPermission(user.permissions, [
     PERMISSIONS.TABLES_CLOSE_REQUEST,
@@ -175,49 +213,111 @@ export default async function PagamentosRetiradaPage({
         </Card>
       )}
 
+      {itemStatuses.length > 0 && (
+        <Card>
+          <h2 className="mb-2 text-sm font-semibold text-ink">Itens</h2>
+          <ul className="flex flex-col gap-2 text-sm">
+            {itemStatuses.map((status) => (
+              <li key={status.itemId} className="border-b border-line/60 pb-2 last:border-b-0 last:pb-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ink">{status.label}</span>
+                  <StatusBadge
+                    tone={
+                      status.openAmount.lessThanOrEqualTo(ZERO)
+                        ? "free"
+                        : status.paidAmount.greaterThan(ZERO)
+                          ? "gold"
+                          : "neutral"
+                    }
+                  >
+                    {status.openAmount.lessThanOrEqualTo(ZERO)
+                      ? "Pago"
+                      : status.paidAmount.greaterThan(ZERO)
+                        ? "Parcial"
+                        : "Em aberto"}
+                  </StatusBadge>
+                </div>
+                <p className="tabular text-xs text-muted">
+                  {status.units
+                    ? `${status.units.total} lançado(s) · ${status.units.paid} pago(s) · ${status.units.open} em aberto`
+                    : `${formatBRL(status.lineTotal)} · pago ${formatBRL(status.paidAmount)} · aberto ${formatBRL(status.openAmount)}`}
+                  {status.openShareParts &&
+                    status.openAmount.greaterThan(ZERO) &&
+                    ` · dividido em ${status.openShareParts} parte(s)`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card>
         <h2 className="mb-2 text-sm font-semibold text-ink">Pagamentos</h2>
         {payments.length === 0 ? (
           <p className="mb-3 text-sm text-muted">Nenhum pagamento registrado ainda.</p>
         ) : (
           <ul className="mb-3 flex flex-col gap-2">
-            {payments.map((payment) => (
-              <li
-                key={payment.id}
-                className="flex items-center justify-between gap-2 border-b border-line/60 pb-2 text-sm last:border-b-0 last:pb-0"
-              >
-                <div>
-                  <div className="text-ink">
-                    {payment.paymentMethod.name} ·{" "}
-                    <span className="tabular font-medium">{formatBRL(payment.amount)}</span>
+            {payments.map((payment) => {
+              const allocationSummary = payment.allocations
+                .map((a) => a.orderItem.productNameAtOrder)
+                .filter((name, index, all) => all.indexOf(name) === index)
+                .join(", ");
+              return (
+                <li
+                  key={payment.id}
+                  className="flex items-center justify-between gap-2 border-b border-line/60 pb-2 text-sm last:border-b-0 last:pb-0"
+                >
+                  <div>
+                    <div className="text-ink">
+                      {payment.paymentMethod.name} ·{" "}
+                      <span className="tabular font-medium">{formatBRL(payment.amount)}</span>
+                    </div>
+                    <div className="text-xs text-muted">
+                      {formatDateTime(payment.createdAt)} · {payment.registeredBy.name}
+                    </div>
+                    {allocationSummary && (
+                      <div className="text-xs text-muted">Itens: {allocationSummary}</div>
+                    )}
                   </div>
-                  <div className="text-xs text-muted">
-                    {formatDateTime(payment.createdAt)} · {payment.registeredBy.name}
-                  </div>
-                </div>
-                {canVoidPayment && (
-                  <ReasonConfirmForm
-                    action={voidPaymentAction.bind(null, redirectPath, payment.id)}
-                    triggerLabel="Estornar"
-                    dialogTitle="Estornar pagamento"
-                    itemLabel={`Pagamento de ${formatBRL(payment.amount)} em ${payment.paymentMethod.name}`}
-                    pendingLabel="Estornando..."
-                    successMessage="Pagamento estornado."
-                  />
-                )}
-              </li>
-            ))}
+                  {canVoidPayment && (
+                    <ReasonConfirmForm
+                      action={voidPaymentAction.bind(null, redirectPath, payment.id)}
+                      triggerLabel="Estornar"
+                      dialogTitle="Estornar pagamento"
+                      itemLabel={`Pagamento de ${formatBRL(payment.amount)} em ${payment.paymentMethod.name}${allocationSummary ? ` (${allocationSummary})` : ""}`}
+                      pendingLabel="Estornando..."
+                      successMessage="Pagamento estornado."
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
         {canRegisterPaymentPermission && session.balanceAmount.greaterThan(ZERO) && (
-          <RegisterPaymentForm
-            redirectPath={redirectPath}
-            sessionId={session.id}
-            paymentMethods={paymentMethods}
-            guests={[]}
-            balance={session.balanceAmount.toString()}
-          />
+          <div className="flex flex-col gap-3">
+            {hasOpenItemBalance && (
+              <Button href={`${redirectPath}/pagamentos/novo`} className="self-start">
+                Novo pagamento
+              </Button>
+            )}
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-medium text-ink">
+                <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+                Pagamento sem detalhar itens
+              </summary>
+              <div className="mt-3">
+                <RegisterPaymentForm
+                  redirectPath={redirectPath}
+                  sessionId={session.id}
+                  paymentMethods={paymentMethods}
+                  guests={[]}
+                  balance={session.balanceAmount.toString()}
+                />
+              </div>
+            </details>
+          </div>
         )}
       </Card>
 

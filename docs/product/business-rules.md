@@ -140,6 +140,35 @@ Disponível a qualquer momento do atendimento ativo (`OPEN` ou `CLOSING`):
    "pessoa" em pedido novo por padrão, itens já lançados pra ela não são
    afetados.
 
+### 6a-bis. Pagamento por itens e rateio de consumo (ADR 0006, 2026-08-15)
+
+Antes de escolher a forma de pagamento, o operador pode selecionar
+exatamente o que está sendo pago — decisão completa em ADR 0006
+(`docs/architecture/decisions/0006-pagamento-por-itens.md`):
+
+1. Unidades inteiras de um item lançado com quantidade (ex.: 3 dos 10
+   chopes) — quantidade sempre revalidada contra o saldo real do item no
+   servidor;
+2. Item inteiro ("pagar tudo");
+3. Fração de um item compartilhado ("Dividir item") — o saldo aberto do
+   item é dividido em N partes; N pode ser redefinido a qualquer momento
+   ("Redistribuir") sem alterar o valor de partes já pagas. v1: só para
+   item lançado com quantidade 1 (várias porções iguais ficam para uma
+   v2 — `docs/backlog.md`);
+4. Valor personalizado, limitado ao saldo aberto do item;
+5. Combinação de qualquer uma das opções acima num único pagamento.
+6. Seleção é só rascunho local até o pagamento ser confirmado — cancelar
+   antes de confirmar não altera nada.
+7. Estornar o pagamento devolve automaticamente as unidades/frações dele
+   para "em aberto", sem afetar nenhum outro pagamento.
+8. Taxa de serviço e desconto **não** entram no rateio por item (a MITIZ
+   não cobra taxa hoje e desconto é sobre o total, não por item) — a
+   seleção representa só o consumo bruto; taxa/desconto continuam sendo
+   tratados no fechamento (seção 6b) como sempre foram.
+9. "Pagamento sem detalhar itens" (o fluxo anterior a esta revisão)
+   continua disponível — não grava nenhuma alocação por item, só reduz o
+   saldo geral, como sempre fez.
+
 ### 6b. Fechamento do atendimento
 
 1. Solicitar fechamento (`OPEN` → `CLOSING`) — só a partir daqui novo

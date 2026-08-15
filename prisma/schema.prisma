@@ -118,6 +118,22 @@ enum DiscountType {
   FIXED_AMOUNT
 }
 
+// Pagamento por itens e rateio de consumo (2026-08-15, ADR
+// docs/architecture/decisions/0006-pagamento-por-itens.md). Cada
+// PaymentItemAllocation liga um Payment a uma fatia de um OrderItem:
+// - UNITS: quantidade inteira de um item lançado com quantity > 1 (ex.: 3
+//   dos 10 chopes). `quantity` é a fonte de verdade da fatia; `amount` é
+//   sempre recalculado no servidor a partir do preço já congelado do item,
+//   nunca confiado do cliente.
+// - AMOUNT: um valor em R$ contra o item, cobre pagar o item inteiro,
+//   pagar uma fração de item dividido (`shareNumerator`/`shareDenominator`
+//   preenchidos, snapshot da divisão vigente no momento deste pagamento) e
+//   valor personalizado (os dois campos de fração nulos).
+enum AllocationKind {
+  UNITS
+  AMOUNT
+}
+
 // Pessoa quitou sua participação na conta (pagamento por pessoa, revisão
 // 2026-08-10) — puramente informativo/organizacional, não é uma trava
 // financeira: marcar/desmarcar é manual (quem está no caixa decide), o
@@ -574,6 +590,15 @@ model OrderItem {
   notes              String?
   status             OrderItemStatus @default(DRAFT)
 
+  // Pagamento por itens (2026-08-15): quantas partes o SALDO ABERTO atual
+  // deste item está dividido agora (ação "Dividir item" / "Redistribuir",
+  // v1 só disponível para item com quantity = 1). Nulo = item não está no
+  // modo compartilhado. Mutável livremente até a próxima alocação tocar
+  // nele; pagamentos já registrados guardam seu próprio snapshot de
+  // denominador em PaymentItemAllocation, nunca são recalculados quando
+  // este campo muda (regra de negócio confirmada com o usuário).
+  openShareParts Int?
+
   cancelReason  String?
   cancelledById String?
   cancelledAt   DateTime? @db.Timestamptz(6)
@@ -587,7 +612,8 @@ model OrderItem {
   guest       Guest?           @relation(fields: [guestId], references: [id], onDelete: SetNull)
   cancelledBy User?            @relation("OrderItemCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
 
-  modifiers OrderItemModifier[]
+  modifiers   OrderItemModifier[]
+  allocations PaymentItemAllocation[]
 
   @@index([orderId])
   @@index([sectorId])
@@ -695,9 +721,46 @@ model Payment {
   registeredBy   User           @relation("PaymentRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
   voidedBy       User?          @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
 
+  allocations PaymentItemAllocation[]
+
   @@index([serviceSessionId])
   @@index([guestId])
   @@map("payments")
+}
+
+// Pagamento por itens e rateio de consumo (2026-08-15) — liga este
+// pagamento a uma fatia específica de um OrderItem. Um Payment "livre"
+// (sem detalhar itens, fluxo de sempre) simplesmente não tem nenhuma
+// linha aqui; nada muda para quem continuar usando pagamento livre. Nunca
+// apagada (mesmo racional de Payment/Discount) — "estornar" é anular o
+// Payment pai (voidedAt), toda leitura de "quanto está aberto" já filtra
+// por payment.voidedAt: null, então o estorno devolve a fatia sem precisar
+// de um campo de anulação próprio aqui.
+model PaymentItemAllocation {
+  id               String         @id @default(cuid())
+  paymentId        String
+  orderItemId      String
+  kind             AllocationKind
+  // Só kind = UNITS: quantas unidades desta linha este pagamento cobre.
+  quantity         Int?
+  // Só kind = AMOUNT quando a fatia veio de um item dividido — snapshot de
+  // "esta fatia corresponde a N de D partes do saldo aberto no momento
+  // deste pagamento". Nunca recalculado se o item for redividido depois.
+  shareNumerator   Int?
+  shareDenominator Int?
+  // Valor efetivo em R$, sempre presente — fonte de verdade monetária
+  // desta fatia. Para UNITS, calculado no servidor a partir do preço já
+  // congelado do item (nunca confiado do cliente).
+  amount           Decimal        @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  payment   Payment   @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@index([orderItemId])
+  @@map("payment_item_allocations")
 }
 
 model Discount {

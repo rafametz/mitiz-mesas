@@ -23,7 +23,12 @@ import {
   registerPayment,
   RegisterPaymentError,
   voidPayment,
+  type AllocationRequest,
 } from "@/application/service-session/register-payment";
+import {
+  setOrderItemShareParts,
+  SetOrderItemShareError,
+} from "@/application/service-session/set-order-item-share";
 import { closeTable, CloseTableError } from "@/application/service-session/close-table";
 
 export type FormState = { error: string | null; success?: boolean };
@@ -145,6 +150,69 @@ export async function registerPaymentAction(
     return { error: "Não foi possível registrar o pagamento." };
   }
   revalidateAtendimento(redirectPath);
+  return { error: null, success: true };
+}
+
+// Pagamento por itens e rateio de consumo (2026-08-15, ADR 0006) — a tela
+// de seleção de consumo monta o carrinho no cliente (nada gravado ainda) e
+// manda a lista de alocações como JSON num campo escondido, porque
+// `useActionState`/FormData não carrega array aninhado. registerPayment
+// revalida tudo contra o banco dentro da transação, o JSON do cliente é só
+// "o que o operador pediu pra selecionar", nunca é confiado como valor
+// final (regra 24).
+export async function registerItemPaymentAction(
+  redirectPath: string,
+  sessionId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.PAYMENTS_REGISTER);
+  const idempotencyKey = String(formData.get("idempotencyKey") ?? "");
+  if (!idempotencyKey) return { error: "Falha interna (sem chave de idempotência). Atualize a página." };
+
+  let allocations: AllocationRequest[];
+  try {
+    allocations = JSON.parse(String(formData.get("allocationsJson") ?? "[]"));
+  } catch {
+    return { error: "Falha interna ao ler os itens selecionados. Atualize a página e tente de novo." };
+  }
+
+  try {
+    await registerPayment(sessionId, user.id, {
+      paymentMethodId: String(formData.get("paymentMethodId") ?? ""),
+      idempotencyKey,
+      guestId: String(formData.get("guestId") ?? "") || undefined,
+      allocations,
+    });
+  } catch (error) {
+    if (error instanceof RegisterPaymentError) return { error: error.message };
+    return { error: "Não foi possível registrar o pagamento." };
+  }
+  revalidateAtendimento(redirectPath);
+  revalidatePath(`${redirectPath}/pagamentos/novo`);
+  return { error: null, success: true };
+}
+
+// "Dividir item" / "Redistribuir" (ADR 0006) — parts vazio ou "0" remove a
+// divisão (item volta a ser normal). Mesma permissão de quem registra
+// pagamento, é parte do mesmo fluxo de caixa.
+export async function setItemShareAction(
+  redirectPath: string,
+  orderItemId: string,
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.PAYMENTS_REGISTER);
+  const raw = String(formData.get("parts") ?? "").trim();
+  const parts = raw === "" || raw === "0" ? null : Number(raw);
+  try {
+    await setOrderItemShareParts(orderItemId, user.id, parts);
+  } catch (error) {
+    if (error instanceof SetOrderItemShareError) return { error: error.message };
+    return { error: "Não foi possível dividir o item." };
+  }
+  revalidateAtendimento(redirectPath);
+  revalidatePath(`${redirectPath}/pagamentos/novo`);
   return { error: null, success: true };
 }
 
