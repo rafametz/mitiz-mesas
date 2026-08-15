@@ -814,6 +814,52 @@ permissão e ter controle de quem usa o sistema.
 
 ---
 
+## Módulo 15 — Pagamento por itens e rateio de consumo ✅
+
+- Pedido do usuário: montar exatamente o que uma pessoa está pagando
+  (unidades de item com quantidade, fração de item compartilhado, valor
+  personalizado, ou combinação) antes de escolher a forma de pagamento,
+  sabendo depois o que já foi quitado e o que continua em aberto —
+  decisão de arquitetura completa em ADR 0006
+  (`docs/architecture/decisions/0006-pagamento-por-itens.md`);
+- ✅ `PaymentItemAllocation` (liga um `Payment` a uma fatia de um
+  `OrderItem`, `AllocationKind` `UNITS`/`AMOUNT`) e
+  `OrderItem.openShareParts` (em quantas partes o saldo aberto de um item
+  dividido está agora) — migration `20260815120000_payment_item_allocations`.
+  Camada aditiva: `recalculateSessionTotals` e nenhuma tabela financeira
+  existente foram alteradas;
+- ✅ `src/domain/payment/item-allocation.ts` — cálculo puro de aberto/
+  pago por item, agrupamento para a tela de seleção (unidades entre
+  pedidos diferentes via FIFO) e distribuição determinística
+  (`distributeUnitsFifo`);
+- ✅ `registerPayment` estendido para aceitar uma lista de alocações,
+  sempre revalidada contra o banco dentro da transação (nunca confia no
+  que o cliente calculou); `setOrderItemShareParts` ("Dividir item"/
+  "Redistribuir"), v1 só para item lançado com quantidade 1 — dividir
+  entre várias porções iguais na mesma mesa fica para uma v2 (decisão
+  confirmada com o usuário);
+- ✅ Tela de seleção de consumo (`/mesas/[id]/pagamentos/novo` e
+  equivalente de retirada, mesmo componente reaproveitado) — carrinho
+  local até confirmar, sem gravar nada antes disso; "Pagamento sem
+  detalhar itens" (fluxo anterior) continua disponível como opção
+  secundária;
+- ✅ Bloco "Itens" na tela de pagamentos (lançado/pago/aberto por linha,
+  sempre visível) e resumo dos itens cobertos no diálogo de estorno;
+- Fora de escopo por decisão do usuário 2026-08-15: taxa de serviço e
+  desconto não entram no rateio por item (a MITIZ não cobra taxa hoje e
+  desconto é sobre o total); "Dividir item" quando há mais de uma porção
+  igual na mesma mesa (v2).
+- **Testes**: 8 integração novos
+  (`tests/integration/payment-item-allocation.test.ts` — unidades
+  parciais com rejeição de sobre-alocação, item dividido com
+  redistribuição sem afetar pagamento anterior, combinação dos três
+  tipos numa mesma cobrança, valor personalizado limitado ao saldo
+  aberto, estorno com devolução correta, pagamento livre continua
+  funcionando, guarda de escopo v1) e 10 unitários
+  (`tests/unit/item-allocation.test.ts`). `tsc --noEmit`, `npm run
+  lint`, `npm run build`, `npm test` (152/152) e `npm run
+  test:integration` (64/64) limpos.
+
 ## Ordem de execução recomendada
 
 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12

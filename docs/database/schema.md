@@ -31,6 +31,7 @@ item 6) e as tabelas de junção necessárias (`RolePermission`).
 | `Order`, `OrderItem`, `OrderItemModifier` | Pedidos e seus itens.                                                         |
 | `PrintJob`                                | Fila de impressão por pedido/setor.                                           |
 | `PaymentMethod`, `Payment`                | Formas e registros de pagamento.                                              |
+| `PaymentItemAllocation`                   | Fatia de um `OrderItem` coberta por um `Payment` (unidades ou valor, com fração quando o item está dividido) — ADR 0006. |
 | `Discount`, `ServiceCharge`               | Desconto e taxa de serviço aplicados ao atendimento.                          |
 | `AuditLog`                                | Trilha de auditoria transversal.                                              |
 
@@ -201,6 +202,15 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
    `requestedAt`, `pickupNote`, `pickupNumber` sequencial por restaurante
    que nunca reinicia) e reescreve o índice único parcial da seção 4 para
    excluir explicitamente linhas sem mesa.
+8. ✅ Pagamento por itens e rateio de consumo (ADR 0006) —
+   `prisma/migrations/20260815120000_payment_item_allocations`: nova
+   tabela `payment_item_allocations` (liga um `Payment` a uma fatia de um
+   `OrderItem` — unidades inteiras ou um valor em R$, com metadado de
+   fração quando vem de item dividido), novo enum `AllocationKind`
+   (`UNITS`/`AMOUNT`) e `OrderItem.openShareParts` opcional (em quantas
+   partes o saldo aberto de um item compartilhado está dividido agora).
+   Camada aditiva — não altera `recalculateSessionTotals` nem nenhuma
+   tabela financeira existente.
 
 ## 7. Fluxo de migration usado na prática
 
