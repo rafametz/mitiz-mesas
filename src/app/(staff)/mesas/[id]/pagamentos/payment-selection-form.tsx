@@ -441,6 +441,15 @@ function AmountActions({
   const [customValue, setCustomValue] = useState("");
   const [shareFormOpen, setShareFormOpen] = useState(false);
   const isSelected = cartEntry !== undefined;
+  // Cada botão sinaliza só a própria opção selecionada, não qualquer
+  // seleção da linha (correção 2026-08-18, relato do usuário: "Pagar
+  // inteiro" aparecia destacado em vermelho mesmo sem nada selecionado,
+  // e "1 parte" nunca destacava depois de escolhido — variante estava
+  // invertida e as outras não refletiam o carrinho).
+  const selectedPayload = cartEntry?.payload.type === "AMOUNT" ? cartEntry.payload : undefined;
+  const isFullSelected = selectedPayload?.mode === "FULL";
+  const isShareSelected = selectedPayload?.mode === "SHARE";
+  const isCustomSelected = selectedPayload?.mode === "CUSTOM";
 
   function selectFull() {
     onChange({
@@ -486,16 +495,20 @@ function AmountActions({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         {showFull && (
-          <Button variant={isSelected ? "outline" : "secondary"} size="sm" onClick={selectFull}>
+          <Button variant={isFullSelected ? "secondary" : "outline"} size="sm" onClick={selectFull}>
             Pagar inteiro
           </Button>
         )}
         {share && (
-          <Button variant="outline" size="sm" onClick={() => selectShare(1)}>
+          <Button variant={isShareSelected ? "secondary" : "outline"} size="sm" onClick={() => selectShare(1)}>
             1 parte ({formatCentsBRL(share.nominalPartCents)})
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={() => setCustomOpen((v) => !v)}>
+        <Button
+          variant={isCustomSelected ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => setCustomOpen((v) => !v)}
+        >
           Outro valor
         </Button>
         <button
