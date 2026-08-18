@@ -866,7 +866,15 @@ permissão e ter controle de quem usa o sistema.
 - Fora de escopo por decisão do usuário 2026-08-15: taxa de serviço e
   desconto não entram no rateio por item (a MITIZ não cobra taxa hoje e
   desconto é sobre o total).
-- **Testes**: 11 integração
+- ✅ Correção 2026-08-18 (relato do usuário em produção): valor nominal da
+  parte era recalculado a cada pagamento como saldo aberto atual dividido
+  pelas partes, encolhendo a cada parte paga (76 dividido em 4 partes de
+  19; depois de pagar uma, o saldo de 57 virava 4 partes de 14,25). Novo
+  campo `OrderItem.openShareBaseAmount` (migration
+  `20260818120000_order_item_share_base_amount`) grava a base FIXA no
+  momento de "Dividir"/"Redistribuir"; o nominal da parte usa sempre essa
+  base, nunca o saldo atual — só muda com uma redistribuição explícita.
+- **Testes**: 13 integração
   (`tests/integration/payment-item-allocation.test.ts` — unidades
   parciais com rejeição de sobre-alocação, agrupamento entre pedidos
   diferentes, item dividido com redistribuição sem afetar pagamento
@@ -874,10 +882,11 @@ permissão e ter controle de quem usa o sistema.
   personalizado limitado ao saldo aberto, estorno com devolução correta,
   pagamento livre continua funcionando, dividir item com mais de 1
   unidade, dividir duas linhas de origem atravessando ambas numa fração
-  só, rejeições) e 21 unitários (`tests/unit/item-allocation.test.ts`,
-  incluindo `distributeAmountFifo`). `tsc --noEmit`, `npm run lint`,
-  `npm run build`, `npm test` (163/163) e `npm run test:integration`
-  (67/67) limpos.
+  só, valor da parte fixo entre 4 pagamentos sem redistribuir, rejeições)
+  e 22 unitários (`tests/unit/item-allocation.test.ts`, incluindo
+  `distributeAmountFifo` e o caso de valor fixo com saldo encolhendo).
+  `tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (164/164) e
+  `npm run test:integration` (68/68) limpos.
 
 ## Ordem de execução recomendada
 

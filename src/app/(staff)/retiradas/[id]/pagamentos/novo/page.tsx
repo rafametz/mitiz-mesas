@@ -57,6 +57,7 @@ export default async function NovoPagamentoRetiradaPage({
       unitPrice: item.unitPrice,
       modifiers: item.modifiers,
       openShareParts: item.openShareParts,
+      openShareBaseAmount: item.openShareBaseAmount,
       createdAt: item.createdAt,
       allocations: item.allocations.map((a) => ({
         kind: a.kind,

@@ -201,6 +201,7 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
       unitPrice: item.unitPrice,
       modifiers: item.modifiers,
       openShareParts: item.openShareParts,
+      openShareBaseAmount: item.openShareBaseAmount,
       createdAt: item.createdAt,
       allocations: item.allocations.map((a) => ({
         kind: a.kind,
@@ -254,6 +255,49 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
     const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
     expect(current.paidAmount.toString()).toBe("75"); // 30 + 45
     expect(current.balanceAmount.toString()).toBe("45"); // 120 - 75
+  });
+
+  it("valor nominal da parte fica FIXO entre pagamentos sem redistribuir, mesmo com saldo aberto encolhendo (correção 2026-08-18)", async () => {
+    // Reproduz o relato do usuário: 2 porções de R$38 (R$76) divididas em
+    // 4 partes de R$19. Sem clicar em "Redistribuir" entre um pagamento e
+    // outro, cada uma das 4 partes tem que continuar valendo R$19 até o
+    // fim, nunca recalculado sobre o saldo que vai encolhendo (76 → 57 →
+    // 38 → 19). Bug reportado: a segunda parte saía cobrando 57/4=14,25
+    // em vez de manter os 19 originais.
+    const table = await prisma.table.create({
+      data: { restaurantId, number: `ALOC-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 4 });
+    const order1 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `fixo-1-${session.id}`,
+      items: [{ productId: porcaoId, quantity: 1 }],
+    });
+    const order2 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `fixo-2-${session.id}`,
+      items: [{ productId: porcaoId, quantity: 1 }],
+    });
+    const rowIds = [order1.items[0]!.id, order2.items[0]!.id];
+
+    await setOrderItemShareParts(rowIds, waiterId, 4);
+
+    for (const key of ["p1", "p2", "p3", "p4"]) {
+      const payment = await registerPayment(session.id, waiterId, {
+        paymentMethodId,
+        idempotencyKey: `fixo-${key}-${session.id}`,
+        allocations: [{ type: "AMOUNT", orderItemIds: rowIds, mode: "SHARE", parts: 1 }],
+      });
+      // 240 (2x120) / 4 = 60 em cada uma das 4 partes, sempre — nunca o
+      // saldo restante dividido de novo por 4.
+      expect(payment.amount.toString()).toBe("60");
+    }
+
+    const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.balanceAmount.toString()).toBe("0");
   });
 
   it("combinação: unidades inteiras + item inteiro + fração de item dividido num único pagamento", async () => {

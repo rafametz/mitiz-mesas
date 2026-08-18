@@ -110,6 +110,36 @@ nunca são recalculados quando o grupo é redividido depois; item já
 dividido mantém isso ao ganhar um novo irmão igual (a divisão vigente é
 lida da linha mais antiga do grupo que tiver `openShareParts` gravado).
 
+### O valor da parte é uma base FIXA, não o saldo aberto recalculado (correção 2026-08-18)
+
+Bug relatado pelo usuário em produção: 2 porções de R$38 (R$76 no total)
+divididas em 4 partes de R$19. Depois de pagar 1 parte (R$19), o saldo
+aberto do grupo caiu pra R$57 — e a tela passou a mostrar "dividido em 4
+partes de R$14,25" (57 / 4), quando a parte tinha que continuar valendo
+R$19 até alguém clicar em "Redistribuir" de propósito. A implementação
+original (`openAmount / openShareParts` sempre recalculado, nunca
+armazenado — ver seção acima) tinha essa consequência não prevista: cada
+pagamento parcial encolhe o saldo aberto, e a próxima parte saía mais
+barata que a anterior.
+
+Correção: `OrderItem` ganhou `openShareBaseAmount` (Decimal, nullable),
+gravado sempre junto com `openShareParts` na mesma chamada de
+`setOrderItemShareParts` — é o saldo aberto do grupo **no momento exato**
+em que "Dividir"/"Redistribuir" foi acionado. O valor nominal de uma
+parte passou a ser sempre `openShareBaseAmount / openShareParts` (uma
+base fixa), nunca `saldoAbertoAtual / openShareParts`. Entre um pagamento
+e outro, sem clicar em "Redistribuir", o valor da parte não muda sozinho
+— só uma redistribuição explícita grava uma base nova, calculada sobre o
+saldo aberto no momento em que é acionada. Item dividido antes desta
+correção (sem base gravada ainda) cai no saldo aberto atual como
+fallback, mesmo comportamento de antes, até a próxima redistribuição
+gravar a base de verdade.
+
+Exemplo: 2 porções de R$38 (R$76), "Dividir" em 4 grava
+`openShareBaseAmount = 76`. Pagar "1 parte" três vezes seguidas, sem
+redistribuir, cobra R$19 nas três (76/4), nunca R$14,25 ou R$9,50 — só
+depois de "Redistribuir" o denominador ou a base mudam de novo.
+
 ### Agrupamento na tela de seleção
 
 Revisado em 2026-08-15 (correção de bug relatado pelo usuário: um chope

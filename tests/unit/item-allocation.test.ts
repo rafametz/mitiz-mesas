@@ -29,6 +29,7 @@ function item(overrides: Partial<PayableOrderItemInput> = {}): PayableOrderItemI
     unitPrice: "12.00",
     modifiers: [],
     openShareParts: null,
+    openShareBaseAmount: null,
     createdAt: new Date("2026-08-15T12:00:00Z"),
     allocations: [],
     ...overrides,
@@ -112,6 +113,31 @@ describe("buildPayableLines", () => {
     // só o saldo da linha que carrega o openShareParts.
     expect(line.openAmount.toString()).toBe("240");
     expect(line.share!.nominalPartValue.toString()).toBe("60");
+  });
+
+  it("valor nominal da parte fica FIXO na base gravada na divisão, não encolhe com o saldo aberto atual (correção 2026-08-18)", () => {
+    // Reproduz o relato do usuário: 2 porções de R$38 (R$76 no total)
+    // divididas em 4 partes de R$19. Depois de pagar 1 parte (R$19), o
+    // saldo aberto do grupo cai pra R$57 — mas a parte continua valendo
+    // R$19 (76/4), não R$14,25 (57/4, o bug).
+    const withOnePartPaid = item({
+      id: "a",
+      quantity: 1,
+      productNameAtOrder: "Porção de Ancho",
+      unitPrice: "38.00",
+      openShareParts: 4,
+      openShareBaseAmount: "76.00", // base gravada no momento da divisão
+      // Uma parte (R$19) já paga, tirada inteira desta linha (FIFO).
+      allocations: [{ kind: "AMOUNT", quantity: null, amount: "19.00", voided: false }],
+    });
+    const b = item({ id: "b", quantity: 1, productNameAtOrder: "Porção de Ancho", unitPrice: "38.00" });
+    const lines = buildPayableLines([withOnePartPaid, b]);
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.type).toBe("units");
+    if (line.type !== "units") throw new Error("esperado units");
+    expect(line.openAmount.toString()).toBe("57"); // 76 - 19 já pago
+    expect(line.share!.nominalPartValue.toString()).toBe("19"); // continua 76/4, não 57/4
   });
 
   it("dividir também funciona pra item com uma única linha de origem (sem duplicata), mesmo comportamento de antes", () => {

@@ -154,9 +154,13 @@ exatamente o que está sendo pago — decisão completa em ADR 0006
    — disponível pra qualquer item, mesmo com mais de uma unidade ou
    repetido em pedidos diferentes (ex.: 2 porções iguais lançadas
    separadas, dividir as duas juntas entre a quantidade de pessoas da
-   mesa). O saldo aberto somado é dividido em N partes; N pode ser
-   redefinido a qualquer momento ("Redistribuir") sem alterar o valor de
-   partes já pagas (revisão 2026-08-16);
+   mesa). O saldo aberto somado no momento do "Dividir" é dividido em N
+   partes de valor FIXO; N pode ser redefinido a qualquer momento
+   ("Redistribuir") sem alterar o valor de partes já pagas (revisão
+   2026-08-16). O valor de cada parte não encolhe conforme as outras vão
+   sendo pagas — só uma redistribuição explícita recalcula o valor da
+   parte, sobre o saldo aberto no momento em que é acionada (correção
+   2026-08-18);
 4. Valor personalizado, limitado ao saldo aberto do item;
 5. Combinação de qualquer uma das opções acima num único pagamento.
 6. Seleção é só rascunho local até o pagamento ser confirmado — cancelar

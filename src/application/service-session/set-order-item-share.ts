@@ -64,6 +64,7 @@ export async function setOrderItemShareParts(
       unitPrice: item.unitPrice,
       modifiers: item.modifiers,
       openShareParts: item.openShareParts,
+      openShareBaseAmount: item.openShareBaseAmount,
       createdAt: item.createdAt,
       allocations: item.allocations.map((a) => ({
         kind: a.kind,
@@ -73,16 +74,21 @@ export async function setOrderItemShareParts(
       })),
     }));
 
-    if (value !== null) {
-      const groupOpenAmount = sumDecimals(payableItems.map((item) => openAmountForItem(item)));
-      if (groupOpenAmount.lessThanOrEqualTo(ZERO)) {
-        throw new SetOrderItemShareError("Este item já está totalmente pago.");
-      }
+    // Base fixa do rateio (revisão 2026-08-18): sempre o saldo aberto do
+    // grupo NO MOMENTO desta chamada, gravada junto com openShareParts.
+    // Toda vez que "Dividir"/"Redistribuir" é acionado de novo, essa base
+    // é recalculada a partir do saldo aberto atual — é assim que uma
+    // redistribuição de propósito muda o valor da parte; entre uma
+    // chamada e outra, o valor da parte fica fixo mesmo com pagamentos
+    // parciais reduzindo o saldo aberto.
+    const groupOpenAmount = sumDecimals(payableItems.map((item) => openAmountForItem(item)));
+    if (value !== null && groupOpenAmount.lessThanOrEqualTo(ZERO)) {
+      throw new SetOrderItemShareError("Este item já está totalmente pago.");
     }
 
     await tx.orderItem.updateMany({
       where: { id: { in: orderItemIds } },
-      data: { openShareParts: value },
+      data: { openShareParts: value, openShareBaseAmount: value !== null ? groupOpenAmount : null },
     });
 
     const session = items[0]!.order.serviceSession;
@@ -96,7 +102,9 @@ export async function setOrderItemShareParts(
       metadata: {
         orderItemIds,
         previousParts: items.map((i) => i.openShareParts),
+        previousBaseAmount: items.map((i) => i.openShareBaseAmount?.toString() ?? null),
         parts: value,
+        baseAmount: value !== null ? groupOpenAmount.toString() : null,
       },
     });
 

@@ -45,6 +45,15 @@ export type PayableOrderItemInput = {
   // quantidade 1). Uma ação de "Dividir"/"Redistribuir" grava o mesmo
   // valor em todas as linhas do grupo no momento em que é acionada.
   openShareParts: number | null;
+  // Valor total que estava aberto no GRUPO no momento em que a divisão foi
+  // feita/redistribuída (revisado 2026-08-18: base FIXA do rateio). O
+  // nominal de uma parte é sempre este valor / openShareParts, nunca o
+  // saldo aberto atual / openShareParts — senão cada parte paga encolhe o
+  // valor da próxima (bug relatado pelo usuário). Só null em item nunca
+  // dividido, ou dividido antes desta revisão (tratado como igual ao
+  // saldo aberto atual, mesmo comportamento de antes, até o próximo
+  // "Redistribuir" gravar a base).
+  openShareBaseAmount: Prisma.Decimal.Value | null;
   createdAt: Date;
   allocations: AllocationInput[];
 };
@@ -198,15 +207,28 @@ function groupItemsByLine(items: PayableOrderItemInput[]): ItemGroup[] {
   return [...groups.values()];
 }
 
-// Denominador vigente do grupo — a linha mais antiga que tiver
-// openShareParts gravado (todas deveriam concordar, já que toda ação de
-// "Dividir"/"Redistribuir" estampa o mesmo valor nas linhas do grupo no
-// momento em que é acionada; se uma linha nova chegou depois de um
-// "Dividir" anterior sem redistribuir de novo, a mais antiga prevalece
-// até o próximo "Redistribuir").
-function groupShareParts(items: PayableOrderItemInput[]): number | null {
+// Rateio vigente do grupo — parte e base fixa da linha mais antiga que
+// tiver openShareParts gravado (todas deveriam concordar, já que toda
+// ação de "Dividir"/"Redistribuir" estampa os dois campos juntos nas
+// linhas do grupo no momento em que é acionada; se uma linha nova chegou
+// depois de um "Dividir" anterior sem redistribuir de novo, a mais antiga
+// prevalece até o próximo "Redistribuir"). O nominal da parte usa sempre
+// a base fixa (openShareBaseAmount), nunca o saldo aberto atual — senão
+// cada parte paga encolhe o valor da próxima (revisão 2026-08-18). Item
+// dividido antes desta revisão (sem base gravada ainda) cai no saldo
+// aberto atual como base, mesmo comportamento de antes, até o próximo
+// "Redistribuir" gravar a base de verdade.
+function groupShareInfo(
+  items: PayableOrderItemInput[],
+  currentOpenAmount: Prisma.Decimal,
+): PayableLineShare | null {
   const sorted = items.slice().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-  return sorted.find((i) => i.openShareParts && i.openShareParts > 0)?.openShareParts ?? null;
+  const withParts = sorted.find((i) => i.openShareParts && i.openShareParts > 0);
+  if (!withParts) return null;
+  const openParts = withParts.openShareParts!;
+  const baseAmount =
+    withParts.openShareBaseAmount !== null ? toDecimal(withParts.openShareBaseAmount) : currentOpenAmount;
+  return { openParts, nominalPartValue: baseAmount.div(openParts) };
 }
 
 function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
@@ -214,10 +236,7 @@ function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
   if (openAmount.lessThanOrEqualTo(ZERO)) return null;
 
   const lineTotal = computeItemLineTotal(item);
-  const share =
-    item.openShareParts && item.openShareParts > 0
-      ? { openParts: item.openShareParts, nominalPartValue: openAmount.div(item.openShareParts) }
-      : null;
+  const share = groupShareInfo([item], openAmount);
 
   return {
     type: "single",
@@ -274,8 +293,7 @@ export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[]
       // atendimento, regra 9/10 já congela por linha).
       const unitPrice = sourceItems[0]?.unitPrice ?? computeItemLineTotal(group.items[0]!).div(group.items[0]!.quantity);
 
-      const openShareParts = groupShareParts(group.items);
-      const share = openShareParts ? { openParts: openShareParts, nominalPartValue: openAmount.div(openShareParts) } : null;
+      const share = groupShareInfo(group.items, openAmount);
 
       return {
         type: "units" as const,
@@ -336,18 +354,19 @@ export function buildItemPaymentStatuses(items: PayableOrderItemInput[]): ItemPa
     .map((group) => {
       const totalQuantity = sumField(group.items, (item) => item.quantity);
       const paidUnits = sumField(group.items, (item) => paidUnitsForItem(item));
+      const openAmount = sumDecimals(group.items.map((item) => openAmountForItem(item)));
       return {
         itemId: group.items[0]!.id,
         label: group.label,
         guestName: group.guestName,
         lineTotal: sumDecimals(group.items.map((item) => computeItemLineTotal(item))),
         paidAmount: sumDecimals(group.items.map((item) => paidAmountForItem(item))),
-        openAmount: sumDecimals(group.items.map((item) => openAmountForItem(item))),
+        openAmount,
         units:
           totalQuantity > 1
             ? { total: totalQuantity, paid: paidUnits, open: totalQuantity - paidUnits }
             : null,
-        openShareParts: groupShareParts(group.items),
+        openShareParts: groupShareInfo(group.items, openAmount)?.openParts ?? null,
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));

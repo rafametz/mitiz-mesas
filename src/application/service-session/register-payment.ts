@@ -99,6 +99,7 @@ function toPayableOrderItemInput(item: {
   quantity: number;
   unitPrice: Prisma.Decimal;
   openShareParts: number | null;
+  openShareBaseAmount: Prisma.Decimal | null;
   createdAt: Date;
   modifiers: { modifierNameAtOrder: string; priceDeltaAtOrder: Prisma.Decimal; quantity: number }[];
   allocations: { kind: "UNITS" | "AMOUNT"; quantity: number | null; amount: Prisma.Decimal; payment: { voidedAt: Date | null } }[];
@@ -114,6 +115,7 @@ function toPayableOrderItemInput(item: {
     unitPrice: item.unitPrice,
     modifiers: item.modifiers,
     openShareParts: item.openShareParts,
+    openShareBaseAmount: item.openShareBaseAmount,
     createdAt: item.createdAt,
     allocations: item.allocations.map((a) => ({
       kind: a.kind,
@@ -222,10 +224,16 @@ async function resolveAllocations(
     }
 
     if (request.mode === "SHARE") {
-      // Denominador vigente: a linha mais antiga que tiver openShareParts
-      // gravado (toda ação de "Dividir"/"Redistribuir" estampa o mesmo
-      // valor em todas as linhas do grupo — ver setOrderItemShareParts).
-      const denominator = groupItems.find((i) => i.openShareParts && i.openShareParts > 0)?.openShareParts;
+      // Denominador e base vigentes: a linha mais antiga que tiver
+      // openShareParts gravado (toda ação de "Dividir"/"Redistribuir"
+      // estampa os dois campos juntos em todas as linhas do grupo — ver
+      // setOrderItemShareParts). O nominal da parte usa a base FIXA
+      // (openShareBaseAmount), nunca o saldo aberto atual — senão cada
+      // parte paga encolheria o valor da próxima (revisão 2026-08-18).
+      // Item dividido antes desta revisão (sem base gravada) cai no
+      // saldo aberto atual, mesmo comportamento de antes.
+      const withParts = groupItems.find((i) => i.openShareParts && i.openShareParts > 0);
+      const denominator = withParts?.openShareParts;
       if (!denominator) {
         throw new RegisterPaymentError("Este item não está dividido em partes.");
       }
@@ -233,8 +241,17 @@ async function resolveAllocations(
       if (parts > denominator) {
         throw new RegisterPaymentError(`Só há ${denominator} parte(s) em aberto, foi pedido ${parts}.`);
       }
-      const nominalPart = groupOpenAmount.div(denominator).toDecimalPlaces(2);
-      pushDistribution(nominalPart.mul(parts), parts, denominator);
+      const baseAmount =
+        withParts!.openShareBaseAmount !== null ? toDecimal(withParts!.openShareBaseAmount) : groupOpenAmount;
+      const nominalPart = baseAmount.div(denominator).toDecimalPlaces(2);
+      // O total pedido nunca passa do saldo realmente aberto (defesa: se
+      // arredondamento acumulado deixar a última parte um centavo maior
+      // que o resto, ou se um pagamento avulso tiver reduzido o saldo por
+      // fora do rateio, distributeAmountFifo já rejeitaria por conta
+      // própria — aqui só evita passar direto do saldo por conta da base
+      // fixa não ter sido atualizada).
+      const target = nominalPart.mul(parts);
+      pushDistribution(target.greaterThan(groupOpenAmount) ? groupOpenAmount : target, parts, denominator);
       continue;
     }
 

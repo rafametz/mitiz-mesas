@@ -590,14 +590,24 @@ model OrderItem {
   notes              String?
   status             OrderItemStatus @default(DRAFT)
 
-  // Pagamento por itens (2026-08-15): quantas partes o SALDO ABERTO atual
-  // deste item está dividido agora (ação "Dividir item" / "Redistribuir",
-  // v1 só disponível para item com quantity = 1). Nulo = item não está no
-  // modo compartilhado. Mutável livremente até a próxima alocação tocar
-  // nele; pagamentos já registrados guardam seu próprio snapshot de
-  // denominador em PaymentItemAllocation, nunca são recalculados quando
-  // este campo muda (regra de negócio confirmada com o usuário).
-  openShareParts Int?
+  // Pagamento por itens (2026-08-15, revisado 2026-08-18): "Dividir item" /
+  // "Redistribuir" estampa os dois campos juntos, sempre na mesma ação —
+  // openShareParts é em quantas partes, openShareBaseAmount é o valor TOTAL
+  // que estava aberto naquele momento (a base fixa do rateio). O valor
+  // nominal de uma parte é sempre openShareBaseAmount / openShareParts, e
+  // NUNCA openAmount atual / openShareParts: sem a base fixa, cada
+  // pagamento parcial encolhe o saldo aberto e a próxima "parte" sairia
+  // mais barata que a anterior (bug relatado pelo usuário — R$76 dividido
+  // em 4 partes de R$19, mas depois de pagar 1 parte o saldo de R$57
+  // dividido de novo por 4 virava R$14,25). Redividir de propósito
+  // ("Redistribuir") grava uma base nova a partir do saldo aberto no
+  // momento em que é acionado; até lá o valor da parte não muda sozinho.
+  // Nulo = item não está no modo compartilhado. Pagamentos já registrados
+  // guardam seu próprio snapshot de numerador/denominador em
+  // PaymentItemAllocation, nunca são recalculados quando estes campos
+  // mudam.
+  openShareParts      Int?
+  openShareBaseAmount Decimal? @db.Decimal(10, 2)
 
   cancelReason  String?
   cancelledById String?
