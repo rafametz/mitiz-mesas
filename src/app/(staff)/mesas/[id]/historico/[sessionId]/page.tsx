@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/application/auth/get-current-user";
+import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
 import { Card } from "@/components/ui/card";
@@ -8,6 +10,7 @@ import { SummaryField } from "@/components/ui/summary-field";
 import { SERVICE_SESSION_STATUS_TONE } from "@/components/ui/status-tone";
 import { formatBRL } from "@/lib/money";
 import { formatDateTime } from "@/lib/datetime";
+import { PrintBillSummaryButton } from "../../../print-bill-summary-button";
 
 // Detalhe de um atendimento encerrado (pedido do usuário, Módulo 10):
 // itens consumidos, pessoas e valores pagos — a mesma informação que dava
@@ -20,6 +23,16 @@ export default async function HistoricoDetalhePage({
   params: Promise<{ id: string; sessionId: string }>;
 }) {
   const { id, sessionId } = await params;
+  const user = await requireUser();
+  // "Imprimir conferência" (CLAUDE.md seção 10) — mesma permissão da tela
+  // da mesa aberta (pedido do usuário: poder reimprimir o resumo de um
+  // atendimento já encerrado pra conferência ou lançamento manual em
+  // outro sistema, ex.: futura integração com o PDV).
+  const canPrintBillSummary = hasAnyPermission(user.permissions, [
+    PERMISSIONS.ORDERS_CREATE,
+    PERMISSIONS.PAYMENTS_REGISTER,
+    PERMISSIONS.PRINT_JOBS_MANAGE,
+  ]);
 
   const session = await prisma.serviceSession.findUnique({
     where: { id: sessionId },
@@ -85,7 +98,12 @@ export default async function HistoricoDetalhePage({
       )}
 
       <Card>
-        <h2 className="mb-2 text-sm font-semibold text-ink">Resumo financeiro</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ink">Resumo financeiro</h2>
+          {canPrintBillSummary && (
+            <PrintBillSummaryButton redirectPath={`/mesas/${id}/historico/${sessionId}`} sessionId={session.id} />
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <SummaryField label="Subtotal" value={formatBRL(session.subtotalAmount)} />
           <SummaryField label="Taxa de serviço" value={formatBRL(session.serviceChargeAmount)} />
