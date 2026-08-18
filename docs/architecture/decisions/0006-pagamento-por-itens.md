@@ -87,14 +87,26 @@ a proposta original sem essa generalização.
 
 ### Agrupamento na tela de seleção
 
-Itens lançados com `quantity > 1` (bebidas, itens contáveis) são
-agrupados entre linhas diferentes do mesmo produto + ponto + adicionais +
-pessoa (chopes lançados em dois pedidos viram uma seleção só de "10
-chopes"), consumidos mais antiga primeiro (`distributeUnitsFifo`,
-determinístico, calculado dentro da transação contra o estado real do
-banco). Item com `quantity = 1` nunca é agrupado com outro igual, mesmo
-que haja mais de um idêntico na mesa — consistente com o escopo v1 de
-"Dividir item" acima.
+Revisado em 2026-08-15 (correção de bug relatado pelo usuário: um chope
+lançado agora e outro chope do mesmo produto lançado num pedido separado
+uma hora depois não estavam juntando na seleção). Regra atual: linhas do
+mesmo produto + ponto + adicionais + pessoa sempre se juntam, não importa
+a quantidade de cada linha de origem nem se vieram de pedidos diferentes
+(chopes lançados em dois pedidos viram uma seleção só de "10 chopes"),
+consumidos mais antiga primeiro (`distributeUnitsFifo`, determinístico,
+calculado dentro da transação contra o estado real do banco). O grupo só
+vira uma linha "unidades" (com stepper) quando a soma é maior que 1;
+exatamente 1 unidade sozinha continua sendo o item único de sempre
+(pagar inteiro/dividir/valor personalizado).
+
+Item já dividido ("Dividir item") nunca entra num grupo, mesmo que exista
+outro igual ainda fechado — carrega uma fração própria, incompatível com
+o agrupamento por unidade. Efeito colateral aceito conscientemente: duas
+porções idênticas, nenhuma ainda dividida, agora também se agrupam numa
+linha "2 lançados" (dá pra pagar uma inteira de cada vez; a última que
+sobrar sozinha volta a oferecer "Dividir item" normalmente) — dividir uma
+delas enquanto as duas ainda estão inteiras e abertas continua fora do
+escopo da v1 (mesmo backlog v2 já registrado abaixo).
 
 ### Duas etapas, sem persistir rascunho
 

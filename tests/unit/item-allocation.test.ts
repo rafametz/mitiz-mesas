@@ -73,11 +73,40 @@ describe("buildPayableLines", () => {
     expect(line.sourceItems.map((s) => s.itemId)).toEqual(["a", "b"]);
   });
 
-  it("item com quantity = 1 nunca agrupa com outro igual (escopo v1)", () => {
-    const a = item({ id: "a", quantity: 1, productNameAtOrder: "Porção Mista", unitPrice: "120.00" });
-    const b = item({ id: "b", quantity: 1, productNameAtOrder: "Porção Mista", unitPrice: "120.00" });
+  it("agrupa item lançado quantity=1 em pedidos diferentes (correção de bug 2026-08-15: chope lançado uma unidade de cada vez não juntava)", () => {
+    const a = item({ id: "a", quantity: 1, createdAt: new Date("2026-08-15T12:00:00Z") });
+    const b = item({ id: "b", quantity: 1, createdAt: new Date("2026-08-15T13:00:00Z") });
     const lines = buildPayableLines([a, b]);
-    expect(lines.filter((l) => l.type === "single")).toHaveLength(2);
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.type).toBe("units");
+    if (line.type !== "units") throw new Error("esperado units");
+    expect(line.totalQuantity).toBe(2);
+    expect(line.sourceItems.map((s) => s.itemId)).toEqual(["a", "b"]);
+  });
+
+  it("item único (sem outro igual) continua sendo linha simples, não uma unidade só", () => {
+    const single = item({ id: "a", quantity: 1, productNameAtOrder: "Porção Mista", unitPrice: "120.00" });
+    const lines = buildPayableLines([single]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.type).toBe("single");
+  });
+
+  it("item já dividido nunca agrupa com outro igual ainda fechado, mesmo com quantity=1 duplicado", () => {
+    const divided = item({
+      id: "a",
+      quantity: 1,
+      productNameAtOrder: "Porção Mista",
+      unitPrice: "120.00",
+      openShareParts: 4,
+    });
+    const untouched = item({ id: "b", quantity: 1, productNameAtOrder: "Porção Mista", unitPrice: "120.00" });
+    const lines = buildPayableLines([divided, untouched]);
+    // A dividida fica isolada (linha própria com fração); a que sobrou
+    // sozinha (sem outra igual pra juntar) também vira linha simples —
+    // duas linhas "single", nenhuma "units".
+    expect(lines.every((l) => l.type === "single")).toBe(true);
+    expect(lines).toHaveLength(2);
   });
 
   it("item totalmente pago some da lista de seleção", () => {

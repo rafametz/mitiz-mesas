@@ -845,10 +845,20 @@ permissão e ter controle de quem usa o sistema.
   secundária;
 - ✅ Bloco "Itens" na tela de pagamentos (lançado/pago/aberto por linha,
   sempre visível) e resumo dos itens cobertos no diálogo de estorno;
+- ✅ Correção 2026-08-15 (relato do usuário): stepper de unidades começava
+  com "1" pré-marcado mesmo sem nada no carrinho — agora começa zerado.
+- ✅ Correção 2026-08-15 (relato do usuário): item lançado quantity=1 em
+  pedidos diferentes (ex.: 1 chope agora, mais 1 chope num pedido
+  separado depois) não agrupava na seleção de pagamento. Regra de
+  agrupamento revisada em ADR 0006 — junta por produto+ponto+adicionais+
+  pessoa independente da quantidade de cada linha; efeito colateral
+  aceito: duas porções idênticas ainda não divididas também passam a se
+  agrupar (dá pra pagar uma inteira de cada vez, a última que sobrar
+  volta a oferecer "Dividir item").
 - Fora de escopo por decisão do usuário 2026-08-15: taxa de serviço e
   desconto não entram no rateio por item (a MITIZ não cobra taxa hoje e
-  desconto é sobre o total); "Dividir item" quando há mais de uma porção
-  igual na mesma mesa (v2).
+  desconto é sobre o total); dividir uma porção específica enquanto ainda
+  existe outra idêntica igualmente aberta (v2).
 - **Testes**: 8 integração novos
   (`tests/integration/payment-item-allocation.test.ts` — unidades
   parciais com rejeição de sobre-alocação, item dividido com

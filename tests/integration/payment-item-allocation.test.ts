@@ -11,6 +11,7 @@ import {
   setOrderItemShareParts,
   SetOrderItemShareError,
 } from "@/application/service-session/set-order-item-share";
+import { buildPayableLines, type PayableOrderItemInput } from "@/domain/payment/item-allocation";
 
 // Teste de integração — pagamento por itens e rateio de consumo (ADR 0006,
 // 2026-08-15). Cobre os cenários do enunciado do usuário: unidades
@@ -159,6 +160,70 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
 
     const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
     expect(current.balanceAmount.toString()).toBe("0");
+  });
+
+  it("agrupa o mesmo item lançado quantity=1 em pedidos diferentes (correção de bug 2026-08-15) e paga através das duas linhas de origem", async () => {
+    // Reproduz o relato do usuário: 1 chope lançado agora, mais 1 chope
+    // lançado num pedido separado depois — tinha que juntar como "2
+    // lançados" na seleção de pagamento, não ficar como duas linhas soltas.
+    const table = await prisma.table.create({
+      data: { restaurantId, number: `ALOC-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+
+    const order1 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `dup-1-${session.id}`,
+      items: [{ productId: choppId, quantity: 1 }],
+    });
+    const order2 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `dup-2-${session.id}`,
+      items: [{ productId: choppId, quantity: 1 }],
+    });
+
+    const items = await prisma.orderItem.findMany({
+      where: { order: { serviceSessionId: session.id }, status: { not: "CANCELLED" } },
+      include: { modifiers: true, guest: true, allocations: { include: { payment: { select: { voidedAt: true } } } } },
+      orderBy: { createdAt: "asc" },
+    });
+    const payableInput: PayableOrderItemInput[] = items.map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      productNameAtOrder: item.productNameAtOrder,
+      meatPoint: item.meatPoint,
+      guestId: item.guestId,
+      guestName: item.guest?.name ?? null,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      modifiers: item.modifiers,
+      openShareParts: item.openShareParts,
+      createdAt: item.createdAt,
+      allocations: item.allocations.map((a) => ({
+        kind: a.kind,
+        quantity: a.quantity,
+        amount: a.amount,
+        voided: a.payment.voidedAt !== null,
+      })),
+    }));
+
+    const lines = buildPayableLines(payableInput);
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.type).toBe("units");
+    if (line.type !== "units") throw new Error("esperado units");
+    expect(line.totalQuantity).toBe(2);
+    expect(line.sourceItems.map((s) => s.itemId)).toEqual([order1.items[0]!.id, order2.items[0]!.id]);
+
+    const payment = await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      idempotencyKey: `dup-pay-${session.id}`,
+      allocations: [{ type: "UNITS", orderItemIds: line.sourceItems.map((s) => s.itemId), quantity: 2 }],
+    });
+    expect(payment.amount.toString()).toBe("24"); // 2 x 12.00
   });
 
   it("item dividido em 4 partes, paga 1, redistribui o restante em 2 partes sem alterar o pagamento anterior", async () => {

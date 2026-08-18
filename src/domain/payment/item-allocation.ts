@@ -92,15 +92,22 @@ export function openUnitsForItem(item: PayableOrderItemInput): number {
 
 // --- Linhas para a tela de seleção de consumo ------------------------------
 //
-// Regra de agrupamento (v1, confirmada com o usuário 2026-08-15): só itens
-// lançados com quantity > 1 (bebidas, itens contáveis) são agrupados entre
-// linhas diferentes do mesmo produto + ponto + adicionais + pessoa (ex.:
-// chopes lançados em dois pedidos viram "10 chopes" numa seleção só,
-// pagos por unidade de qualquer uma das linhas de origem, mais antiga
-// primeiro). Item com quantity = 1 (pratos compartilhados) NUNCA é
-// agrupado com outro item igual, mesmo que haja mais de uma porção igual
-// na mesa — dividir/selecionar entre várias porções iguais fica para uma
-// v2 (backlog).
+// Regra de agrupamento (revisada 2026-08-15 — correção de bug: itens
+// lançados quantity=1 em pedidos diferentes, ex. um chope de cada vez,
+// não agrupavam antes desta revisão): linhas do mesmo produto + ponto +
+// adicionais + pessoa sempre se juntam, não importa a quantidade de cada
+// linha de origem nem se vieram de pedidos diferentes (ex.: 2 chopes
+// lançados agora + 2 chopes lançados uma hora depois viram "4 chopes"
+// numa seleção só, pagos por unidade, mais antiga primeiro). O grupo só
+// vira uma linha "unidades" (com stepper) quando a soma é maior que 1;
+// exatamente 1 unidade sozinha continua sendo o item único de sempre
+// (pagar inteiro/dividir/valor personalizado). Item já dividido
+// ("Dividir item") nunca entra num grupo, mesmo que exista outro igual
+// ainda fechado — carrega uma fração própria. Duas porções iguais, NENHUMA
+// ainda dividida, agora também se agrupam numa linha "2 lançados": dá pra
+// pagar uma inteira de cada vez; a última que sobrar sozinha volta a
+// oferecer "Dividir item" normalmente. Dividir uma entre as duas enquanto
+// as duas ainda estão abertas continua fora do escopo da v1 (backlog).
 
 export type UnitsPayableLine = {
   type: "units";
@@ -141,6 +148,29 @@ function itemLabel(item: PayableOrderItemInput): string {
   return `${item.productNameAtOrder}${meatPointLabel}${modifierLabel}`;
 }
 
+function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
+  const openAmount = openAmountForItem(item);
+  if (openAmount.lessThanOrEqualTo(ZERO)) return null;
+
+  const lineTotal = computeItemLineTotal(item);
+  const share =
+    item.openShareParts && item.openShareParts > 0
+      ? { openParts: item.openShareParts, nominalPartValue: openAmount.div(item.openShareParts) }
+      : null;
+
+  return {
+    type: "single",
+    key: item.id,
+    itemId: item.id,
+    label: itemLabel(item),
+    guestId: item.guestId,
+    guestName: item.guestName,
+    lineTotal,
+    openAmount,
+    share,
+  };
+}
+
 export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[] {
   const unitsGroups = new Map<
     string,
@@ -149,46 +179,49 @@ export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[]
   const singleLines: SharePayableLine[] = [];
 
   for (const item of items) {
-    if (item.quantity > 1) {
-      const modifierKey = item.modifiers
-        .map((m) => m.modifierNameAtOrder)
-        .sort()
-        .join(",");
-      const key = `${item.productId}|${item.meatPoint ?? ""}|${modifierKey}|${item.guestId ?? ""}`;
-      const existing = unitsGroups.get(key);
-      if (existing) {
-        existing.items.push(item);
-      } else {
-        unitsGroups.set(key, {
-          label: itemLabel(item),
-          guestId: item.guestId,
-          guestName: item.guestName,
-          items: [item],
-        });
-      }
+    // Item já dividido ("Dividir item") nunca agrupa com outro igual —
+    // ele carrega uma fração própria, diferente de um irmão idêntico
+    // ainda não tocado (2026-08-15, correção de bug: agrupamento não
+    // funcionava para item lançado quantity=1 em pedidos diferentes,
+    // mesmo sem estar dividido).
+    if (item.quantity === 1 && item.openShareParts) {
+      const single = toSingleLine(item);
+      if (single) singleLines.push(single);
       continue;
     }
 
-    const openAmount = openAmountForItem(item);
-    if (openAmount.lessThanOrEqualTo(ZERO)) continue;
+    // Agrupa por produto + ponto + adicionais + pessoa, juntando linhas
+    // de origem diferentes (mesmo produto lançado em pedidos diferentes,
+    // ou várias vezes no mesmo pedido) independente da quantidade de
+    // cada linha — é a soma entre as linhas que decide se vira um
+    // seletor de unidades (grupo com mais de 1 unidade no total) ou uma
+    // linha única (exatamente 1 unidade, nenhuma outra linha igual).
+    const modifierKey = item.modifiers
+      .map((m) => m.modifierNameAtOrder)
+      .sort()
+      .join(",");
+    const key = `${item.productId}|${item.meatPoint ?? ""}|${modifierKey}|${item.guestId ?? ""}`;
+    const existing = unitsGroups.get(key);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      unitsGroups.set(key, {
+        label: itemLabel(item),
+        guestId: item.guestId,
+        guestName: item.guestName,
+        items: [item],
+      });
+    }
+  }
 
-    const lineTotal = computeItemLineTotal(item);
-    const share =
-      item.openShareParts && item.openShareParts > 0
-        ? { openParts: item.openShareParts, nominalPartValue: openAmount.div(item.openShareParts) }
-        : null;
-
-    singleLines.push({
-      type: "single",
-      key: item.id,
-      itemId: item.id,
-      label: itemLabel(item),
-      guestId: item.guestId,
-      guestName: item.guestName,
-      lineTotal,
-      openAmount,
-      share,
-    });
+  // Grupo com uma única linha de quantidade 1 não é "unidades", é o
+  // item único de sempre (pagar inteiro / dividir / valor personalizado).
+  for (const [key, group] of unitsGroups) {
+    if (group.items.length === 1 && group.items[0]!.quantity === 1) {
+      unitsGroups.delete(key);
+      const single = toSingleLine(group.items[0]!);
+      if (single) singleLines.push(single);
+    }
   }
 
   const unitsLines: UnitsPayableLine[] = [...unitsGroups.entries()]
