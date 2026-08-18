@@ -171,4 +171,26 @@ describe("buildItemPaymentStatuses", () => {
     expect(statuses[0]!.openAmount.toString()).toBe("0");
     expect(statuses[0]!.paidAmount.toString()).toBe("35");
   });
+
+  it("agrupa o mesmo produto lançado em pedidos diferentes numa única linha (correção de bug 2026-08-15: painel mostrava duas vezes)", () => {
+    const a = item({ id: "a", quantity: 4, createdAt: new Date("2026-08-15T12:00:00Z") });
+    const b = item({ id: "b", quantity: 4, createdAt: new Date("2026-08-15T13:00:00Z") });
+    const statuses = buildItemPaymentStatuses([a, b]);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.units).toEqual({ total: 8, paid: 0, open: 8 });
+    expect(statuses[0]!.lineTotal.toString()).toBe("96"); // 8 x 12.00
+  });
+
+  it("soma pago/aberto entre as linhas de origem do grupo (unidade paga numa linha, saldo reflete o total)", () => {
+    const a = item({
+      id: "a",
+      quantity: 4,
+      allocations: [{ kind: "UNITS", quantity: 2, amount: "24.00", voided: false }],
+    });
+    const b = item({ id: "b", quantity: 4 });
+    const statuses = buildItemPaymentStatuses([a, b]);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.units).toEqual({ total: 8, paid: 2, open: 6 });
+    expect(statuses[0]!.paidAmount.toString()).toBe("24");
+  });
 });

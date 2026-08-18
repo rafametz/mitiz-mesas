@@ -148,6 +148,44 @@ function itemLabel(item: PayableOrderItemInput): string {
   return `${item.productNameAtOrder}${meatPointLabel}${modifierLabel}`;
 }
 
+type ItemGroup = { label: string; guestId: string | null; guestName: string | null; items: PayableOrderItemInput[] };
+
+// Agrupamento compartilhado (2026-08-15): mesmo critério usado tanto na
+// seleção de pagamento (buildPayableLines) quanto no painel de situação
+// (buildItemPaymentStatuses) — as duas telas precisam concordar sobre o
+// que é "o mesmo item", senão uma mostra agrupado e a outra não (bug
+// relatado pelo usuário: painel de situação mostrava "Chopp Pilsen" duas
+// vezes, uma por pedido, mesmo depois do agrupamento já ter sido
+// corrigido na seleção de pagamento). Item já dividido nunca agrupa,
+// mesmo racional documentado em buildPayableLines.
+function groupItemsByLine(items: PayableOrderItemInput[]): ItemGroup[] {
+  const groups = new Map<string, ItemGroup>();
+
+  for (const item of items) {
+    const key =
+      item.quantity === 1 && item.openShareParts
+        ? `divided:${item.id}`
+        : `${item.productId}|${item.meatPoint ?? ""}|${item.modifiers
+            .map((m) => m.modifierNameAtOrder)
+            .sort()
+            .join(",")}|${item.guestId ?? ""}`;
+
+    const existing = groups.get(key);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.set(key, {
+        label: itemLabel(item),
+        guestId: item.guestId,
+        guestName: item.guestName,
+        items: [item],
+      });
+    }
+  }
+
+  return [...groups.values()];
+}
+
 function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
   const openAmount = openAmountForItem(item);
   if (openAmount.lessThanOrEqualTo(ZERO)) return null;
@@ -172,59 +210,21 @@ function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
 }
 
 export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[] {
-  const unitsGroups = new Map<
-    string,
-    { label: string; guestId: string | null; guestName: string | null; items: PayableOrderItemInput[] }
-  >();
   const singleLines: SharePayableLine[] = [];
+  const unitsGroupEntries: [string, ItemGroup][] = [];
 
-  for (const item of items) {
-    // Item já dividido ("Dividir item") nunca agrupa com outro igual —
-    // ele carrega uma fração própria, diferente de um irmão idêntico
-    // ainda não tocado (2026-08-15, correção de bug: agrupamento não
-    // funcionava para item lançado quantity=1 em pedidos diferentes,
-    // mesmo sem estar dividido).
-    if (item.quantity === 1 && item.openShareParts) {
-      const single = toSingleLine(item);
+  for (const group of groupItemsByLine(items)) {
+    // Grupo com uma única linha de quantidade 1 não é "unidades", é o
+    // item único de sempre (pagar inteiro / dividir / valor personalizado).
+    if (group.items.length === 1 && group.items[0]!.quantity === 1) {
+      const single = toSingleLine(group.items[0]!);
       if (single) singleLines.push(single);
       continue;
     }
-
-    // Agrupa por produto + ponto + adicionais + pessoa, juntando linhas
-    // de origem diferentes (mesmo produto lançado em pedidos diferentes,
-    // ou várias vezes no mesmo pedido) independente da quantidade de
-    // cada linha — é a soma entre as linhas que decide se vira um
-    // seletor de unidades (grupo com mais de 1 unidade no total) ou uma
-    // linha única (exatamente 1 unidade, nenhuma outra linha igual).
-    const modifierKey = item.modifiers
-      .map((m) => m.modifierNameAtOrder)
-      .sort()
-      .join(",");
-    const key = `${item.productId}|${item.meatPoint ?? ""}|${modifierKey}|${item.guestId ?? ""}`;
-    const existing = unitsGroups.get(key);
-    if (existing) {
-      existing.items.push(item);
-    } else {
-      unitsGroups.set(key, {
-        label: itemLabel(item),
-        guestId: item.guestId,
-        guestName: item.guestName,
-        items: [item],
-      });
-    }
+    unitsGroupEntries.push([group.items.map((i) => i.id).join("+"), group]);
   }
 
-  // Grupo com uma única linha de quantidade 1 não é "unidades", é o
-  // item único de sempre (pagar inteiro / dividir / valor personalizado).
-  for (const [key, group] of unitsGroups) {
-    if (group.items.length === 1 && group.items[0]!.quantity === 1) {
-      unitsGroups.delete(key);
-      const single = toSingleLine(group.items[0]!);
-      if (single) singleLines.push(single);
-    }
-  }
-
-  const unitsLines: UnitsPayableLine[] = [...unitsGroups.entries()]
+  const unitsLines: UnitsPayableLine[] = unitsGroupEntries
     .map(([key, group]) => {
       const sourceItems = group.items
         .slice()
@@ -271,43 +271,52 @@ function sumField<T>(items: T[], get: (item: T) => number): number {
 // --- Situação de pagamento por item (exibição, sempre) ---------------------
 //
 // Diferente de buildPayableLines (só o que ainda pode ser selecionado
-// para pagar, agrupado), esta lista mostra TODO item não cancelado,
-// inclusive o que já está 100% pago — usada na tela de pagamentos pra dar
-// visão geral do que já foi quitado e o que falta (pedido do usuário
-// 2026-08-15: "quando a segunda pessoa chegar pra pagar, o operador
-// consegue entender imediatamente o que já foi quitado"). Uma linha por
-// OrderItem real, sem agrupar entre pedidos diferentes (diferente da
-// seleção de pagamento) — mais simples e direto pra uma lista só de
-// consulta.
+// para pagar), esta lista mostra TODO item não cancelado, inclusive o que
+// já está 100% pago — usada na tela de pagamentos pra dar visão geral do
+// que já foi quitado e o que falta (pedido do usuário 2026-08-15: "quando
+// a segunda pessoa chegar pra pagar, o operador consegue entender
+// imediatamente o que já foi quitado"). Mesmo agrupamento de
+// buildPayableLines (correção de bug 2026-08-15: este painel mostrava o
+// mesmo produto duas vezes quando lançado em pedidos diferentes, mesmo já
+// agrupando corretamente na tela de seleção) — o caixa decide quantas
+// unidades pagar independente de qual pedido cada uma veio.
 
 export type ItemPaymentStatus = {
+  // Um por linha de origem no grupo — usado pra decidir tom/estado, não
+  // precisa ser único por produto (vários grupos podem aparecer).
   itemId: string;
   label: string;
   guestName: string | null;
   lineTotal: Prisma.Decimal;
   paidAmount: Prisma.Decimal;
   openAmount: Prisma.Decimal;
-  // Só presente quando o item foi lançado com quantity > 1.
+  // Só presente quando o grupo soma mais de 1 unidade (uma ou mais linhas
+  // de origem, lançadas juntas ou em pedidos diferentes).
   units: { total: number; paid: number; open: number } | null;
-  // Só presente quando o item está no modo dividido ("Dividir item").
+  // Só presente quando o item está no modo dividido ("Dividir item") —
+  // por construção, só grupos de uma única linha podem estar divididos.
   openShareParts: number | null;
 };
 
 export function buildItemPaymentStatuses(items: PayableOrderItemInput[]): ItemPaymentStatus[] {
-  return items
-    .map((item) => ({
-      itemId: item.id,
-      label: itemLabel(item),
-      guestName: item.guestName,
-      lineTotal: computeItemLineTotal(item),
-      paidAmount: paidAmountForItem(item),
-      openAmount: openAmountForItem(item),
-      units:
-        item.quantity > 1
-          ? { total: item.quantity, paid: paidUnitsForItem(item), open: openUnitsForItem(item) }
-          : null,
-      openShareParts: item.openShareParts,
-    }))
+  return groupItemsByLine(items)
+    .map((group) => {
+      const totalQuantity = sumField(group.items, (item) => item.quantity);
+      const paidUnits = sumField(group.items, (item) => paidUnitsForItem(item));
+      return {
+        itemId: group.items[0]!.id,
+        label: group.label,
+        guestName: group.guestName,
+        lineTotal: sumDecimals(group.items.map((item) => computeItemLineTotal(item))),
+        paidAmount: sumDecimals(group.items.map((item) => paidAmountForItem(item))),
+        openAmount: sumDecimals(group.items.map((item) => openAmountForItem(item))),
+        units:
+          totalQuantity > 1
+            ? { total: totalQuantity, paid: paidUnits, open: totalQuantity - paidUnits }
+            : null,
+        openShareParts: group.items.length === 1 ? group.items[0]!.openShareParts : null,
+      };
+    })
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }
 
