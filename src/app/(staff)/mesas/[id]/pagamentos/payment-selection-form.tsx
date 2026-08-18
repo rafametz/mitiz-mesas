@@ -40,6 +40,16 @@ function formatCentsBRL(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Quantas partes do rateio vigente ainda estão em aberto (correção
+// 2026-08-18, pedido do usuário: a linha só mostrava o valor da parte,
+// nunca quantas ainda faltavam nem o saldo em R$ do grupo todo). O
+// nominal da parte é fixo (ver ADR 0006, revisão do valor da parte fixo);
+// o saldo aberto do grupo cai a cada pagamento, então dividir um pelo
+// outro sempre dá a contagem de partes que ainda restam pagar.
+function remainingShareParts(share: ClientShare, openAmountCents: number): number {
+  return Math.round(openAmountCents / share.nominalPartCents);
+}
+
 // Pagamento por itens e rateio de consumo (2026-08-15, ADR 0006). O
 // "carrinho" aqui é puramente local (React state) até o envio final —
 // nada é gravado enquanto o operador está montando a seleção (regra
@@ -280,10 +290,16 @@ function UnitsLineCard({
           {line.guestName && <p className="text-xs text-muted">{line.guestName}</p>}
           <p className="tabular text-xs text-muted">
             {line.totalQuantity} lançado(s) · {line.openQuantity} em aberto ·{" "}
-            {formatCentsBRL(line.unitPriceCents)}/un.
-            {line.share &&
-              ` · dividido em ${line.share.openParts} parte(s) de ${formatCentsBRL(line.share.nominalPartCents)}`}
+            {formatCentsBRL(line.unitPriceCents)}/un. · total{" "}
+            {formatCentsBRL(line.unitPriceCents * line.totalQuantity)}
           </p>
+          {line.share && (
+            <p className="tabular text-xs text-muted">
+              Dividido em {line.share.openParts} parte(s) de {formatCentsBRL(line.share.nominalPartCents)} ·{" "}
+              {remainingShareParts(line.share, line.openAmountCents)} de {line.share.openParts} em aberto · saldo{" "}
+              {formatCentsBRL(line.openAmountCents)}
+            </p>
+          )}
         </div>
 
         <div>
@@ -377,10 +393,14 @@ function SingleLineCard({
           <p className="text-sm font-medium text-ink">{line.label}</p>
           {line.guestName && <p className="text-xs text-muted">{line.guestName}</p>}
           <p className="tabular text-xs text-muted">
-            {formatCentsBRL(line.openAmountCents)} em aberto
-            {line.share &&
-              ` · dividido em ${line.share.openParts} parte(s) de ${formatCentsBRL(line.share.nominalPartCents)}`}
+            {formatCentsBRL(line.lineTotalCents)} lançado · {formatCentsBRL(line.openAmountCents)} em aberto
           </p>
+          {line.share && (
+            <p className="tabular text-xs text-muted">
+              Dividido em {line.share.openParts} parte(s) de {formatCentsBRL(line.share.nominalPartCents)} ·{" "}
+              {remainingShareParts(line.share, line.openAmountCents)} de {line.share.openParts} em aberto
+            </p>
+          )}
         </div>
         <AmountActions
           redirectPath={redirectPath}
