@@ -193,12 +193,13 @@ export async function registerItemPaymentAction(
   return { error: null, success: true };
 }
 
-// "Dividir item" / "Redistribuir" (ADR 0006) — parts vazio ou "0" remove a
-// divisão (item volta a ser normal). Mesma permissão de quem registra
-// pagamento, é parte do mesmo fluxo de caixa.
+// "Dividir" / "Redistribuir" (ADR 0006, revisado 2026-08-16: opera sobre
+// o grupo inteiro, uma ou mais linhas de origem) — parts vazio ou "0"
+// remove a divisão (item volta a ser normal). Mesma permissão de quem
+// registra pagamento, é parte do mesmo fluxo de caixa.
 export async function setItemShareAction(
   redirectPath: string,
-  orderItemId: string,
+  orderItemIds: string[],
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
@@ -206,7 +207,7 @@ export async function setItemShareAction(
   const raw = String(formData.get("parts") ?? "").trim();
   const parts = raw === "" || raw === "0" ? null : Number(raw);
   try {
-    await setOrderItemShareParts(orderItemId, user.id, parts);
+    await setOrderItemShareParts(orderItemIds, user.id, parts);
   } catch (error) {
     if (error instanceof SetOrderItemShareError) return { error: error.message };
     return { error: "Não foi possível dividir o item." };

@@ -230,21 +230,21 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
     const { session, order } = await openTableWithItems([{ productId: porcaoId, quantity: 1 }]);
     const itemId = order.items[0]!.id;
 
-    await setOrderItemShareParts(itemId, waiterId, 4);
+    await setOrderItemShareParts([itemId], waiterId, 4);
     const first = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       idempotencyKey: `porcao-parte1-${session.id}`,
-      allocations: [{ type: "AMOUNT", orderItemId: itemId, mode: "SHARE", parts: 1 }],
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "SHARE", parts: 1 }],
     });
     expect(first.amount.toString()).toBe("30"); // 120 / 4
 
     // Redistribui o saldo aberto (90) em 2 partes de 45 — o pagamento
     // anterior de 30 não pode mudar.
-    await setOrderItemShareParts(itemId, waiterId, 2);
+    await setOrderItemShareParts([itemId], waiterId, 2);
     const second = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       idempotencyKey: `porcao-parte2-${session.id}`,
-      allocations: [{ type: "AMOUNT", orderItemId: itemId, mode: "SHARE", parts: 1 }],
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "SHARE", parts: 1 }],
     });
     expect(second.amount.toString()).toBe("45"); // 90 / 2
 
@@ -266,15 +266,15 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
     const hamburguerItem = order.items.find((i) => i.productId === hamburguerId)!;
     const porcaoItem = order.items.find((i) => i.productId === porcaoId)!;
 
-    await setOrderItemShareParts(porcaoItem.id, waiterId, 4);
+    await setOrderItemShareParts([porcaoItem.id], waiterId, 4);
 
     const payment = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       idempotencyKey: `combo-${session.id}`,
       allocations: [
         { type: "UNITS", orderItemIds: [choppItem.id], quantity: 3 },
-        { type: "AMOUNT", orderItemId: hamburguerItem.id, mode: "FULL" },
-        { type: "AMOUNT", orderItemId: porcaoItem.id, mode: "SHARE", parts: 1 },
+        { type: "AMOUNT", orderItemIds: [hamburguerItem.id], mode: "FULL" },
+        { type: "AMOUNT", orderItemIds: [porcaoItem.id], mode: "SHARE", parts: 1 },
       ],
     });
 
@@ -294,14 +294,14 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
       registerPayment(session.id, waiterId, {
         paymentMethodId,
         idempotencyKey: `custom-demais-${session.id}`,
-        allocations: [{ type: "AMOUNT", orderItemId: itemId, mode: "CUSTOM", amount: 50 }],
+        allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "CUSTOM", amount: 50 }],
       }),
     ).rejects.toThrow(RegisterPaymentError);
 
     const payment = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       idempotencyKey: `custom-ok-${session.id}`,
-      allocations: [{ type: "AMOUNT", orderItemId: itemId, mode: "CUSTOM", amount: 20 }],
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "CUSTOM", amount: 20 }],
     });
     expect(payment.amount.toString()).toBe("20");
   });
@@ -321,13 +321,13 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
       allocations: [{ type: "UNITS", orderItemIds: [choppItem.id], quantity: 2 }],
     });
 
-    await setOrderItemShareParts(porcaoItem.id, waiterId, 4);
+    await setOrderItemShareParts([porcaoItem.id], waiterId, 4);
     const mixed = await registerPayment(session.id, waiterId, {
       paymentMethodId,
       idempotencyKey: `estorno-misto-${session.id}`,
       allocations: [
         { type: "UNITS", orderItemIds: [choppItem.id], quantity: 3 },
-        { type: "AMOUNT", orderItemId: porcaoItem.id, mode: "SHARE", parts: 1 },
+        { type: "AMOUNT", orderItemIds: [porcaoItem.id], mode: "SHARE", parts: 1 },
       ],
     });
 
@@ -372,23 +372,85 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
     expect(current.balanceAmount.toString()).toBe("0");
   });
 
-  it("rejeita dividir item lançado com quantidade maior que 1 (fora do escopo da v1)", async () => {
-    const { order } = await openTableWithItems([{ productId: choppId, quantity: 5 }]);
+  it("dividir vale pra qualquer item, mesmo lançado com mais de 1 unidade (revisão 2026-08-16)", async () => {
+    const { session, order } = await openTableWithItems([{ productId: choppId, quantity: 5 }]);
     const itemId = order.items[0]!.id;
 
-    await expect(setOrderItemShareParts(itemId, waiterId, 3)).rejects.toThrow(SetOrderItemShareError);
+    await setOrderItemShareParts([itemId], waiterId, 2);
+    const payment = await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      idempotencyKey: `chopp-dividido-${session.id}`,
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "SHARE", parts: 1 }],
+    });
+    expect(payment.amount.toString()).toBe("30"); // 60 (5x12) / 2
+  });
+
+  it("divide o saldo somado de duas porções lançadas em pedidos diferentes entre 4 pessoas, atravessando as duas linhas de origem quando a parte pedida passa da primeira", async () => {
+    const table = await prisma.table.create({
+      data: { restaurantId, number: `ALOC-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+    });
+    createdTableIds.push(table.id);
+    const session = await openTable({ tableId: table.id, waiterId, guestCount: 4 });
+
+    const order1 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `dup-porcao-1-${session.id}`,
+      items: [{ productId: porcaoId, quantity: 1 }],
+    });
+    const order2 = await createOrder({
+      serviceSessionId: session.id,
+      waiterId,
+      idempotencyKey: `dup-porcao-2-${session.id}`,
+      items: [{ productId: porcaoId, quantity: 1 }],
+    });
+    const rowIds = [order1.items[0]!.id, order2.items[0]!.id];
+
+    // Divide as DUAS porções juntas (240 no total) em 4 partes de 60.
+    await setOrderItemShareParts(rowIds, waiterId, 4);
+
+    // Pedir 3 partes (180) passa do saldo da primeira linha (120) — 120
+    // vêm da primeira, os 60 restantes vêm da segunda.
+    const payment = await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      idempotencyKey: `porcoes-3-partes-${session.id}`,
+      allocations: [{ type: "AMOUNT", orderItemIds: rowIds, mode: "SHARE", parts: 3 }],
+    });
+    expect(payment.amount.toString()).toBe("180");
+
+    const allocations = await prisma.paymentItemAllocation.findMany({
+      where: { paymentId: payment.id },
+      orderBy: { amount: "desc" },
+    });
+    expect(allocations).toHaveLength(2);
+    expect(allocations[0]!.amount.toString()).toBe("120");
+    expect(allocations[1]!.amount.toString()).toBe("60");
+    expect(allocations.every((a) => a.shareNumerator === 3 && a.shareDenominator === 4)).toBe(true);
+  });
+
+  it("rejeita dividir item já totalmente pago", async () => {
+    const { session, order } = await openTableWithItems([{ productId: hamburguerId, quantity: 1 }]);
+    const itemId = order.items[0]!.id;
+
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      idempotencyKey: `hamburguer-pago-${session.id}`,
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "FULL" }],
+    });
+
+    await expect(setOrderItemShareParts([itemId], waiterId, 4)).rejects.toThrow(SetOrderItemShareError);
   });
 
   it("rejeita pedir mais partes do que as que existem no rateio vigente", async () => {
     const { session, order } = await openTableWithItems([{ productId: porcaoId, quantity: 1 }]);
     const itemId = order.items[0]!.id;
-    await setOrderItemShareParts(itemId, waiterId, 3);
+    await setOrderItemShareParts([itemId], waiterId, 3);
 
     await expect(
       registerPayment(session.id, waiterId, {
         paymentMethodId,
         idempotencyKey: `partes-demais-${session.id}`,
-        allocations: [{ type: "AMOUNT", orderItemId: itemId, mode: "SHARE", parts: 5 }],
+        allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "SHARE", parts: 5 }],
       }),
     ).rejects.toThrow(RegisterPaymentError);
   });

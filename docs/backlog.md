@@ -834,10 +834,9 @@ permissão e ter controle de quem usa o sistema.
   (`distributeUnitsFifo`);
 - ✅ `registerPayment` estendido para aceitar uma lista de alocações,
   sempre revalidada contra o banco dentro da transação (nunca confia no
-  que o cliente calculou); `setOrderItemShareParts` ("Dividir item"/
-  "Redistribuir"), v1 só para item lançado com quantidade 1 — dividir
-  entre várias porções iguais na mesma mesa fica para uma v2 (decisão
-  confirmada com o usuário);
+  que o cliente calculou); `setOrderItemShareParts` ("Dividir"/
+  "Redistribuir") disponível pra qualquer item (revisão 2026-08-16, ver
+  próximo item);
 - ✅ Tela de seleção de consumo (`/mesas/[id]/pagamentos/novo` e
   equivalente de retirada, mesmo componente reaproveitado) — carrinho
   local até confirmar, sem gravar nada antes disso; "Pagamento sem
@@ -851,24 +850,34 @@ permissão e ter controle de quem usa o sistema.
   pedidos diferentes (ex.: 1 chope agora, mais 1 chope num pedido
   separado depois) não agrupava na seleção de pagamento. Regra de
   agrupamento revisada em ADR 0006 — junta por produto+ponto+adicionais+
-  pessoa independente da quantidade de cada linha; efeito colateral
-  aceito: duas porções idênticas ainda não divididas também passam a se
-  agrupar (dá pra pagar uma inteira de cada vez, a última que sobrar
-  volta a oferecer "Dividir item").
+  pessoa independente da quantidade de cada linha.
+- ✅ Correção 2026-08-15: painel de situação ("Itens" na tela de
+  pagamentos) tinha o mesmo problema de agrupamento, corrigido junto
+  (critério unificado numa função só, usada pelas duas telas).
+- ✅ Revisão 2026-08-16 (pedido do usuário): "Dividir"/"Redistribuir"
+  deixou de exigir item de quantidade 1 isolado — agora está disponível
+  em qualquer linha da seleção (chope com várias unidades, ou duas
+  porções iguais lançadas em pedidos diferentes), dividindo o saldo
+  SOMADO do grupo inteiro em N partes (sugestão inicial de N = quantidade
+  de pessoas do atendimento). Seleção por unidades (stepper) e "Dividir"
+  convivem na mesma linha — o operador escolhe qual usar. Uma fração pode
+  atravessar mais de uma linha de origem real (`distributeAmountFifo`,
+  novo, mesmo racional de `distributeUnitsFifo` só que por valor em R$).
 - Fora de escopo por decisão do usuário 2026-08-15: taxa de serviço e
   desconto não entram no rateio por item (a MITIZ não cobra taxa hoje e
-  desconto é sobre o total); dividir uma porção específica enquanto ainda
-  existe outra idêntica igualmente aberta (v2).
-- **Testes**: 8 integração novos
+  desconto é sobre o total).
+- **Testes**: 11 integração
   (`tests/integration/payment-item-allocation.test.ts` — unidades
-  parciais com rejeição de sobre-alocação, item dividido com
-  redistribuição sem afetar pagamento anterior, combinação dos três
-  tipos numa mesma cobrança, valor personalizado limitado ao saldo
-  aberto, estorno com devolução correta, pagamento livre continua
-  funcionando, guarda de escopo v1) e 10 unitários
-  (`tests/unit/item-allocation.test.ts`). `tsc --noEmit`, `npm run
-  lint`, `npm run build`, `npm test` (152/152) e `npm run
-  test:integration` (64/64) limpos.
+  parciais com rejeição de sobre-alocação, agrupamento entre pedidos
+  diferentes, item dividido com redistribuição sem afetar pagamento
+  anterior, combinação dos três tipos numa mesma cobrança, valor
+  personalizado limitado ao saldo aberto, estorno com devolução correta,
+  pagamento livre continua funcionando, dividir item com mais de 1
+  unidade, dividir duas linhas de origem atravessando ambas numa fração
+  só, rejeições) e 21 unitários (`tests/unit/item-allocation.test.ts`,
+  incluindo `distributeAmountFifo`). `tsc --noEmit`, `npm run lint`,
+  `npm run build`, `npm test` (163/163) e `npm run test:integration`
+  (67/67) limpos.
 
 ## Ordem de execução recomendada
 

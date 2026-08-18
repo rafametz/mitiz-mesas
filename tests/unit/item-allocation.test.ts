@@ -3,7 +3,9 @@ import {
   buildItemPaymentStatuses,
   buildPayableLines,
   computeItemLineTotal,
+  distributeAmountFifo,
   distributeUnitsFifo,
+  InsufficientAmountError,
   InsufficientQuantityError,
   openAmountForItem,
   openUnitsForItem,
@@ -92,7 +94,7 @@ describe("buildPayableLines", () => {
     expect(lines[0]!.type).toBe("single");
   });
 
-  it("item já dividido nunca agrupa com outro igual ainda fechado, mesmo com quantity=1 duplicado", () => {
+  it("item já dividido agrupa com outro igual ainda fechado, virando linha de unidades com fração do total (revisão 2026-08-16)", () => {
     const divided = item({
       id: "a",
       quantity: 1,
@@ -102,11 +104,30 @@ describe("buildPayableLines", () => {
     });
     const untouched = item({ id: "b", quantity: 1, productNameAtOrder: "Porção Mista", unitPrice: "120.00" });
     const lines = buildPayableLines([divided, untouched]);
-    // A dividida fica isolada (linha própria com fração); a que sobrou
-    // sozinha (sem outra igual pra juntar) também vira linha simples —
-    // duas linhas "single", nenhuma "units".
-    expect(lines.every((l) => l.type === "single")).toBe(true);
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(1);
+    const line = lines[0]!;
+    expect(line.type).toBe("units");
+    if (line.type !== "units") throw new Error("esperado units");
+    // Saldo do GRUPO (240) dividido pelo denominador vigente (4) — não
+    // só o saldo da linha que carrega o openShareParts.
+    expect(line.openAmount.toString()).toBe("240");
+    expect(line.share!.nominalPartValue.toString()).toBe("60");
+  });
+
+  it("dividir também funciona pra item com uma única linha de origem (sem duplicata), mesmo comportamento de antes", () => {
+    const divided = item({
+      id: "a",
+      quantity: 1,
+      productNameAtOrder: "Porção Mista",
+      unitPrice: "120.00",
+      openShareParts: 4,
+      allocations: [{ kind: "AMOUNT", quantity: null, amount: "30.00", voided: false }],
+    });
+    const lines = buildPayableLines([divided]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.type).toBe("single");
+    if (lines[0]!.type !== "single") throw new Error("esperado single");
+    expect(lines[0]!.share!.nominalPartValue.toString()).toBe("22.5"); // (120-30)/4
   });
 
   it("item totalmente pago some da lista de seleção", () => {
@@ -132,6 +153,47 @@ describe("buildPayableLines", () => {
     // Saldo aberto (90) dividido pelas partes vigentes (4) — não pelo
     // total original.
     expect(line!.share!.nominalPartValue.toString()).toBe("22.5");
+  });
+
+  it("linha de unidades (quantity > 1 numa única linha) também pode estar dividida ao mesmo tempo em que oferece o stepper", () => {
+    const chopes = item({ quantity: 8, unitPrice: "12.00", openShareParts: 4 });
+    const [line] = buildPayableLines([chopes]);
+    expect(line!.type).toBe("units");
+    if (line!.type !== "units") throw new Error("esperado units");
+    expect(line!.totalQuantity).toBe(8);
+    expect(line!.share!.nominalPartValue.toString()).toBe("24"); // 96 / 4
+  });
+});
+
+describe("distributeAmountFifo", () => {
+  const sources = [
+    { itemId: "a", openAmount: computeItemLineTotal(item({ unitPrice: "120.00" })) },
+    { itemId: "b", openAmount: computeItemLineTotal(item({ unitPrice: "120.00" })) },
+  ];
+
+  it("consome a linha mais antiga até esgotar, só então passa pra próxima", () => {
+    const result = distributeAmountFifo(computeItemLineTotal(item({ unitPrice: "180.00" })), sources);
+    expect(result.map((r) => ({ orderItemId: r.orderItemId, amount: r.amount.toString() }))).toEqual([
+      { orderItemId: "a", amount: "120" },
+      { orderItemId: "b", amount: "60" },
+    ]);
+  });
+
+  it("uma parte que cabe inteira na primeira linha não toca a segunda", () => {
+    const result = distributeAmountFifo(computeItemLineTotal(item({ unitPrice: "60.00" })), sources);
+    expect(result).toEqual([{ orderItemId: "a", amount: expect.anything() }]);
+  });
+
+  it("rejeita pedir mais do que a soma disponível", () => {
+    expect(() => distributeAmountFifo(computeItemLineTotal(item({ unitPrice: "999.00" })), sources)).toThrow(
+      InsufficientAmountError,
+    );
+  });
+
+  it("rejeita valor zero ou negativo", () => {
+    expect(() => distributeAmountFifo(computeItemLineTotal(item({ unitPrice: "0.00" })), sources)).toThrow(
+      InsufficientAmountError,
+    );
   });
 });
 
@@ -192,5 +254,26 @@ describe("buildItemPaymentStatuses", () => {
     expect(statuses).toHaveLength(1);
     expect(statuses[0]!.units).toEqual({ total: 8, paid: 2, open: 6 });
     expect(statuses[0]!.paidAmount.toString()).toBe("24");
+  });
+
+  it("mostra o denominador vigente do grupo, mesmo com mais de uma linha de origem", () => {
+    const a = item({
+      id: "a",
+      quantity: 1,
+      productNameAtOrder: "Porção Mista",
+      unitPrice: "120.00",
+      openShareParts: 4,
+      createdAt: new Date("2026-08-16T12:00:00Z"),
+    });
+    const b = item({
+      id: "b",
+      quantity: 1,
+      productNameAtOrder: "Porção Mista",
+      unitPrice: "120.00",
+      createdAt: new Date("2026-08-16T13:00:00Z"),
+    });
+    const statuses = buildItemPaymentStatuses([a, b]);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]!.openShareParts).toBe(4);
   });
 });

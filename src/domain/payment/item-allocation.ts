@@ -39,9 +39,11 @@ export type PayableOrderItemInput = {
     priceDeltaAtOrder: Prisma.Decimal.Value;
     quantity: number;
   }[];
-  // Em quantas partes o saldo aberto está dividido agora ("Dividir item").
-  // Só relevante para item lançado com quantity = 1 (v1 — CLAUDE.md
-  // backlog: dividir entre várias porções iguais fica para uma v2).
+  // Em quantas partes o saldo aberto do GRUPO (este item + qualquer outro
+  // igual, mesmo de pedido diferente) está dividido agora ("Dividir" —
+  // revisado 2026-08-16: disponível pra qualquer item, não só o que tem
+  // quantidade 1). Uma ação de "Dividir"/"Redistribuir" grava o mesmo
+  // valor em todas as linhas do grupo no momento em que é acionada.
   openShareParts: number | null;
   createdAt: Date;
   allocations: AllocationInput[];
@@ -92,22 +94,29 @@ export function openUnitsForItem(item: PayableOrderItemInput): number {
 
 // --- Linhas para a tela de seleção de consumo ------------------------------
 //
-// Regra de agrupamento (revisada 2026-08-15 — correção de bug: itens
-// lançados quantity=1 em pedidos diferentes, ex. um chope de cada vez,
-// não agrupavam antes desta revisão): linhas do mesmo produto + ponto +
-// adicionais + pessoa sempre se juntam, não importa a quantidade de cada
-// linha de origem nem se vieram de pedidos diferentes (ex.: 2 chopes
-// lançados agora + 2 chopes lançados uma hora depois viram "4 chopes"
-// numa seleção só, pagos por unidade, mais antiga primeiro). O grupo só
-// vira uma linha "unidades" (com stepper) quando a soma é maior que 1;
-// exatamente 1 unidade sozinha continua sendo o item único de sempre
-// (pagar inteiro/dividir/valor personalizado). Item já dividido
-// ("Dividir item") nunca entra num grupo, mesmo que exista outro igual
-// ainda fechado — carrega uma fração própria. Duas porções iguais, NENHUMA
-// ainda dividida, agora também se agrupam numa linha "2 lançados": dá pra
-// pagar uma inteira de cada vez; a última que sobrar sozinha volta a
-// oferecer "Dividir item" normalmente. Dividir uma entre as duas enquanto
-// as duas ainda estão abertas continua fora do escopo da v1 (backlog).
+// Regra de agrupamento (revisada 2026-08-16 — pedido do usuário: mesmo um
+// item com mais de uma unidade, ou repetido em pedidos diferentes, precisa
+// oferecer as duas formas de pagamento ao mesmo tempo): linhas do mesmo
+// produto + ponto + adicionais + pessoa sempre se juntam num grupo só, não
+// importa a quantidade de cada linha de origem nem se vieram de pedidos
+// diferentes (ex.: 2 porções de linguiça lançadas em pedidos diferentes
+// viram um grupo só de "2 lançadas"). O grupo com exatamente 1 unidade e
+// nenhum outro igual continua sendo o item único de sempre (pagar
+// inteiro/dividir/valor personalizado, tipo "single"). Qualquer outro
+// grupo (mais de uma linha de origem, ou uma linha só com quantidade > 1)
+// vira uma linha "unidades" (tipo "units"), que agora TAMBÉM pode estar
+// dividida: junto do seletor de unidades, sempre disponível "Dividir"/
+// "Redistribuir", que reparte o saldo aberto do GRUPO INTEIRO (soma de
+// todas as linhas de origem) em N partes — ex.: 2 porções de R$29 cada
+// (R$58 no total) divididas em 4 partes de R$14,50. Uma "Dividir"/
+// "Redistribuir" grava o mesmo `openShareParts` em todas as linhas do
+// grupo no momento em que é acionada; pagamentos já feitos guardam seu
+// próprio snapshot em PaymentItemAllocation, nunca são recalculados
+// depois (mesma regra de sempre). Uma fração pedida (ex.: "1 parte") pode
+// consumir mais de uma linha de origem se o valor da parte passar do
+// saldo da linha mais antiga — ver distributeAmountFifo.
+
+export type PayableLineShare = { openParts: number; nominalPartValue: Prisma.Decimal };
 
 export type UnitsPayableLine = {
   type: "units";
@@ -120,8 +129,12 @@ export type UnitsPayableLine = {
   openQuantity: number;
   openAmount: Prisma.Decimal;
   // Linhas de origem (OrderItem reais), mais antiga primeiro — quem aloca
-  // consome delas em ordem (FIFO), ver distributeUnitsFifo.
+  // consome delas em ordem (FIFO), ver distributeUnitsFifo/distributeAmountFifo.
   sourceItems: { itemId: string; openQuantity: number; unitPrice: Prisma.Decimal }[];
+  // Presente quando o grupo está no modo "dividido"; nulo = ainda não foi
+  // dividido (só o seletor de unidades disponível, "Dividir" continua
+  // oferecido pra ativar).
+  share: PayableLineShare | null;
 };
 
 export type SharePayableLine = {
@@ -135,7 +148,7 @@ export type SharePayableLine = {
   openAmount: Prisma.Decimal;
   // Presente quando o item está no modo "dividido"; nulo = item normal
   // (pagar inteiro ou valor personalizado, sem fração).
-  share: { openParts: number; nominalPartValue: Prisma.Decimal } | null;
+  share: PayableLineShare | null;
 };
 
 export type PayableLine = UnitsPayableLine | SharePayableLine;
@@ -150,25 +163,24 @@ function itemLabel(item: PayableOrderItemInput): string {
 
 type ItemGroup = { label: string; guestId: string | null; guestName: string | null; items: PayableOrderItemInput[] };
 
-// Agrupamento compartilhado (2026-08-15): mesmo critério usado tanto na
+// Agrupamento compartilhado (2026-08-15/16): mesmo critério usado tanto na
 // seleção de pagamento (buildPayableLines) quanto no painel de situação
 // (buildItemPaymentStatuses) — as duas telas precisam concordar sobre o
 // que é "o mesmo item", senão uma mostra agrupado e a outra não (bug
 // relatado pelo usuário: painel de situação mostrava "Chopp Pilsen" duas
 // vezes, uma por pedido, mesmo depois do agrupamento já ter sido
-// corrigido na seleção de pagamento). Item já dividido nunca agrupa,
-// mesmo racional documentado em buildPayableLines.
+// corrigido na seleção de pagamento). Revisado 2026-08-16: item dividido
+// não fica mais isolado do grupo — dividir passou a ser uma propriedade
+// do GRUPO inteiro (ver comentário de PayableLine acima), então uma linha
+// dividida continua agrupada com as demais linhas iguais.
 function groupItemsByLine(items: PayableOrderItemInput[]): ItemGroup[] {
   const groups = new Map<string, ItemGroup>();
 
   for (const item of items) {
-    const key =
-      item.quantity === 1 && item.openShareParts
-        ? `divided:${item.id}`
-        : `${item.productId}|${item.meatPoint ?? ""}|${item.modifiers
-            .map((m) => m.modifierNameAtOrder)
-            .sort()
-            .join(",")}|${item.guestId ?? ""}`;
+    const key = `${item.productId}|${item.meatPoint ?? ""}|${item.modifiers
+      .map((m) => m.modifierNameAtOrder)
+      .sort()
+      .join(",")}|${item.guestId ?? ""}`;
 
     const existing = groups.get(key);
     if (existing) {
@@ -184,6 +196,17 @@ function groupItemsByLine(items: PayableOrderItemInput[]): ItemGroup[] {
   }
 
   return [...groups.values()];
+}
+
+// Denominador vigente do grupo — a linha mais antiga que tiver
+// openShareParts gravado (todas deveriam concordar, já que toda ação de
+// "Dividir"/"Redistribuir" estampa o mesmo valor nas linhas do grupo no
+// momento em que é acionada; se uma linha nova chegou depois de um
+// "Dividir" anterior sem redistribuir de novo, a mais antiga prevalece
+// até o próximo "Redistribuir").
+function groupShareParts(items: PayableOrderItemInput[]): number | null {
+  const sorted = items.slice().sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  return sorted.find((i) => i.openShareParts && i.openShareParts > 0)?.openShareParts ?? null;
 }
 
 function toSingleLine(item: PayableOrderItemInput): SharePayableLine | null {
@@ -238,13 +261,21 @@ export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[]
 
       const totalQuantity = sumField(group.items, (item) => item.quantity);
       const openQuantity = sumField(sourceItems, (s) => s.openQuantity);
-      const openAmount = sumDecimals(sourceItems.map((s) => s.unitPrice.mul(s.openQuantity)));
+      // Saldo aberto do grupo inteiro (soma de todas as linhas de
+      // origem) — não só das que ainda têm unidade sobrando, porque uma
+      // linha pode estar "fechada" pra unidades (openQuantity=0 depois de
+      // pagamentos parciais em R$, não em unidades) mas ainda ter saldo
+      // em R$ pra "Dividir" alocar.
+      const openAmount = sumDecimals(group.items.map((item) => openAmountForItem(item)));
       // Preço unitário de referência pra exibição: da linha mais antiga
       // ainda aberta (todas deveriam ter o mesmo preço na prática, já que
       // o agrupamento já exige mesmo produto + adicionais; preço muda
       // entre pedidos só se o cadastro do produto mudou no meio do
       // atendimento, regra 9/10 já congela por linha).
-      const unitPrice = sourceItems[0]?.unitPrice ?? ZERO;
+      const unitPrice = sourceItems[0]?.unitPrice ?? computeItemLineTotal(group.items[0]!).div(group.items[0]!.quantity);
+
+      const openShareParts = groupShareParts(group.items);
+      const share = openShareParts ? { openParts: openShareParts, nominalPartValue: openAmount.div(openShareParts) } : null;
 
       return {
         type: "units" as const,
@@ -257,9 +288,10 @@ export function buildPayableLines(items: PayableOrderItemInput[]): PayableLine[]
         openQuantity,
         openAmount,
         sourceItems,
+        share,
       };
     })
-    .filter((line) => line.openQuantity > 0);
+    .filter((line) => line.openAmount.greaterThan(ZERO));
 
   return [...unitsLines, ...singleLines].sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }
@@ -293,8 +325,9 @@ export type ItemPaymentStatus = {
   // Só presente quando o grupo soma mais de 1 unidade (uma ou mais linhas
   // de origem, lançadas juntas ou em pedidos diferentes).
   units: { total: number; paid: number; open: number } | null;
-  // Só presente quando o item está no modo dividido ("Dividir item") —
-  // por construção, só grupos de uma única linha podem estar divididos.
+  // Em quantas partes o saldo aberto do grupo está dividido agora
+  // (revisado 2026-08-16: qualquer grupo pode estar dividido, não só o
+  // de uma linha só).
   openShareParts: number | null;
 };
 
@@ -314,7 +347,7 @@ export function buildItemPaymentStatuses(items: PayableOrderItemInput[]): ItemPa
           totalQuantity > 1
             ? { total: totalQuantity, paid: paidUnits, open: totalQuantity - paidUnits }
             : null,
-        openShareParts: group.items.length === 1 ? group.items[0]!.openShareParts : null,
+        openShareParts: groupShareParts(group.items),
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
@@ -354,6 +387,45 @@ export function distributeUnitsFifo(
     if (take <= 0) continue;
     result.push({ orderItemId: source.itemId, quantity: take, amount: source.unitPrice.mul(take) });
     remaining -= take;
+  }
+  return result;
+}
+
+// --- Distribuição FIFO de um VALOR entre linhas de origem -------------------
+//
+// Mesmo racional de distributeUnitsFifo, mas pra "Dividir"/valor
+// personalizado (2026-08-16): o alvo é um valor em R$, não uma
+// quantidade de unidades — uma "parte" pode passar do saldo da linha
+// mais antiga e precisar tirar um pouco da próxima também (ex.: 2
+// porções de R$29 cada, dividir em 4 = R$14,50 a parte — cabe inteira na
+// primeira linha; já "3 partes" = R$43,50 tira os R$29 inteiros da
+// primeira linha mais R$14,50 da segunda).
+
+export class InsufficientAmountError extends Error {}
+
+export function distributeAmountFifo(
+  targetAmount: Prisma.Decimal,
+  sourceItems: { itemId: string; openAmount: Prisma.Decimal }[],
+): { orderItemId: string; amount: Prisma.Decimal }[] {
+  if (targetAmount.lessThanOrEqualTo(ZERO)) {
+    throw new InsufficientAmountError("Valor deve ser maior que zero.");
+  }
+
+  const available = sumDecimals(sourceItems.map((s) => s.openAmount));
+  if (targetAmount.greaterThan(available)) {
+    throw new InsufficientAmountError(
+      `Só há ${available.toFixed(2)} em aberto, foi pedido ${targetAmount.toFixed(2)}.`,
+    );
+  }
+
+  let remaining = targetAmount;
+  const result: { orderItemId: string; amount: Prisma.Decimal }[] = [];
+  for (const source of sourceItems) {
+    if (remaining.lessThanOrEqualTo(ZERO)) break;
+    const take = remaining.lessThan(source.openAmount) ? remaining : source.openAmount;
+    if (take.lessThanOrEqualTo(ZERO)) continue;
+    result.push({ orderItemId: source.itemId, amount: take });
+    remaining = remaining.sub(take);
   }
   return result;
 }

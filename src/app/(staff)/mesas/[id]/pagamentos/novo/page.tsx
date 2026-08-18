@@ -74,6 +74,7 @@ export default async function NovoPagamentoPage({ params }: { params: Promise<{ 
         lines={toClientPayableLines(payableLines)}
         paymentMethods={paymentMethods}
         guests={activeGuests.map((g, i) => ({ id: g.id, name: g.name ?? `Pessoa ${i + 1}` }))}
+        guestCount={session.guestCount}
         balance={session.balanceAmount.toString()}
       />
     </div>

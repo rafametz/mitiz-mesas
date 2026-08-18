@@ -9,6 +9,8 @@ import type { PayableLine } from "@/domain/payment/item-allocation";
 // de ponto flutuante entre vários itens (regra 20/21 aplicada também no
 // lado do cliente, só que aqui é só pra exibição, não pra gravar nada).
 
+export type ClientShare = { openParts: number; nominalPartCents: number };
+
 export type ClientUnitsLine = {
   type: "units";
   key: string;
@@ -18,7 +20,12 @@ export type ClientUnitsLine = {
   unitPriceCents: number;
   openQuantity: number;
   totalQuantity: number;
+  openAmountCents: number;
   orderItemIds: string[];
+  // Presente quando o grupo (uma ou mais linhas de origem) está dividido
+  // (revisado 2026-08-16: dividir passou a valer pra qualquer item, não
+  // só o de quantidade 1).
+  share: ClientShare | null;
 };
 
 export type ClientSingleLine = {
@@ -30,7 +37,7 @@ export type ClientSingleLine = {
   guestName: string | null;
   openAmountCents: number;
   lineTotalCents: number;
-  share: { openParts: number; nominalPartCents: number } | null;
+  share: ClientShare | null;
 };
 
 export type ClientPayableLine = ClientUnitsLine | ClientSingleLine;
@@ -51,7 +58,11 @@ export function toClientPayableLines(lines: PayableLine[]): ClientPayableLine[] 
         unitPriceCents: toCents(line.unitPrice),
         openQuantity: line.openQuantity,
         totalQuantity: line.totalQuantity,
+        openAmountCents: toCents(line.openAmount),
         orderItemIds: line.sourceItems.map((s) => s.itemId),
+        share: line.share
+          ? { openParts: line.share.openParts, nominalPartCents: toCents(line.share.nominalPartValue) }
+          : null,
       };
     }
     return {

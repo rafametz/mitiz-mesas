@@ -150,11 +150,13 @@ exatamente o que está sendo pago — decisão completa em ADR 0006
    chopes) — quantidade sempre revalidada contra o saldo real do item no
    servidor;
 2. Item inteiro ("pagar tudo");
-3. Fração de um item compartilhado ("Dividir item") — o saldo aberto do
-   item é dividido em N partes; N pode ser redefinido a qualquer momento
-   ("Redistribuir") sem alterar o valor de partes já pagas. v1: só para
-   item lançado com quantidade 1 (várias porções iguais ficam para uma
-   v2 — `docs/backlog.md`);
+3. Fração do saldo aberto de um item ou grupo de itens iguais ("Dividir")
+   — disponível pra qualquer item, mesmo com mais de uma unidade ou
+   repetido em pedidos diferentes (ex.: 2 porções iguais lançadas
+   separadas, dividir as duas juntas entre a quantidade de pessoas da
+   mesa). O saldo aberto somado é dividido em N partes; N pode ser
+   redefinido a qualquer momento ("Redistribuir") sem alterar o valor de
+   partes já pagas (revisão 2026-08-16);
 4. Valor personalizado, limitado ao saldo aberto do item;
 5. Combinação de qualquer uma das opções acima num único pagamento.
 6. Seleção é só rascunho local até o pagamento ser confirmado — cancelar

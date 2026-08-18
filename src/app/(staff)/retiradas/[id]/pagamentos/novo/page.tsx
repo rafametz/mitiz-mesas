@@ -76,6 +76,7 @@ export default async function NovoPagamentoRetiradaPage({
         lines={toClientPayableLines(payableLines)}
         paymentMethods={paymentMethods}
         guests={[]}
+        guestCount={session.guestCount}
         balance={session.balanceAmount.toString()}
       />
     </div>

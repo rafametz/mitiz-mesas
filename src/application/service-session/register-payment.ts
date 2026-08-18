@@ -11,7 +11,9 @@ import { sessionRealtimeChannels } from "./session-realtime";
 import { runAfterResponse } from "@/lib/run-after-response";
 import {
   computeItemLineTotal,
+  distributeAmountFifo,
   distributeUnitsFifo,
+  InsufficientAmountError,
   InsufficientQuantityError,
   openAmountForItem,
   type PayableOrderItemInput,
@@ -36,10 +38,16 @@ const unitsAllocationSchema = z.object({
 
 const amountAllocationSchema = z.object({
   type: z.literal("AMOUNT"),
-  orderItemId: z.string().min(1),
-  // FULL: todo o saldo aberto do item. SHARE: N partes do rateio vigente
-  // (openShareParts) — v1 só existe para item lançado com quantity = 1.
-  // CUSTOM: valor livre digitado pelo operador, limitado ao saldo aberto.
+  // Todas as linhas de origem do grupo (revisado 2026-08-16: dividir/
+  // valor personalizado agora operam sobre o saldo SOMADO de um grupo
+  // inteiro, não só de um item isolado — ex.: 2 porções iguais lançadas
+  // em pedidos diferentes, divididas juntas). Uma "parte" pode consumir
+  // mais de uma linha de origem se passar do saldo da mais antiga
+  // (distributeAmountFifo).
+  orderItemIds: z.array(z.string().min(1)).min(1),
+  // FULL: todo o saldo aberto do grupo. SHARE: N partes do rateio vigente
+  // (openShareParts). CUSTOM: valor livre digitado pelo operador,
+  // limitado ao saldo aberto do grupo.
   mode: z.enum(["FULL", "SHARE", "CUSTOM"]),
   parts: z.coerce.number().int().positive().optional(),
   amount: z.coerce.number().positive().optional(),
@@ -121,11 +129,7 @@ async function resolveAllocations(
   serviceSessionId: string,
   requests: z.infer<typeof allocationRequestSchema>[],
 ): Promise<{ resolved: ResolvedAllocation[]; totalAmount: Prisma.Decimal }> {
-  const orderItemIds = [
-    ...new Set(
-      requests.flatMap((r) => (r.type === "UNITS" ? r.orderItemIds : [r.orderItemId])),
-    ),
-  ];
+  const orderItemIds = [...new Set(requests.flatMap((r) => r.orderItemIds))];
 
   const items = await tx.orderItem.findMany({
     where: { id: { in: orderItemIds }, order: { serviceSessionId }, status: { not: "CANCELLED" } },
@@ -177,45 +181,60 @@ async function resolveAllocations(
       continue;
     }
 
-    const item = itemsById.get(request.orderItemId);
-    if (!item) throw new RegisterPaymentError("Item não encontrado ou já cancelado.");
-    const openAmount = openAmountForItem(item);
+    // Grupo (1 ou mais linhas de origem, mais antiga primeiro — mesma
+    // ordem que distributeAmountFifo consome).
+    const groupItems = request.orderItemIds
+      .map((id) => itemsById.get(id))
+      .filter((item): item is PayableOrderItemInput => {
+        if (!item) throw new RegisterPaymentError("Item não encontrado ou já cancelado.");
+        return true;
+      })
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const sourceItems = groupItems.map((item) => ({ itemId: item.id, openAmount: openAmountForItem(item) }));
+    const groupOpenAmount = sumDecimals(sourceItems.map((s) => s.openAmount));
+
+    function pushDistribution(target: Prisma.Decimal, shareNumerator: number | null, shareDenominator: number | null) {
+      let distribution;
+      try {
+        distribution = distributeAmountFifo(target, sourceItems);
+      } catch (error) {
+        if (error instanceof InsufficientAmountError) throw new RegisterPaymentError(error.message);
+        throw error;
+      }
+      for (const piece of distribution) {
+        resolved.push({
+          orderItemId: piece.orderItemId,
+          kind: "AMOUNT",
+          quantity: null,
+          shareNumerator,
+          shareDenominator,
+          amount: piece.amount,
+        });
+      }
+    }
 
     if (request.mode === "FULL") {
-      if (openAmount.lessThanOrEqualTo(ZERO)) {
+      if (groupOpenAmount.lessThanOrEqualTo(ZERO)) {
         throw new RegisterPaymentError("Este item já está totalmente pago.");
       }
-      resolved.push({
-        orderItemId: item.id,
-        kind: "AMOUNT",
-        quantity: null,
-        shareNumerator: null,
-        shareDenominator: null,
-        amount: openAmount,
-      });
+      pushDistribution(groupOpenAmount, null, null);
       continue;
     }
 
     if (request.mode === "SHARE") {
-      if (!item.openShareParts || item.openShareParts <= 0) {
+      // Denominador vigente: a linha mais antiga que tiver openShareParts
+      // gravado (toda ação de "Dividir"/"Redistribuir" estampa o mesmo
+      // valor em todas as linhas do grupo — ver setOrderItemShareParts).
+      const denominator = groupItems.find((i) => i.openShareParts && i.openShareParts > 0)?.openShareParts;
+      if (!denominator) {
         throw new RegisterPaymentError("Este item não está dividido em partes.");
       }
       const parts = request.parts ?? 1;
-      if (parts > item.openShareParts) {
-        throw new RegisterPaymentError(
-          `Só há ${item.openShareParts} parte(s) em aberto, foi pedido ${parts}.`,
-        );
+      if (parts > denominator) {
+        throw new RegisterPaymentError(`Só há ${denominator} parte(s) em aberto, foi pedido ${parts}.`);
       }
-      const nominalPart = openAmount.div(item.openShareParts).toDecimalPlaces(2);
-      const amount = nominalPart.mul(parts);
-      resolved.push({
-        orderItemId: item.id,
-        kind: "AMOUNT",
-        quantity: null,
-        shareNumerator: parts,
-        shareDenominator: item.openShareParts,
-        amount,
-      });
+      const nominalPart = groupOpenAmount.div(denominator).toDecimalPlaces(2);
+      pushDistribution(nominalPart.mul(parts), parts, denominator);
       continue;
     }
 
@@ -224,19 +243,12 @@ async function resolveAllocations(
       throw new RegisterPaymentError("Informe o valor personalizado.");
     }
     const amount = toDecimal(request.amount);
-    if (amount.greaterThan(openAmount)) {
+    if (amount.greaterThan(groupOpenAmount)) {
       throw new RegisterPaymentError(
-        `Valor maior que o saldo em aberto deste item (${openAmount.toFixed(2)}).`,
+        `Valor maior que o saldo em aberto deste item (${groupOpenAmount.toFixed(2)}).`,
       );
     }
-    resolved.push({
-      orderItemId: item.id,
-      kind: "AMOUNT",
-      quantity: null,
-      shareNumerator: null,
-      shareDenominator: null,
-      amount,
-    });
+    pushDistribution(amount, null, null);
   }
 
   return { resolved, totalAmount: sumDecimals(resolved.map((r) => r.amount)) };

@@ -76,37 +76,59 @@ desconto. Se um dia isso mudar, é uma decisão de negócio nova a ser
 tomada explicitamente, não uma distribuição automática assumida por
 engenharia.
 
-### Escopo v1 de "Dividir item": só quantidade 1
+### "Dividir" é uma propriedade do grupo, não de um item isolado (revisado 2026-08-16)
 
-"Dividir item" (rateio de item compartilhado) só está disponível para
-`OrderItem` lançado com `quantity = 1` — o caso real do pedido original
-(uma porção compartilhada). Dividir entre várias porções iguais na mesma
-mesa (ex.: 3-4 porções, dividir o total entre todas as pessoas) fica para
-uma v2 (`docs/backlog.md`) — decisão confirmada com o usuário: a v1 seguiu
-a proposta original sem essa generalização.
+Pedido do usuário: mesmo um item lançado com mais de uma unidade (ex.: 3
+lanches) ou repetido em pedidos diferentes (ex.: 2 porções de linguiça,
+uma por pedido) precisa oferecer as duas formas de pagamento ao mesmo
+tempo — selecionar quantas unidades pagar, **e** dividir o saldo somado
+em N partes (quantidade de pessoas). A restrição original ("só item com
+quantity = 1") saiu: "Dividir"/"Redistribuir" agora está sempre
+disponível em qualquer linha da seleção, e reparte o saldo aberto do
+**grupo inteiro** (soma de todas as linhas de origem daquele produto +
+ponto + adicionais + pessoa, mesmo vindas de pedidos diferentes) em N
+partes, não o saldo de uma única linha.
+
+Mecânica: `setOrderItemShareParts` (aplicação) recebe uma lista de
+`orderItemIds` e grava o mesmo `openShareParts` em todas de uma vez, na
+mesma transação — é o saldo somado entre elas que fica dividido. Uma
+fração pedida (ex.: "3 partes") pode consumir mais de uma linha de
+origem se passar do saldo da mais antiga: `distributeAmountFifo` (novo,
+mesmo racional de `distributeUnitsFifo` mas por valor em R$ em vez de
+unidades) resolve isso dentro da transação de `registerPayment`, sempre
+contra o estado fresco do banco.
+
+Exemplo do pedido do usuário: 2 porções de linguiça (R$120 cada, R$240 no
+total) lançadas em pedidos diferentes, "Dividir" em 4 partes de R$60. Um
+pagamento de "3 partes" (R$180) tira os R$120 inteiros da porção mais
+antiga e os R$60 restantes da outra — vira 2 `PaymentItemAllocation`,
+uma por linha real, ambas guardando o mesmo snapshot `shareNumerator=3,
+shareDenominator=4`.
+
+Continua valendo: pagamentos já registrados guardam seu próprio snapshot,
+nunca são recalculados quando o grupo é redividido depois; item já
+dividido mantém isso ao ganhar um novo irmão igual (a divisão vigente é
+lida da linha mais antiga do grupo que tiver `openShareParts` gravado).
 
 ### Agrupamento na tela de seleção
 
 Revisado em 2026-08-15 (correção de bug relatado pelo usuário: um chope
 lançado agora e outro chope do mesmo produto lançado num pedido separado
-uma hora depois não estavam juntando na seleção). Regra atual: linhas do
-mesmo produto + ponto + adicionais + pessoa sempre se juntam, não importa
-a quantidade de cada linha de origem nem se vieram de pedidos diferentes
-(chopes lançados em dois pedidos viram uma seleção só de "10 chopes"),
-consumidos mais antiga primeiro (`distributeUnitsFifo`, determinístico,
-calculado dentro da transação contra o estado real do banco). O grupo só
-vira uma linha "unidades" (com stepper) quando a soma é maior que 1;
-exatamente 1 unidade sozinha continua sendo o item único de sempre
-(pagar inteiro/dividir/valor personalizado).
-
-Item já dividido ("Dividir item") nunca entra num grupo, mesmo que exista
-outro igual ainda fechado — carrega uma fração própria, incompatível com
-o agrupamento por unidade. Efeito colateral aceito conscientemente: duas
-porções idênticas, nenhuma ainda dividida, agora também se agrupam numa
-linha "2 lançados" (dá pra pagar uma inteira de cada vez; a última que
-sobrar sozinha volta a oferecer "Dividir item" normalmente) — dividir uma
-delas enquanto as duas ainda estão inteiras e abertas continua fora do
-escopo da v1 (mesmo backlog v2 já registrado abaixo).
+uma hora depois não estavam juntando na seleção) e 2026-08-16 (painel de
+situação da tela de pagamentos tinha o mesmo bug, critério unificado numa
+função só, `groupItemsByLine`, usada pelas duas telas). Regra atual:
+linhas do mesmo produto + ponto + adicionais + pessoa sempre se juntam
+num grupo só, não importa a quantidade de cada linha de origem, se vieram
+de pedidos diferentes, nem se alguma já está dividida (chopes lançados em
+dois pedidos viram uma seleção só de "10 chopes"; uma porção já dividida
+continua agrupada com uma porção igual ainda fechada). O grupo com
+exatamente 1 unidade e nenhum outro igual continua sendo o item único de
+sempre (pagar inteiro/dividir/valor personalizado). Qualquer outro grupo
+vira uma linha "unidades" (stepper para selecionar quantas pagar,
+consumidas mais antiga primeiro via `distributeUnitsFifo`), que agora
+TAMBÉM oferece "Dividir"/"Redistribuir" ao lado do stepper — as duas
+formas de pagar convivem na mesma linha, o operador escolhe qual usar
+conforme o caso (unidades pro chope, dividir pra porção compartilhada).
 
 ### Duas etapas, sem persistir rascunho
 
