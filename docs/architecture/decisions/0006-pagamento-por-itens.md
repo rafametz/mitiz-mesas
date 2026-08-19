@@ -140,6 +140,41 @@ Exemplo: 2 porções de R$38 (R$76), "Dividir" em 4 grava
 redistribuir, cobra R$19 nas três (76/4), nunca R$14,25 ou R$9,50 — só
 depois de "Redistribuir" o denominador ou a base mudam de novo.
 
+### Item dividido não pode também ser pago por unidade (correção 2026-08-19)
+
+Bug relatado pelo usuário em produção: uma porção dividida em 4 partes
+(R$120 → 4 de R$30), com 3 partes já pagas via "Dividir" (R$90), ainda
+oferecia o seletor de unidades da mesma linha. Selecionar "1 unidade"
+cobrou o preço cheio da unidade (R$120) de novo, sem descontar os R$90
+já quitados pelas partes — as duas formas de pagar a mesma linha
+("Selecionar unidades", que soma unidades inteiras a preço cheio, e
+"Dividir", que reparte o saldo em frações) leem o que já foi pago de
+jeitos diferentes (`paidUnitsForItem`, só alocações `kind=UNITS`, contra
+`paidAmountForItem`, soma qualquer `kind`). Um pagamento por partes não
+grava nenhuma alocação `UNITS`, então `openUnitsForItem` continuava
+enxergando a unidade inteira em aberto, mesmo com a maior parte do valor
+dela já paga por fora.
+
+Em vez de tentar fazer as duas formas convergirem (proporcionalizar
+"quantas unidades ainda restam" a partir de pagamentos em R$ é ambíguo
+quando o grupo tem mais de uma linha de origem com valores diferentes),
+a correção segue exatamente o que foi pedido: **enquanto o grupo estiver
+no modo dividido (`openShareParts` gravado em qualquer linha dele), a
+seleção por unidade fica bloqueada** — só "Dividir"/"Redistribuir"/
+"Outro valor" continuam disponíveis. Reforçado nas duas pontas:
+
+- Tela (`payment-selection-form.tsx`): o bloco "Selecionar unidades" some
+  da linha (`line.share` presente) e vira uma nota explicando o motivo,
+  em vez de aparecer desabilitado sem explicação.
+- Aplicação (`register-payment.ts`, `resolveAllocations`): uma alocação
+  `UNITS` contra qualquer linha de origem que tenha `openShareParts`
+  gravado é rejeitada com `RegisterPaymentError`, mesmo que a requisição
+  não tenha passado pela tela (regra 24 — frontend nunca é a única
+  camada de validação).
+
+Remover a divisão (`openShareParts = null`) libera a unidade de novo,
+normalmente.
+
 ### Agrupamento na tela de seleção
 
 Revisado em 2026-08-15 (correção de bug relatado pelo usuário: um chope

@@ -330,6 +330,36 @@ describe("Pagamento por itens e rateio de consumo (ADR 0006)", () => {
     expect(allocations).toHaveLength(3);
   });
 
+  it("rejeita pagar por unidade um item que está dividido em partes, mesmo faltando só 1 (correção 2026-08-19)", async () => {
+    // Reproduz o relato do usuário: porção dividida em 4 partes de R$30
+    // (120/4), paga 3 partes (R$90) via "Dividir" — resta 1 parte
+    // (R$30). Selecionar "1 unidade" no stepper não pode cobrar o preço
+    // cheio da unidade (R$120) de novo: a linha inteira já está no modo
+    // dividido, unidade fica bloqueada até remover a divisão.
+    const { session, order } = await openTableWithItems([{ productId: porcaoId, quantity: 1 }]);
+    const itemId = order.items[0]!.id;
+
+    await setOrderItemShareParts([itemId], waiterId, 4);
+    await registerPayment(session.id, waiterId, {
+      paymentMethodId,
+      idempotencyKey: `divide-3partes-${session.id}`,
+      allocations: [{ type: "AMOUNT", orderItemIds: [itemId], mode: "SHARE", parts: 3 }],
+    });
+
+    await expect(
+      registerPayment(session.id, waiterId, {
+        paymentMethodId,
+        idempotencyKey: `divide-unidade-${session.id}`,
+        allocations: [{ type: "UNITS", orderItemIds: [itemId], quantity: 1 }],
+      }),
+    ).rejects.toThrow(RegisterPaymentError);
+
+    // Saldo continua em 30 (a parte que faltava) — a tentativa rejeitada
+    // não mexeu em nada.
+    const current = await prisma.serviceSession.findUniqueOrThrow({ where: { id: session.id } });
+    expect(current.balanceAmount.toString()).toBe("30");
+  });
+
   it("valor personalizado é limitado ao saldo aberto do item", async () => {
     const { session, order } = await openTableWithItems([{ productId: hamburguerId, quantity: 1 }]);
     const itemId = order.items[0]!.id;

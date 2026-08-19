@@ -874,7 +874,16 @@ permissão e ter controle de quem usa o sistema.
   `20260818120000_order_item_share_base_amount`) grava a base FIXA no
   momento de "Dividir"/"Redistribuir"; o nominal da parte usa sempre essa
   base, nunca o saldo atual — só muda com uma redistribuição explícita.
-- **Testes**: 13 integração
+- ✅ Correção 2026-08-19 (relato do usuário em produção): unidade e
+  "Dividir" NÃO convivem mais na mesma linha quando ela está dividida —
+  pagar 1 unidade de um item já com partes pagas cobrava o preço cheio da
+  unidade de novo, sem descontar o que já tinha sido quitado pelas
+  partes (as duas formas leem "o que já foi pago" de jeitos diferentes).
+  Enquanto o grupo estiver dividido, "Selecionar unidades" some da tela
+  (vira uma nota explicando o motivo) e o servidor rejeita qualquer
+  alocação `UNITS` contra linha com `openShareParts` gravado, mesmo
+  pulando a tela.
+- **Testes**: 14 integração
   (`tests/integration/payment-item-allocation.test.ts` — unidades
   parciais com rejeição de sobre-alocação, agrupamento entre pedidos
   diferentes, item dividido com redistribuição sem afetar pagamento
@@ -882,11 +891,12 @@ permissão e ter controle de quem usa o sistema.
   personalizado limitado ao saldo aberto, estorno com devolução correta,
   pagamento livre continua funcionando, dividir item com mais de 1
   unidade, dividir duas linhas de origem atravessando ambas numa fração
-  só, valor da parte fixo entre 4 pagamentos sem redistribuir, rejeições)
-  e 22 unitários (`tests/unit/item-allocation.test.ts`, incluindo
-  `distributeAmountFifo` e o caso de valor fixo com saldo encolhendo).
-  `tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (164/164) e
-  `npm run test:integration` (68/68) limpos.
+  só, valor da parte fixo entre 4 pagamentos sem redistribuir, rejeição
+  de unidade contra item dividido, rejeições) e 22 unitários
+  (`tests/unit/item-allocation.test.ts`, incluindo `distributeAmountFifo`
+  e o caso de valor fixo com saldo encolhendo). `tsc --noEmit`,
+  `npm run lint`, `npm run build`, `npm test` (164/164) e
+  `npm run test:integration` (69/69) limpos.
 
 ## Ordem de execução recomendada
 

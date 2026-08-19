@@ -302,46 +302,59 @@ function UnitsLineCard({
           )}
         </div>
 
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Selecionar unidades</p>
-          <div className="flex items-center gap-2">
-            <IconButton
-              label="Diminuir quantidade"
-              icon={Minus}
-              className="border border-line disabled:pointer-events-none disabled:opacity-40"
-              onClick={() => {
-                const next = Math.max(0, quantity - 1);
-                setQuantity(next);
-                commitUnits(next);
-              }}
-              disabled={quantity <= 0}
-            />
-            <span className="tabular w-8 text-center text-sm font-medium text-ink">{quantity}</span>
-            <IconButton
-              label="Aumentar quantidade"
-              icon={Plus}
-              className="border border-line disabled:pointer-events-none disabled:opacity-40"
-              onClick={() => {
-                const next = Math.min(line.openQuantity, quantity + 1);
-                setQuantity(next);
-                commitUnits(next);
-              }}
-              disabled={quantity >= line.openQuantity}
-            />
-            {line.openQuantity > 1 && (
-              <button
-                type="button"
+        {line.share ? (
+          // Item dividido não pode também ser pago por unidade
+          // (correção 2026-08-19, relato do usuário): selecionar 1
+          // unidade cobraria o preço cheio dela, sem descontar o que já
+          // foi quitado pelas partes já pagas — as duas formas ficam
+          // divergentes se coexistirem. Enquanto durar a divisão, só
+          // "Dividir"/"Redistribuir"/"Outro valor" continuam
+          // disponíveis (reforçado no servidor também, register-payment.ts).
+          <p className="text-xs text-muted">
+            Item dividido em partes: pague pelas partes abaixo ou remova a divisão antes de selecionar por unidade.
+          </p>
+        ) : (
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Selecionar unidades</p>
+            <div className="flex items-center gap-2">
+              <IconButton
+                label="Diminuir quantidade"
+                icon={Minus}
+                className="border border-line disabled:pointer-events-none disabled:opacity-40"
                 onClick={() => {
-                  setQuantity(line.openQuantity);
-                  commitUnits(line.openQuantity);
+                  const next = Math.max(0, quantity - 1);
+                  setQuantity(next);
+                  commitUnits(next);
                 }}
-                className="text-xs font-medium text-wine underline underline-offset-2"
-              >
-                Selecionar todas
-              </button>
-            )}
+                disabled={quantity <= 0}
+              />
+              <span className="tabular w-8 text-center text-sm font-medium text-ink">{quantity}</span>
+              <IconButton
+                label="Aumentar quantidade"
+                icon={Plus}
+                className="border border-line disabled:pointer-events-none disabled:opacity-40"
+                onClick={() => {
+                  const next = Math.min(line.openQuantity, quantity + 1);
+                  setQuantity(next);
+                  commitUnits(next);
+                }}
+                disabled={quantity >= line.openQuantity}
+              />
+              {line.openQuantity > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuantity(line.openQuantity);
+                    commitUnits(line.openQuantity);
+                  }}
+                  className="text-xs font-medium text-wine underline underline-offset-2"
+                >
+                  Selecionar todas
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Ou dividir o total</p>

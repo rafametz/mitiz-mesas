@@ -148,7 +148,10 @@ exatamente o que está sendo pago — decisão completa em ADR 0006
 
 1. Unidades inteiras de um item lançado com quantidade (ex.: 3 dos 10
    chopes) — quantidade sempre revalidada contra o saldo real do item no
-   servidor;
+   servidor. Indisponível enquanto o item/grupo estiver no modo
+   "Dividir" (item 3) — as duas formas cobram do mesmo saldo de jeitos
+   diferentes e ficam divergentes se coexistirem (correção 2026-08-19);
+   remover a divisão libera a unidade de novo;
 2. Item inteiro ("pagar tudo");
 3. Fração do saldo aberto de um item ou grupo de itens iguais ("Dividir")
    — disponível pra qualquer item, mesmo com mais de uma unidade ou

@@ -147,12 +147,30 @@ async function resolveAllocations(
 
   for (const request of requests) {
     if (request.type === "UNITS") {
-      const sourceItems = request.orderItemIds
+      const requestItems = request.orderItemIds
         .map((id) => itemsById.get(id))
         .filter((item): item is PayableOrderItemInput => {
           if (!item) throw new RegisterPaymentError("Item não encontrado ou já cancelado.");
           return true;
-        })
+        });
+
+      // Item dividido em partes não pode também ser pago por unidade
+      // (correção 2026-08-19, relato do usuário: selecionar 1 unidade
+      // depois de já ter pago partes cobrou o preço cheio da unidade de
+      // novo, sem descontar o que já tinha sido quitado por "Dividir" —
+      // as duas formas cobram do mesmo saldo de jeitos diferentes e
+      // ficam divergentes se coexistirem). Enquanto o grupo estiver
+      // dividido (openShareParts gravado em qualquer linha do grupo),
+      // só "Dividir"/"Redistribuir"/"Outro valor" continuam disponíveis
+      // — mesma regra já aplicada na tela (payment-selection-form.tsx),
+      // reforçada aqui pra nunca depender só do cliente (regra 24).
+      if (requestItems.some((item) => item.openShareParts && item.openShareParts > 0)) {
+        throw new RegisterPaymentError(
+          "Este item está dividido em partes. Pague pelas partes ou remova a divisão antes de selecionar por unidade.",
+        );
+      }
+
+      const sourceItems = requestItems
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
         .map((item) => ({
           itemId: item.id,
