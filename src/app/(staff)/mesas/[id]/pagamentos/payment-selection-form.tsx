@@ -484,6 +484,16 @@ function AmountActions({
   const isShareSelected = selectedPayload?.mode === "SHARE";
   const isCustomSelected = selectedPayload?.mode === "CUSTOM";
 
+  // Quantas partes pagar de uma vez (2026-08-19, pedido do usuário: uma
+  // pessoa no caixa pode estar quitando a parte dela E a de outra ao
+  // mesmo tempo — antes só existia "1 parte" fixo ou "Outro valor", que
+  // não guarda vínculo nenhum com o rateio). Mesmo padrão de
+  // "Selecionar unidades": stepper que já começa refletindo o que está
+  // no carrinho, cada +/- já confirma na hora.
+  const alreadySelectedShareParts = selectedPayload?.mode === "SHARE" ? selectedPayload.parts : 0;
+  const [sharePartsCount, setSharePartsCount] = useState(alreadySelectedShareParts);
+  const maxShareParts = share ? remainingShareParts(share, openAmountCents) : 0;
+
   function selectFull() {
     onChange({
       key: cartKey,
@@ -495,15 +505,19 @@ function AmountActions({
     });
   }
 
-  function selectShare(parts: number) {
+  function commitShareParts(nextParts: number) {
     if (!share) return;
+    if (nextParts <= 0) {
+      onRemove(cartKey);
+      return;
+    }
     onChange({
       key: cartKey,
       label,
       guestId,
       guestName,
-      amountCents: share.nominalPartCents * parts,
-      payload: { type: "AMOUNT", orderItemIds, mode: "SHARE", parts },
+      amountCents: share.nominalPartCents * nextParts,
+      payload: { type: "AMOUNT", orderItemIds, mode: "SHARE", parts: nextParts },
     });
   }
 
@@ -533,9 +547,42 @@ function AmountActions({
           </Button>
         )}
         {share && (
-          <Button variant={isShareSelected ? "secondary" : "outline"} size="sm" onClick={() => selectShare(1)}>
-            1 parte ({formatCentsBRL(share.nominalPartCents)})
-          </Button>
+          <div
+            className={`flex items-center gap-1 rounded-control-sm border py-0.5 pl-0.5 pr-2 ${
+              isShareSelected ? "border-wine bg-wine/5" : "border-line"
+            }`}
+          >
+            <IconButton
+              label="Diminuir partes a pagar"
+              icon={Minus}
+              size="sm"
+              className="disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => {
+                const next = Math.max(0, sharePartsCount - 1);
+                setSharePartsCount(next);
+                commitShareParts(next);
+              }}
+              disabled={sharePartsCount <= 0}
+            />
+            <span className="tabular w-4 text-center text-sm font-medium text-ink">{sharePartsCount}</span>
+            <IconButton
+              label="Aumentar partes a pagar"
+              icon={Plus}
+              size="sm"
+              className="disabled:pointer-events-none disabled:opacity-40"
+              onClick={() => {
+                const next = Math.min(maxShareParts, sharePartsCount + 1);
+                setSharePartsCount(next);
+                commitShareParts(next);
+              }}
+              disabled={sharePartsCount >= maxShareParts}
+            />
+            <span className="tabular text-xs font-medium text-ink">
+              {sharePartsCount > 0
+                ? `${sharePartsCount} parte(s) (${formatCentsBRL(share.nominalPartCents * sharePartsCount)})`
+                : "partes"}
+            </span>
+          </div>
         )}
         <Button
           variant={isCustomSelected ? "secondary" : "outline"}

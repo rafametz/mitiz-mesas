@@ -175,6 +175,28 @@ seleção por unidade fica bloqueada** — só "Dividir"/"Redistribuir"/
 Remover a divisão (`openShareParts = null`) libera a unidade de novo,
 normalmente.
 
+### Seletor de "quantas partes pagar de uma vez" (2026-08-19)
+
+Pedido do usuário: no caixa, uma pessoa pode estar quitando a parte dela
+**e** a de outra ao mesmo tempo (ex.: 2 das 4 partes de uma porção). O
+mecanismo pra isso já existia desde a versão original do rateio
+(`AllocationRequest` do tipo `SHARE` sempre aceitou `parts` como
+qualquer número, não só 1 — é o mesmo caminho que `distributeAmountFifo`
+usa pra atravessar mais de uma linha de origem quando a fração pedida
+passa da mais antiga). Só faltava a tela oferecer isso: o botão "1
+parte" era fixo, e a única forma de pagar mais de uma parte de uma vez
+era digitar "Outro valor" — que grava como `CUSTOM`
+(`shareNumerator`/`shareDenominator` nulos), perdendo o vínculo com o
+rateio no histórico e no cálculo de "quantas partes restam".
+
+Trocado por um seletor (mesmo padrão visual de "Selecionar unidades"):
+`-`/contador/`+`, cada clique já confirma a seleção na hora (sem passo
+de "adicionar" separado), limitado a `remainingShareParts` (saldo aberto
+do grupo ÷ valor nominal fixo da parte — mesma conta já usada pra
+mostrar "N de M em aberto" na tela). "Outro valor" continua existindo do
+jeito que sempre foi, pra quando a pessoa quer pagar um valor solto sem
+vínculo com partes.
+
 ### Agrupamento na tela de seleção
 
 Revisado em 2026-08-15 (correção de bug relatado pelo usuário: um chope

@@ -883,6 +883,14 @@ permissão e ter controle de quem usa o sistema.
   (vira uma nota explicando o motivo) e o servidor rejeita qualquer
   alocação `UNITS` contra linha com `openShareParts` gravado, mesmo
   pulando a tela.
+- ✅ Melhoria 2026-08-19 (pedido do usuário): botão fixo "1 parte" virou
+  um seletor (-/contador/+, mesmo padrão de "Selecionar unidades") pra
+  pagar quantas partes quiser de uma vez (ex.: a parte de duas pessoas
+  juntas), sempre com vínculo de rateio gravado (`shareNumerator`/
+  `shareDenominator`) — o mecanismo já existia desde a v1 do rateio
+  (`distributeAmountFifo` já sabia atravessar mais de uma linha de
+  origem pra uma fração maior), só a tela ainda não oferecia escolher
+  mais de 1 parte de uma vez.
 - **Testes**: 14 integração
   (`tests/integration/payment-item-allocation.test.ts` — unidades
   parciais com rejeição de sobre-alocação, agrupamento entre pedidos
