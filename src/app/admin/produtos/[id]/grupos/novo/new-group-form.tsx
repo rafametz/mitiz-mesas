@@ -43,6 +43,7 @@ export function NewGroupForm({ productId }: { productId: string }) {
         type="number"
         min={0}
         defaultValue={0}
+        hint="0 = opcional. 1 ou mais torna o grupo obrigatório."
       />
       <TextField
         label="Máximo de seleções"
@@ -51,7 +52,6 @@ export function NewGroupForm({ productId }: { productId: string }) {
         min={1}
         defaultValue={1}
       />
-      <CheckboxField label="Obrigatório" name="required" />
       <CheckboxField label="Ativo" name="active" defaultChecked />
       {state.error && (
         <p role="alert" className="text-sm text-wine">

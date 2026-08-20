@@ -17,7 +17,7 @@ export function UpdateGroupForm({
   group,
 }: {
   groupId: string;
-  group: { name: string; minSelect: number; maxSelect: number; required: boolean; active: boolean };
+  group: { name: string; minSelect: number; maxSelect: number; active: boolean };
 }) {
   const { showToast } = useToast();
   const action = updateModifierGroup.bind(null, groupId);
@@ -36,12 +36,12 @@ export function UpdateGroupForm({
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <TextField label="Grupo" name="name" defaultValue={group.name} required maxLength={80} />
       <TextField
-        label="Mín."
+        label="Mín. (0 = opcional)"
         name="minSelect"
         type="number"
         min={0}
         defaultValue={group.minSelect}
-        className="w-20"
+        className="w-32"
       />
       <TextField
         label="Máx."
@@ -51,7 +51,6 @@ export function UpdateGroupForm({
         defaultValue={group.maxSelect}
         className="w-20"
       />
-      <CheckboxField label="Obrigatório" name="required" defaultChecked={group.required} />
       <CheckboxField label="Ativo" name="active" defaultChecked={group.active} />
       <SubmitButton pendingLabel="Salvando...">Salvar grupo</SubmitButton>
       {state.error && (

@@ -181,7 +181,7 @@ todos dependem de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
   saldo real da comanda. Sem tempo real e sem impressão ainda — produção/
   caixa precisam recarregar para ver (Módulos 5 e 7).
 
-### Dois bugs reais encontrados e corrigidos pelos testes
+### Três bugs reais encontrados e corrigidos pelos testes
 
 1. `create-order.ts` não validava `minSelect`/`maxSelect`/`required` dos
    grupos de modificadores — só validava que o modificador pertencia ao
@@ -193,6 +193,27 @@ todos dependem de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
    nunca aparecia para pedidos. Só foi pego pelo E2E deste módulo, porque
    foi o primeiro lugar que realmente filtra `active: true` ao listar
    modificadores. Corrigido: criação sempre nasce ativa.
+3. Correção 2026-08-19 (relato do usuário em produção): grupo de
+   adicional marcado como "não obrigatório" mesmo assim bloqueava o
+   pedido. Causa: `required` e `minSelect` eram dois campos
+   independentes no formulário do admin (checkbox "Obrigatório" +
+   número "Mínimo de seleções"), sem nenhuma sincronia entre eles —
+   `required=false` com `minSelect=1` (caso real: grupo "Hamburguer
+   Extra" de "Mitiz Burguer BBQ" e "Mitiz Burguer Classico") passava
+   batido na tela de novo pedido (que só olhava `required`), mas era
+   barrado ao confirmar o pedido (`create-order.ts` valida por
+   `minSelect`, não por `required`) — o operador via "não obrigatório"
+   no cadastro e ainda assim não conseguia enviar o pedido sem escolher
+   o adicional. Corrigido: `required` deixou de ser editável, agora é
+   sempre derivado de `minSelect > 0` no servidor (única fonte de
+   verdade); checkbox "Obrigatório" removido dos dois formulários
+   (criar/editar grupo), com "Mínimo de seleções" explicando "0 =
+   opcional" no lugar. Validação client-side do carrinho de novo pedido
+   (`new-order-form.tsx`) também passou a checar `minSelect` (antes só
+   olhava `required`, deixando passar sem aviso um caso que o servidor
+   ia rejeitar depois). Dados dos dois grupos já quebrados corrigidos
+   direto no banco (`minSelect` voltou a 0, batendo com o
+   `required=false` que já estava certo).
 
 ### Observação de performance (não é bug, é acúmulo de dado de teste)
 

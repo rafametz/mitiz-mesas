@@ -183,8 +183,15 @@ export function NewOrderForm({
       const selectedCount = group.modifiers.filter((m) =>
         selectedModifierIds.includes(m.id),
       ).length;
-      if (group.required && selectedCount === 0) {
-        setItemError(`Selecione uma opção em "${group.name}".`);
+      // Correção 2026-08-19 (relato do usuário: grupo marcado como não
+      // obrigatório mesmo assim bloqueava o pedido) — a checagem aqui só
+      // olhava `group.required`, mas o servidor sempre validou por
+      // `minSelect` (create-order.ts); um grupo com required=false e
+      // minSelect>0 passava por aqui sem erro e só falhava ao confirmar o
+      // pedido. `minSelect` sozinho já cobre os dois casos (é sempre >0
+      // quando o grupo é obrigatório).
+      if (selectedCount < group.minSelect) {
+        setItemError(`Selecione ao menos ${group.minSelect} opção(ões) em "${group.name}".`);
         return;
       }
       if (selectedCount > group.maxSelect) {

@@ -6,10 +6,21 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 
+// "Obrigatório" (correção 2026-08-19, relato do usuário: grupo marcado
+// como não obrigatório mesmo assim bloqueava o pedido) deixou de ser um
+// campo próprio no formulário — virava dois controles independentes
+// (checkbox "Obrigatório" e campo "Mínimo de seleções") que podiam
+// divergir sem nenhum aviso: um produto com "Obrigatório" desmarcado mas
+// "Mínimo" = 1 continuava sendo bloqueado na hora de criar o pedido
+// (create-order.ts valida por `minSelect`, não por `required`), sem
+// nenhuma pista visível pro admin de que os dois campos tinham que
+// concordar. `required` (a coluna continua existindo, só pra exibição —
+// ex.: o "(obrigatório)" na tela de novo pedido) agora é sempre derivado
+// de `minSelect > 0` no servidor, nunca mais lido direto do formulário —
+// única fonte de verdade passa a ser o "Mínimo de seleções".
 const groupSchema = z
   .object({
     name: z.string().trim().min(1, "Nome é obrigatório").max(80),
-    required: z.boolean(),
     minSelect: z.coerce.number().int().min(0),
     maxSelect: z.coerce.number().int().min(1),
     sortOrder: z.coerce.number().int().default(0),
@@ -18,12 +29,12 @@ const groupSchema = z
   .refine((data) => data.minSelect <= data.maxSelect, {
     message: "Mínimo não pode ser maior que o máximo",
     path: ["minSelect"],
-  });
+  })
+  .transform((data) => ({ ...data, required: data.minSelect > 0 }));
 
 function parseGroupForm(formData: FormData) {
   return groupSchema.parse({
     name: formData.get("name"),
-    required: formData.get("required") === "on",
     minSelect: formData.get("minSelect") || 0,
     maxSelect: formData.get("maxSelect") || 1,
     sortOrder: formData.get("sortOrder") || 0,
