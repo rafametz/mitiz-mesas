@@ -29,7 +29,14 @@ export default async function RelatorioVendasPorProdutoPage({
     where: {
       order: {
         serviceSession: {
-          table: { restaurantId: restaurant.id },
+          // `restaurantId` direto na sessão, nunca via `table:` (correção
+          // 2026-08-20, relato do usuário: pedido de retirada com 2
+          // unidades sumia do relatório) — retirada (módulo Retiradas,
+          // 2026-08-14) não tem mesa (`tableId: null`), então filtrar
+          // por `table: { restaurantId }` excluía essas sessões inteiras
+          // do relatório sem nenhum aviso. Mesmo racional já corrigido
+          // antes em relatorios/mesas/page.tsx.
+          restaurantId: restaurant.id,
           status: "CLOSED",
           closedAt: { gte: range.start, lt: range.end },
         },

@@ -729,6 +729,19 @@ impressão) existirem.
   agregação) + 3 novos em `datetime.test.ts` (helpers de intervalo).
   `tsc --noEmit`, `npm run lint`, `npm run build` e `npm test` (134/134)
   limpos. Sem migration (nenhuma mudança de schema).
+- ✅ Correção 2026-08-20 (relato do usuário: BBQ vendido 2x num pedido de
+  retirada sumia do relatório de vendas por produto): "Vendas por
+  período", "Vendas por produto" e "Horários de pico" filtravam a sessão
+  por `table: { restaurantId }` — retirada (módulo Retiradas,
+  2026-08-14) não tem mesa (`tableId: null`), então a relação `table`
+  nunca existe pra essas sessões e o filtro excluía o atendimento
+  inteiro do relatório, sem erro nem aviso nenhum (faturamento e
+  contagem de produto silenciosamente menores que o real). "Tempo de
+  mesas abertas" já tinha sido corrigido antes pra usar `restaurantId`
+  direto na sessão (é o único dos 4 que continua limitado a `type:
+  "TABLE"` por escolha, não por bug — retirada não tem "tempo aberto"
+  com sentido de mesa física). Os outros 3 corrigidos pro mesmo padrão:
+  `restaurantId` direto na `ServiceSession`, nunca via `table:`.
 
 ## Módulo 12 — Integração futura com PDV (preparação)
 

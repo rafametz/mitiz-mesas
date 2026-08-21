@@ -32,7 +32,11 @@ export default async function RelatorioHorariosDePicoPage({
 
   const sessions = await prisma.serviceSession.findMany({
     where: {
-      table: { restaurantId: restaurant.id },
+      // `restaurantId` direto na sessão, nunca via `table:` (correção
+      // 2026-08-20, relato do usuário) — retirada não tem mesa
+      // (`tableId: null`), `table: { restaurantId }` excluía essas
+      // sessões inteiras do relatório sem nenhum aviso.
+      restaurantId: restaurant.id,
       openedAt: { gte: range.start, lt: range.end },
     },
     select: { openedAt: true, guestCount: true, totalAmount: true },

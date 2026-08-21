@@ -28,7 +28,11 @@ export default async function RelatorioVendasPorPeriodoPage({
 
   const sessions = await prisma.serviceSession.findMany({
     where: {
-      table: { restaurantId: restaurant.id },
+      // `restaurantId` direto na sessão, nunca via `table:` (correção
+      // 2026-08-20, relato do usuário) — retirada não tem mesa
+      // (`tableId: null`), `table: { restaurantId }` excluía essas
+      // sessões inteiras do faturamento sem nenhum aviso.
+      restaurantId: restaurant.id,
       status: "CLOSED",
       closedAt: { gte: range.start, lt: range.end },
     },
