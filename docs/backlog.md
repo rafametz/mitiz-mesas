@@ -180,6 +180,14 @@ todos dependem de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
 - **Saída**: pedidos completos pela UI, com preço/setor congelados e
   saldo real da comanda. Sem tempo real e sem impressão ainda — produção/
   caixa precisam recarregar para ver (Módulos 5 e 7).
+- ✅ Mudança 2026-08-20 (pedido do usuário): "Ponto da carne" deixou de
+  ser um campo fixo em toda linha do carrinho de novo pedido (aparecia
+  até em item que não é carne, tipo bebida). O produto que precisa agora
+  usa o mesmo mecanismo de grupo de adicional já existente (igual ao já
+  usado pra sabor de caipirinha) — grupo "Ponto da carne" com as opções
+  como adicionais sem valor, seleção única, cadastrado só no(s)
+  produto(s) que precisam. `OrderItem.meatPoint` continua existindo no
+  schema (histórico intacto), só sem controle próprio nesta tela.
 
 ### Três bugs reais encontrados e corrigidos pelos testes
 

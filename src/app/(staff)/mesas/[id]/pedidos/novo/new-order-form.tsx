@@ -38,7 +38,6 @@ type CartItem = {
   quantity: number;
   guestId?: string;
   guestName?: string;
-  meatPoint?: string;
   notes?: string;
   modifierIds: string[];
   modifierNames: string[];
@@ -46,14 +45,6 @@ type CartItem = {
   // Decimal, esse número não vira registro financeiro em lugar nenhum.
   estimatedLineTotal: number;
 };
-
-const MEAT_POINTS = [
-  { value: "MAL_PASSADO", label: "Mal passado" },
-  { value: "AO_PONTO_PARA_MAL", label: "Ao ponto para mal" },
-  { value: "AO_PONTO", label: "Ao ponto" },
-  { value: "AO_PONTO_PARA_BEM", label: "Ao ponto para bem" },
-  { value: "BEM_PASSADO", label: "Bem passado" },
-];
 
 const initialState: FormState = { error: null };
 
@@ -149,7 +140,6 @@ export function NewOrderForm({
   }
 
   const [guestId, setGuestId] = useState("");
-  const [meatPoint, setMeatPoint] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedModifierIds, setSelectedModifierIds] = useState<string[]>([]);
   const [itemError, setItemError] = useState<string | null>(null);
@@ -214,7 +204,6 @@ export function NewOrderForm({
         quantity,
         guestId: guestId || undefined,
         guestName: guests.find((g) => g.id === guestId)?.name,
-        meatPoint: meatPoint || undefined,
         notes: notes || undefined,
         modifierIds: selectedModifierIds,
         modifierNames: chosenModifiers.map((m) => m.name),
@@ -224,7 +213,6 @@ export function NewOrderForm({
 
     setQuantityInput("1");
     setGuestId("");
-    setMeatPoint("");
     setNotes("");
     setSelectedModifierIds([]);
   }
@@ -239,7 +227,6 @@ export function NewOrderForm({
     productId: item.productId,
     quantity: item.quantity,
     guestId: item.guestId,
-    meatPoint: item.meatPoint,
     notes: item.notes,
     modifierIds: item.modifierIds,
   }));
@@ -364,6 +351,15 @@ export function NewOrderForm({
           </SelectField>
         )}
 
+        {/* "Ponto da carne" deixou de ser um campo fixo pra todo produto
+            (correção 2026-08-20, pedido do usuário: aparecia até em item
+            que não é carne, tipo bebida). O grupo de adicional abaixo
+            (mesmo mecanismo já usado pra sabor de caipirinha) cobre o
+            mesmo caso pros produtos que precisam — cadastrar um grupo
+            "Ponto da carne" com Mal passado/Ao ponto/etc. como opções,
+            seleção única, sem valor extra, só no produto que precisa. O
+            campo `OrderItem.meatPoint` continua existindo no banco (não
+            apaga histórico), só não tem mais controle próprio nesta tela. */}
         {selectedProduct && selectedProduct.modifierGroups.length > 0 && (
           <div className="flex flex-col gap-3">
             {selectedProduct.modifierGroups.map((group) => (
@@ -391,20 +387,6 @@ export function NewOrderForm({
             ))}
           </div>
         )}
-
-        <SelectField
-          label="Ponto da carne (opcional)"
-          name="meatPoint"
-          value={meatPoint}
-          onChange={(e) => setMeatPoint(e.target.value)}
-        >
-          <option value="">Não se aplica</option>
-          {MEAT_POINTS.map((mp) => (
-            <option key={mp.value} value={mp.value}>
-              {mp.label}
-            </option>
-          ))}
-        </SelectField>
 
         <TextAreaField
           label="Observação (opcional)"
