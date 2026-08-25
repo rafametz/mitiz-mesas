@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSalesByPeriod } from "@/domain/reports/sales-by-period";
 import { buildSalesByProduct } from "@/domain/reports/sales-by-product";
 import { buildTableOpenDuration } from "@/domain/reports/table-open-duration";
-import { buildPeakHours } from "@/domain/reports/peak-hours";
+import { buildArrivalsByHour, buildRevenueByOrderHour } from "@/domain/reports/peak-hours";
 
 describe("buildSalesByPeriod", () => {
   it("agrupa por dia do fechamento (América/Sao_Paulo), soma total e conta atendimentos", () => {
@@ -114,27 +114,79 @@ describe("buildTableOpenDuration", () => {
   });
 });
 
-describe("buildPeakHours", () => {
+describe("buildArrivalsByHour", () => {
   it("sempre devolve 24 baldes, mesmo sem nenhum atendimento naquela hora", () => {
-    const buckets = buildPeakHours([]);
+    const buckets = buildArrivalsByHour([]);
     expect(buckets).toHaveLength(24);
     expect(buckets[0]).toMatchObject({ hour: 0, sessionsOpened: 0, guests: 0 });
-    expect(buckets[0]?.revenue.toString()).toBe("0");
   });
 
-  it("agrupa pela hora local (América/Sao_Paulo) da abertura", () => {
-    const buckets = buildPeakHours([
-      { openedAt: new Date("2026-08-11T13:05:00-03:00"), guestCount: 2, totalAmount: "100.00" },
-      { openedAt: new Date("2026-08-11T13:45:00-03:00"), guestCount: 4, totalAmount: "50.00" },
-      { openedAt: new Date("2026-08-11T20:00:00-03:00"), guestCount: 3, totalAmount: "80.00" },
+  it("agrupa pela hora local (América/Sao_Paulo) da abertura do atendimento", () => {
+    const buckets = buildArrivalsByHour([
+      { openedAt: new Date("2026-08-11T13:05:00-03:00"), guestCount: 2 },
+      { openedAt: new Date("2026-08-11T13:45:00-03:00"), guestCount: 4 },
+      { openedAt: new Date("2026-08-11T20:00:00-03:00"), guestCount: 3 },
     ]);
 
     const hour13 = buckets.find((b) => b.hour === 13);
     expect(hour13).toMatchObject({ sessionsOpened: 2, guests: 6 });
-    expect(hour13?.revenue.toString()).toBe("150");
 
     const hour20 = buckets.find((b) => b.hour === 20);
     expect(hour20).toMatchObject({ sessionsOpened: 1, guests: 3 });
-    expect(hour20?.revenue.toString()).toBe("80");
+  });
+});
+
+describe("buildRevenueByOrderHour", () => {
+  const baseItem = {
+    quantity: 1,
+    unitPrice: "20.00",
+    status: "DELIVERED" as const,
+    modifiers: [],
+  };
+
+  it("sempre devolve 24 baldes com revenue zero, mesmo sem nenhum item naquela hora", () => {
+    const buckets = buildRevenueByOrderHour([]);
+    expect(buckets).toHaveLength(24);
+    expect(buckets[0]?.revenue.toString()).toBe("0");
+  });
+
+  it("agrupa pela hora local (América/Sao_Paulo) do lançamento do item, não da mesa como um todo", () => {
+    // Mesma mesa (mesmo atendimento), dois itens lançados em horas
+    // diferentes — cada um cai no próprio horário, não no da abertura.
+    const buckets = buildRevenueByOrderHour([
+      { ...baseItem, createdAt: new Date("2026-08-11T18:05:00-03:00"), unitPrice: "15.00" }, // chope
+      { ...baseItem, createdAt: new Date("2026-08-11T19:10:00-03:00"), unitPrice: "15.00" }, // chope
+    ]);
+
+    const hour18 = buckets.find((b) => b.hour === 18);
+    expect(hour18?.revenue.toString()).toBe("15");
+    const hour19 = buckets.find((b) => b.hour === 19);
+    expect(hour19?.revenue.toString()).toBe("15");
+  });
+
+  it("ignora item CANCELLED, mas conta CANCELLATION_REQUESTED", () => {
+    const buckets = buildRevenueByOrderHour([
+      { ...baseItem, createdAt: new Date("2026-08-11T18:00:00-03:00"), status: "CANCELLED" },
+      {
+        ...baseItem,
+        createdAt: new Date("2026-08-11T18:00:00-03:00"),
+        status: "CANCELLATION_REQUESTED",
+      },
+    ]);
+    const hour18 = buckets.find((b) => b.hour === 18);
+    expect(hour18?.revenue.toString()).toBe("20");
+  });
+
+  it("soma o valor dos adicionais na hora do item", () => {
+    const buckets = buildRevenueByOrderHour([
+      {
+        ...baseItem,
+        createdAt: new Date("2026-08-11T18:00:00-03:00"),
+        modifiers: [{ priceDeltaAtOrder: "3.00", quantity: 2 }],
+      },
+    ]);
+    // 20.00 + (3.00 * 2) = 26.00
+    const hour18 = buckets.find((b) => b.hour === 18);
+    expect(hour18?.revenue.toString()).toBe("26");
   });
 });

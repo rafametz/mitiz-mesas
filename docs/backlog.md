@@ -746,11 +746,20 @@ impressão) existirem.
   - **Horários de pico** (`/horarios-pico`) — atendimentos abertos e
     faturamento por hora do dia, pra saber quando chega mais gente e em
     que horário sai mais venda.
-  Todos os 4 usam só atendimentos `CLOSED` (mesa cancelada nunca foi
-  venda). Os 3 primeiros filtram/agrupam por `closedAt` (quando a venda se
-  conclui); "horários de pico" é a exceção deliberada e usa `openedAt`
-  (é sobre chegada, não sobre conclusão da venda) — decisão documentada
-  no próprio `src/domain/reports/peak-hours.ts`;
+  "Vendas por período", "Vendas por produto" e "Tempo de mesas abertas"
+  usam só atendimentos `CLOSED`, agrupados por `closedAt` (quando a venda
+  se conclui). "Horários de pico" é a exceção deliberada, com dois
+  critérios de horário diferentes dentro do mesmo relatório (revisão
+  2026-08-25, relato do usuário: o gráfico de faturamento jogava o valor
+  do atendimento inteiro no horário em que a mesa ABRIU, escondendo
+  quando o pedido realmente saiu):
+  - "Atendimentos abertos por horário" — por `openedAt` da sessão (é
+    sobre chegada, não sobre venda), sem exigir `CLOSED`;
+  - "Faturamento por horário" — por `OrderItem.createdAt` (horário do
+    lançamento de CADA item, não da mesa como um todo). Conta item de
+    mesa ainda aberta hoje, independente de pagamento; só exclui item
+    `CANCELLED` (mesmo critério de "vendas por produto"). Decisão
+    documentada no próprio `src/domain/reports/peak-hours.ts`;
 - ✅ Sem biblioteca de gráfico nova: barras horizontais simples
   (`src/components/ui/bar-row.tsx`), mesmo racional do `DonutChart`
   existente, só com os tokens de cor da marca (dourado pra dinheiro,
@@ -775,6 +784,20 @@ impressão) existirem.
   "TABLE"` por escolha, não por bug — retirada não tem "tempo aberto"
   com sentido de mesa física). Os outros 3 corrigidos pro mesmo padrão:
   `restaurantId` direto na `ServiceSession`, nunca via `table:`.
+- ✅ Revisão 2026-08-25 (relato do usuário, dois exemplos concretos: mesa
+  aberta 18h/fechada 21h aparecia inteira no horário de abertura; chope
+  lançado às 18h e outro às 19h numa mesa fechada às 20h): "Faturamento
+  por horário" em "Horários de pico" passou a agrupar por
+  `OrderItem.createdAt` (lançamento do item) em vez de `openedAt` da
+  sessão — `buildPeakHours` virou dois domínios independentes,
+  `buildArrivalsByHour` (chegada, `openedAt`, inalterado) e
+  `buildRevenueByOrderHour` (faturamento, lançamento do item, novo).
+  Análise de produto por horário (ex.: "que horário sai mais chope") foi
+  discutida e adiada por pedido explícito do usuário, não implementar sem
+  novo pedido. **Testes**: `reports.test.ts` reescrito pras duas funções
+  novas (mesma cobertura, incluindo item `CANCELLED` excluído e
+  adicionais somados). `tsc --noEmit`, `npm run lint`, `npm run build` e
+  suíte unitária (180/180) limpos.
 
 ## Módulo 12 — Integração futura com PDV (preparação)
 
