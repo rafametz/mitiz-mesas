@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
+import { groupByGuestName } from "@/domain/guest/group-by-guest";
 import { registerItemPaymentAction, setItemShareAction, type FormState } from "./actions";
 import type {
   ClientPayableLine,
@@ -119,6 +120,40 @@ export function PaymentSelectionForm({
 
   const allocationsPayload = cart.map((entry) => entry.payload);
 
+  // Agrupado por pessoa (2026-08-20, pedido do usuário): facilita achar
+  // rápido o que uma pessoa específica da mesa está consumindo, na hora
+  // de selecionar o que ela vai pagar. Ordem alfabética, "Consumo geral"
+  // sempre por último — mesmo critério usado no painel "Itens" da tela
+  // de pagamentos (groupByGuestName, compartilhado). Com só um grupo
+  // (mesa sem ninguém nomeado, por exemplo) não mostra cabeçalho — não
+  // há o que diferenciar.
+  const guestGroups = useMemo(() => groupByGuestName(lines), [lines]);
+  const showGuestHeadings = guestGroups.length > 1;
+
+  function renderLine(line: ClientPayableLine) {
+    return line.type === "units" ? (
+      <UnitsLineCard
+        key={line.key}
+        line={line}
+        redirectPath={redirectPath}
+        defaultParts={guestCount}
+        cartEntry={cartByKey.get(line.key)}
+        onChange={upsertEntry}
+        onRemove={removeEntry}
+      />
+    ) : (
+      <SingleLineCard
+        key={line.key}
+        line={line}
+        redirectPath={redirectPath}
+        defaultParts={guestCount}
+        cartEntry={cartByKey.get(line.key)}
+        onChange={upsertEntry}
+        onRemove={removeEntry}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 pb-4">
       {lines.length === 0 ? (
@@ -127,33 +162,18 @@ export function PaymentSelectionForm({
           title="Nenhum item em aberto para selecionar. Use o pagamento sem detalhar itens."
         />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <h2 className="font-display text-base font-semibold text-ink">Itens em aberto</h2>
-          <ul className="flex flex-col gap-2">
-            {lines.map((line) =>
-              line.type === "units" ? (
-                <UnitsLineCard
-                  key={line.key}
-                  line={line}
-                  redirectPath={redirectPath}
-                  defaultParts={guestCount}
-                  cartEntry={cartByKey.get(line.key)}
-                  onChange={upsertEntry}
-                  onRemove={removeEntry}
-                />
-              ) : (
-                <SingleLineCard
-                  key={line.key}
-                  line={line}
-                  redirectPath={redirectPath}
-                  defaultParts={guestCount}
-                  cartEntry={cartByKey.get(line.key)}
-                  onChange={upsertEntry}
-                  onRemove={removeEntry}
-                />
-              ),
-            )}
-          </ul>
+          {guestGroups.map((group) => (
+            <div key={group.guestName ?? "__geral__"} className="flex flex-col gap-2">
+              {showGuestHeadings && (
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {group.guestName ?? "Consumo geral"}
+                </h3>
+              )}
+              <ul className="flex flex-col gap-2">{group.items.map(renderLine)}</ul>
+            </div>
+          ))}
         </div>
       )}
 

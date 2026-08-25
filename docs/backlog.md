@@ -933,6 +933,15 @@ permissão e ter controle de quem usa o sistema.
   (`distributeAmountFifo` já sabia atravessar mais de uma linha de
   origem pra uma fração maior), só a tela ainda não oferecia escolher
   mais de 1 parte de uma vez.
+- ✅ Melhoria 2026-08-20 (pedido do usuário): itens em aberto agrupados
+  por pessoa, em ordem alfabética, com "Consumo geral" sempre por
+  último — tanto na tela de seleção de pagamento
+  (`/pagamentos/novo`) quanto no painel "Itens" da tela principal de
+  pagamentos (`/pagamentos`), pra já ver de cara o que cada pessoa da
+  mesa consumiu. Agrupamento puro e compartilhado
+  (`src/domain/guest/group-by-guest.ts`, `groupByGuestName`) — sem
+  cabeçalho de seção quando só existe um grupo (mesa sem ninguém
+  nomeado, por exemplo continua exatamente como antes).
 - **Testes**: 14 integração
   (`tests/integration/payment-item-allocation.test.ts` — unidades
   parciais com rejeição de sobre-alocação, agrupamento entre pedidos
@@ -942,10 +951,11 @@ permissão e ter controle de quem usa o sistema.
   pagamento livre continua funcionando, dividir item com mais de 1
   unidade, dividir duas linhas de origem atravessando ambas numa fração
   só, valor da parte fixo entre 4 pagamentos sem redistribuir, rejeição
-  de unidade contra item dividido, rejeições) e 22 unitários
+  de unidade contra item dividido, rejeições), 22 unitários
   (`tests/unit/item-allocation.test.ts`, incluindo `distributeAmountFifo`
-  e o caso de valor fixo com saldo encolhendo). `tsc --noEmit`,
-  `npm run lint`, `npm run build`, `npm test` (164/164) e
+  e o caso de valor fixo com saldo encolhendo) e 6 novos
+  (`tests/unit/group-by-guest.test.ts`). `tsc --noEmit`,
+  `npm run lint`, `npm run build`, `npm test` (170/170) e
   `npm run test:integration` (69/69) limpos.
 
 ## Ordem de execução recomendada

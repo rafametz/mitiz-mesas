@@ -14,6 +14,7 @@ import { splitEqually, type SplitItemInput } from "@/domain/service-session/spli
 import { deriveGuestParticipation } from "@/domain/service-session/guest-participation";
 import { DISCOUNT_TYPE_LABELS, formatSessionLabel } from "@/domain/service-session/labels";
 import { buildItemPaymentStatuses, type PayableOrderItemInput } from "@/domain/payment/item-allocation";
+import { groupByGuestName } from "@/domain/guest/group-by-guest";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -106,6 +107,11 @@ export default async function PagamentosPage({
   }));
   const itemStatuses = buildItemPaymentStatuses(payableItems);
   const hasOpenItemBalance = itemStatuses.some((status) => status.openAmount.greaterThan(ZERO));
+  // Agrupado por pessoa (2026-08-20, pedido do usuário): mesmo
+  // agrupamento da tela de seleção de pagamento, pra já ver de cara o
+  // que cada pessoa consumiu assim que abre a tela de pagamentos.
+  const itemStatusGroups = groupByGuestName(itemStatuses);
+  const showItemGuestHeadings = itemStatusGroups.length > 1;
 
   const canRequestClosingPermission = hasAnyPermission(user.permissions, [
     PERMISSIONS.TABLES_CLOSE_REQUEST,
@@ -333,41 +339,54 @@ export default async function PagamentosPage({
       {itemStatuses.length > 0 && (
         <Card>
           <h2 className="mb-2 text-sm font-semibold text-ink">Itens</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            {itemStatuses.map((status) => (
-              <li key={status.itemId} className="border-b border-line/60 pb-2 last:border-b-0 last:pb-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-ink">
-                    {status.label}
-                    {status.guestName && <span className="text-muted"> · {status.guestName}</span>}
-                  </span>
-                  <StatusBadge
-                    tone={
-                      status.openAmount.lessThanOrEqualTo(ZERO)
-                        ? "free"
-                        : status.paidAmount.greaterThan(ZERO)
-                          ? "gold"
-                          : "neutral"
-                    }
-                  >
-                    {status.openAmount.lessThanOrEqualTo(ZERO)
-                      ? "Pago"
-                      : status.paidAmount.greaterThan(ZERO)
-                        ? "Parcial"
-                        : "Em aberto"}
-                  </StatusBadge>
-                </div>
-                <p className="tabular text-xs text-muted">
-                  {status.units
-                    ? `${status.units.total} lançado(s) · ${status.units.paid} pago(s) · ${status.units.open} em aberto`
-                    : `${formatBRL(status.lineTotal)} · pago ${formatBRL(status.paidAmount)} · aberto ${formatBRL(status.openAmount)}`}
-                  {status.openShareParts &&
-                    status.openAmount.greaterThan(ZERO) &&
-                    ` · dividido em ${status.openShareParts} parte(s)`}
-                </p>
-              </li>
+          <div className="flex flex-col gap-3">
+            {itemStatusGroups.map((group) => (
+              <div key={group.guestName ?? "__geral__"}>
+                {showItemGuestHeadings && (
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+                    {group.guestName ?? "Consumo geral"}
+                  </h3>
+                )}
+                <ul className="flex flex-col gap-2 text-sm">
+                  {group.items.map((status) => (
+                    <li key={status.itemId} className="border-b border-line/60 pb-2 last:border-b-0 last:pb-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-ink">
+                          {status.label}
+                          {!showItemGuestHeadings && status.guestName && (
+                            <span className="text-muted"> · {status.guestName}</span>
+                          )}
+                        </span>
+                        <StatusBadge
+                          tone={
+                            status.openAmount.lessThanOrEqualTo(ZERO)
+                              ? "free"
+                              : status.paidAmount.greaterThan(ZERO)
+                                ? "gold"
+                                : "neutral"
+                          }
+                        >
+                          {status.openAmount.lessThanOrEqualTo(ZERO)
+                            ? "Pago"
+                            : status.paidAmount.greaterThan(ZERO)
+                              ? "Parcial"
+                              : "Em aberto"}
+                        </StatusBadge>
+                      </div>
+                      <p className="tabular text-xs text-muted">
+                        {status.units
+                          ? `${status.units.total} lançado(s) · ${status.units.paid} pago(s) · ${status.units.open} em aberto`
+                          : `${formatBRL(status.lineTotal)} · pago ${formatBRL(status.paidAmount)} · aberto ${formatBRL(status.openAmount)}`}
+                        {status.openShareParts &&
+                          status.openAmount.greaterThan(ZERO) &&
+                          ` · dividido em ${status.openShareParts} parte(s)`}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </Card>
       )}
 
