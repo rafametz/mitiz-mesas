@@ -12,6 +12,7 @@ import {
 } from "@/domain/order/labels";
 import { CANCELLABLE_ORDER_ITEM_STATUSES } from "@/domain/order/states";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
+import { canTransferTable } from "@/domain/service-session/transfer";
 import { TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { OpenTableForm } from "./open-table-form";
 import { authorizeCancelAction, requestCancelAction } from "./pedidos/actions";
 import { CancelItemForm } from "./pedidos/cancel-item-form";
 import { PrintBillSummaryButton } from "../print-bill-summary-button";
+import { TransferTableForm } from "./transfer-table-form";
 
 // Refatoração mobile-first da tela da mesa (foco: garçom em atendimento) —
 // Comanda + Pedidos + Pessoas viviam em 3 páginas/abas separadas; viram uma
@@ -94,6 +96,20 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
     PERMISSIONS.PAYMENTS_REGISTER,
     PERMISSIONS.PRINT_JOBS_MANAGE,
   ]);
+  // "Trocar de mesa" (CLAUDE.md seção 10, 2026-08-21) — só faz sentido
+  // com atendimento ativo (transfer-table.ts) e mesa livre disponível
+  // como destino; a consulta de mesas livres só roda se as duas
+  // condições já baterem, pra não gastar uma query à toa em toda tela
+  // da mesa.
+  const canTransferTablePermission =
+    hasPermission(user.permissions, PERMISSIONS.TABLES_TRANSFER) && canTransferTable(session.status);
+  const freeTables = canTransferTablePermission
+    ? await prisma.table.findMany({
+        where: { restaurantId: table.restaurantId, status: "FREE" },
+        orderBy: { number: "asc" },
+        select: { id: true, number: true },
+      })
+    : [];
 
   // Revisão 2026-08-10 — pagamento e fechamento são conceitos separados:
   // pagamento parcial (ou até saldo já zerado) não tira a mesa de OPEN nem
@@ -293,6 +309,23 @@ export default async function MesaComandaPage({ params }: { params: Promise<{ id
           )}
         </div>
       </details>
+
+      {/* Trocar de mesa (CLAUDE.md seção 10, 2026-08-21, pedido do
+          usuário): mover o atendimento inteiro pra outra mesa livre sem
+          fechar/reabrir nada — ex.: uma mesa melhor fica livre e o grupo
+          quer migrar. Recolhido por padrão: ação rara, não deve competir
+          visualmente com "Novo pedido"/"Fechar mesa". */}
+      {canTransferTablePermission && (
+        <details className="group overflow-hidden rounded-card border border-line bg-surface">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-3 text-sm">
+            <span className="font-semibold text-ink">Trocar de mesa</span>
+            <ChevronDown className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-line px-3 py-3">
+            <TransferTableForm tableId={id} sessionId={session.id} freeTables={freeTables} />
+          </div>
+        </details>
+      )}
 
       {/* Pedidos — detalhe por pedido (horário, status, cancelamento). Fica
           escondido por padrão: o Resumo da comanda acima já responde "o

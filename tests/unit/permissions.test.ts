@@ -57,6 +57,12 @@ describe("ROLE_PERMISSIONS — regras de negócio (CLAUDE.md seção 5 / busines
     expect(hasPermission(ROLE_PERMISSIONS.WAITER, PERMISSIONS.TABLES_CLOSE)).toBe(false);
   });
 
+  it("Garçom pode trocar de mesa (CLAUDE.md seção 5: 'quando autorizado'), Caixa não (decisão do usuário 2026-08-21)", () => {
+    expect(hasPermission(ROLE_PERMISSIONS.WAITER, PERMISSIONS.TABLES_TRANSFER)).toBe(true);
+    expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.TABLES_TRANSFER)).toBe(false);
+    expect(hasPermission(ROLE_PERMISSIONS.KITCHEN, PERMISSIONS.TABLES_TRANSFER)).toBe(false);
+  });
+
   it("Caixa registra pagamento e fecha mesa, mas não lança pedido nem abre mesa", () => {
     expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.PAYMENTS_REGISTER)).toBe(true);
     expect(hasPermission(ROLE_PERMISSIONS.CASHIER, PERMISSIONS.TABLES_CLOSE)).toBe(true);

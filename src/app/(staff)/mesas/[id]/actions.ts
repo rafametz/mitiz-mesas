@@ -15,6 +15,7 @@ import {
   BillSummaryPrintError,
   createBillSummaryPrintJob,
 } from "@/application/printing/create-bill-summary-print-job";
+import { transferTable, TransferTableError } from "@/application/service-session/transfer-table";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 
 export type FormState = { error: string | null };
@@ -171,4 +172,35 @@ export async function printBillSummaryAction(
     if (error instanceof BillSummaryPrintError) return { error: error.message, printerConfigured: null };
     return { error: "Não foi possível gerar o resumo da comanda.", printerConfigured: null };
   }
+}
+
+// "Trocar de mesa" (2026-08-21, pedido do usuário) — CLAUDE.md seção 10
+// já previa essa ação, nunca tinha sido construída. Move o atendimento
+// ativo inteiro pra outra mesa livre, sem fechar/reabrir nada (ver
+// application/service-session/transfer-table.ts). Redireciona pra tela
+// da mesa nova assim que confirma — igual ao padrão de abrir mesa.
+export async function transferTableAction(
+  tableId: string,
+  sessionId: string,
+  _prevState: FormState, // eslint-disable-line @typescript-eslint/no-unused-vars
+  formData: FormData,
+): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.TABLES_TRANSFER);
+  const destinationTableId = String(formData.get("destinationTableId") ?? "").trim();
+  if (!destinationTableId) {
+    return { error: "Selecione a mesa de destino." };
+  }
+
+  let toTableId: string;
+  try {
+    const result = await transferTable({ serviceSessionId: sessionId, destinationTableId }, user.id);
+    toTableId = result.toTableId;
+  } catch (error) {
+    if (error instanceof TransferTableError) return { error: error.message };
+    return { error: "Não foi possível trocar de mesa. Tente de novo." };
+  }
+
+  revalidatePath("/mesas");
+  revalidatePath(`/mesas/${tableId}`);
+  redirect(`/mesas/${toTableId}`);
 }

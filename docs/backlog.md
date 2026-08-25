@@ -123,12 +123,34 @@ telas de garçom/produção nos próximos módulos).
   (resumo financeiro é placeholder até os Módulos 4/8); Pedidos/Pagamentos
   são placeholder textual claro; Histórico já funciona de verdade (lista
   atendimentos encerrados da mesa, mesmo sem nenhum ainda existir).
+- ✅ "Trocar de mesa" (2026-08-21, pedido do usuário): mover um
+  atendimento ativo inteiro pra outra mesa livre, sem fechar/reabrir
+  nada — ex.: uma mesa melhor fica livre e o grupo quer migrar.
+  `transferTable` (`src/application/service-session/transfer-table.ts`)
+  só reaponta `ServiceSession.tableId` pra mesa nova e flipa o status
+  das duas mesas (antiga → `FREE`, nova → `OCCUPIED`/`WAITING_CLOSING`
+  espelhando o status do atendimento) — nenhum pedido, item, pagamento
+  ou pessoa está vinculado à mesa em si (todos apontam pro atendimento),
+  então nada disso precisa ser tocado. Só pra mesa de destino livre
+  (mover pra mesa ocupada seria "juntar mesas", função diferente, fora
+  de escopo); auditoria registrada com mesa de origem/destino. Ação em
+  `/mesas/[id]` (seção recolhida "Trocar de mesa"), permissão
+  `TABLES_TRANSFER` — Administrador e Garçom (CLAUDE.md seção 5:
+  "transferir mesa quando autorizado"), Caixa não recebe (decisão do
+  usuário).
 - **Testes**: 8 unitários (transições de estado + `canOpenTable`); 3 de
   integração contra o Supabase real — abrir mesa com sucesso, rejeição
   pela aplicação, rejeição pelo índice único do banco pulando a aplicação
   de propósito (`tests/integration/open-table.test.ts`, `npm run
 test:integration`); E2E cobrindo abrir mesa pela UI, aba Pessoas e
   confirmação de que a mesa fica ocupada (`tests/e2e/mesas.spec.ts`).
+  "Trocar de mesa": 5 unitários (`tests/unit/table-transfer.test.ts`,
+  `canTransferTable`) + 6 de integração
+  (`tests/integration/transfer-table.test.ts` — move sem alterar
+  pedido/item/pessoa/horário original, aceita pedido novo na mesa nova,
+  espelha WAITING_CLOSING quando o atendimento já está em CLOSING,
+  rejeita mesa de destino ocupada, rejeita trocar pra própria mesa,
+  rejeita atendimento já fechado).
 - **Saída**: garçom abre mesa pela UI, vê o card refletir o estado (reload
   manual — tempo real ainda não implementado, Módulo 5).
 
@@ -144,9 +166,12 @@ test:integration`); E2E cobrindo abrir mesa pela UI, aba Pessoas e
 
 ### Fora de escopo de propósito (fica para módulos seguintes)
 
-Fechar mesa, transferir mesa/item, juntar mesas, imprimir conferência —
-todos dependem de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
-(Módulo 7), que ainda não existem.
+Fechar mesa, transferir item, juntar mesas, imprimir conferência —
+dependiam de `Order` (Módulo 4), `Payment` (Módulo 8) ou impressão
+(Módulo 7), que não existiam ainda quando este módulo foi escrito.
+"Transferir mesa" saiu desta lista em 2026-08-21 (ver acima) — não
+dependia de nenhum dos três, só de `ServiceSession`/`Table`, já existentes
+desde este módulo.
 
 ## Módulo 4 — Pedidos ✅
 

@@ -63,6 +63,10 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   WAITER: [
     PERMISSIONS.TABLES_OPEN,
     PERMISSIONS.TABLES_CLOSE_REQUEST,
+    // CLAUDE.md seção 5: "Transferir itens ou mesas quando autorizado" —
+    // o garçom tem o código de permissão (2026-08-21, pedido do
+    // usuário); Caixa não recebe (decisão do usuário, mesmo pedido).
+    PERMISSIONS.TABLES_TRANSFER,
     PERMISSIONS.ORDERS_CREATE,
     PERMISSIONS.ORDERS_SEND,
     PERMISSIONS.ORDERS_CANCEL_REQUEST,
