@@ -59,13 +59,29 @@ export type VhsysProduct = {
   statusProduto: string | null;
 };
 
+// `data` é a lista de produtos numa resposta de sucesso, mas vira uma
+// STRING de mensagem numa resposta de erro (documentação da VHSYS não
+// deixa isso claro — descoberto testando contra a API real, 2026-08-29).
+// Também observado: uma busca sem nenhum resultado devolve HTTP 403 com
+// code 403 e data "Nenhum produto encontrado!" — não é falha de
+// autenticação, é só "zero produtos" com um código HTTP mal escolhido do
+// lado da VHSYS. Falha de autenticação de verdade, por outro lado, vem
+// com HTTP 200 e code 401 no corpo — o único jeito confiável de saber se
+// deu certo é `body.status === "success"`, nunca o HTTP status sozinho.
 type VhsysListProdutosResponse = {
   code: number;
   status: string;
-  message?: string;
   paging?: { total_count?: number };
-  data?: Array<Record<string, unknown>>;
+  data?: Array<Record<string, unknown>> | string;
 };
+
+// "Nenhum produto encontrado" não é um erro pra quem está buscando — é
+// uma lista vazia. Reconhecido pelo formato observado (code 403, data
+// string), não pelo texto exato da mensagem (a VHSYS pode reformular sem
+// aviso).
+function isEmptyResultResponse(body: VhsysListProdutosResponse | null): boolean {
+  return body?.code === 403 && typeof body?.data === "string";
+}
 
 // GET /produtos — https://developers.vhsys.com.br/api/listar-produtos-16211257e0
 // Só usada pela tela de vínculo manual: o admin busca pelo nome do produto
@@ -98,15 +114,20 @@ export async function listVhsysProducts(params: {
 
   const body = (await response.json().catch(() => null)) as VhsysListProdutosResponse | null;
 
-  if (!response.ok || body?.status !== "success") {
+  if (isEmptyResultResponse(body)) {
+    return { products: [], totalCount: 0 };
+  }
+
+  if (body?.status !== "success" || !Array.isArray(body.data)) {
+    const message = typeof body?.data === "string" ? body.data : null;
     throw new VhsysApiError(
-      body?.message ?? `Falha ao consultar produtos na VHSYS (HTTP ${response.status}).`,
+      message ?? `Falha ao consultar produtos na VHSYS (HTTP ${response.status}).`,
       response.status,
     );
   }
 
   return {
-    products: (body.data ?? []).map((item) => ({
+    products: body.data.map((item) => ({
       idProduto: Number(item.id_produto),
       codProduto: (item.cod_produto as string | undefined) ?? null,
       descProduto: String(item.desc_produto ?? ""),

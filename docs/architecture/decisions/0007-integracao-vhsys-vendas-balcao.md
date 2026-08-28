@@ -88,6 +88,28 @@ sistema de produção deles). Qualquer teste manual que efetivamente
 lançar uma venda no ambiente real precisa ser estornado/cancelado
 depois, manualmente, pela própria VHSYS.
 
+### Comportamento real da API, confirmado contra o ambiente de produção (2026-08-29)
+
+Validando um dos riscos já listados na análise original (item 3): o
+tratamento de erro da VHSYS é inconsistente com a documentação e entre
+si mesmo.
+
+- **Falha de autenticação** (token inválido) devolve **HTTP 200** com
+  `code: 401` e `data` (string) no corpo — nunca um HTTP 401/403 de
+  verdade.
+- **Busca sem nenhum resultado** devolve **HTTP 403** com `code: 403` e
+  `data` (string) igual a `"Nenhum produto encontrado!"` — não é falha
+  de autorização, é só lista vazia com um código HTTP mal escolhido.
+- Em qualquer um dos dois casos, `data` deixa de ser o array de produtos
+  documentado e vira uma string de mensagem — o campo `message`
+  documentado na resposta de sucesso nunca aparece de verdade.
+- Conclusão: o único sinal confiável de sucesso é `body.status ===
+  "success"` combinado com `Array.isArray(body.data)`; o HTTP status
+  sozinho não diferencia "deu certo", "não autenticado" e "zero
+  resultados". `src/lib/vhsys/client.ts` já trata os três casos
+  corretamente (`isEmptyResultResponse` reconhece o formato, não o texto
+  exato da mensagem, pra não quebrar se a VHSYS reformular).
+
 ## Consequências
 
 - Produto sem vínculo nunca bloqueia o fechamento local da mesa (Fase 1

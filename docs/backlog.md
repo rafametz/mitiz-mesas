@@ -836,6 +836,17 @@ impressão) existirem.
     build` e suíte unitária completa (184/184) limpos. Migration
     `20260828160345_product_vhsys_link` (só `ADD COLUMN`, sem dado
     existente afetado).
+  - ✅ Correção 2026-08-29 (validado contra a API real, credenciais reais
+    do usuário): o tratamento de erro da VHSYS não bate com a
+    documentação nem é consistente entre si — falha de autenticação
+    devolve HTTP 200 com `code 401` no corpo; busca sem resultado devolve
+    HTTP 403 com `code 403` e `data` (string) `"Nenhum produto
+    encontrado!"`, que **não é erro**, é lista vazia. `client.ts`
+    corrigido pra reconhecer os três casos pelo formato do corpo
+    (`body.status === "success"` + `Array.isArray(body.data)`), nunca só
+    pelo HTTP status — detalhado na ADR 0007. Sem esse ajuste, toda busca
+    sem resultado aparecia como erro vermelho na tela em vez do estado
+    vazio esperado.
 
 ## Módulo 13 — Administração de usuários ✅
 
