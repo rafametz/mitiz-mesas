@@ -859,6 +859,18 @@ impressão) existirem.
     ID mantido como alternativa pra quem já sabe o `id_produto`. Painel
     de busca genérica no topo da tela removido (redundante com a busca
     por linha).
+  - ✅ Correção 2026-08-29 (relato do usuário: numa lista grande, clicar
+    "Buscar vínculo" ou reenviar a busca com termo ajustado jogava o
+    scroll de volta pro topo da página, obrigando a descer tudo de novo
+    pra achar o produto). "Buscar vínculo"/"Fechar busca"/"Fechar" viram
+    `<Link scroll={false}>` (Next.js não mexe na posição de rolagem
+    nessa navegação). O formulário de reenviar a busca por termo, que
+    era um `<form method="get">` comum — navegação de verdade do
+    navegador, fora do controle do `scroll` do `Link` — virou
+    `SearchTermForm` (client, `router.push(..., { scroll: false })`),
+    preservando os outros parâmetros da URL (ex.: `semVinculo`). O botão
+    "Vincular" (envio de formulário via server action) já não mexia no
+    scroll, não precisou de ajuste.
 
 Não estava no roteiro original nem no backlog (CLAUDE.md §4/§23) — pedido
 novo do usuário (2026-08-13): tela de admin pra cadastrar usuário, dar/tirar

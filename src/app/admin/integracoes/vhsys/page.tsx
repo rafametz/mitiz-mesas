@@ -132,6 +132,7 @@ export default async function VhsysIntegrationPage({
                         <LinkProductForm productId={product.id} currentVhsysProductId={product.vhsysProductId} />
                         <Link
                           href={isExpanded ? hrefWithParams({}) : hrefWithParams({ buscar: product.id })}
+                          scroll={false}
                           className="text-xs font-medium text-wine underline"
                         >
                           {isExpanded ? "Fechar busca" : "Buscar vínculo"}
@@ -187,6 +188,7 @@ export default async function VhsysIntegrationPage({
                   <LinkProductForm productId={product.id} currentVhsysProductId={product.vhsysProductId} />
                   <Link
                     href={isExpanded ? hrefWithParams({}) : hrefWithParams({ buscar: product.id })}
+                    scroll={false}
                     className="text-xs font-medium text-wine underline"
                   >
                     {isExpanded ? "Fechar busca" : "Buscar vínculo"}

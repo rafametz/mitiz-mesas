@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
 import type { VhsysProduct } from "@/lib/vhsys/client";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SubmitButton } from "@/components/form/submit-button";
 import { formatBRL } from "@/lib/money";
 import { quickLinkProductAction } from "./actions";
+import { SearchTermForm } from "./search-term-form";
 
 // Painel de busca de vínculo por linha (pedido do usuário 2026-08-29): em
 // vez de copiar o id_produto de uma busca genérica e colar no campo
@@ -36,30 +36,12 @@ export function MatchPanel({
         <span className="text-xs font-semibold uppercase tracking-wide text-muted">
           Buscar vínculo · {productName}
         </span>
-        <Link href={closeHref} className="text-xs font-medium text-wine underline">
+        <Link href={closeHref} scroll={false} className="text-xs font-medium text-wine underline">
           Fechar
         </Link>
       </div>
 
-      <form className="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="buscar" value={productId} />
-        <label className="flex flex-1 min-w-[180px] flex-col gap-1 text-sm">
-          <span className="text-xs text-muted">Nome (ou parte do nome) na VHSYS</span>
-          <input
-            type="text"
-            name="termo"
-            defaultValue={term}
-            className="h-10 rounded-control-sm border border-line bg-surface px-3 text-sm text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
-          />
-        </label>
-        <button
-          type="submit"
-          className="flex h-10 items-center gap-1.5 rounded-control-sm border border-wine bg-wine px-4 text-sm font-semibold text-bg hover:bg-wine-dark"
-        >
-          <Search className="h-4 w-4" aria-hidden="true" />
-          Buscar
-        </button>
-      </form>
+      <SearchTermForm productId={productId} initialTerm={term} />
 
       {!configured ? (
         <p className="text-sm text-muted">Configure as credenciais da VHSYS para buscar produtos.</p>
