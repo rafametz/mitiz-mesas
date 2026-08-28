@@ -847,8 +847,18 @@ impressão) existirem.
     pelo HTTP status — detalhado na ADR 0007. Sem esse ajuste, toda busca
     sem resultado aparecia como erro vermelho na tela em vez do estado
     vazio esperado.
-
-## Módulo 13 — Administração de usuários ✅
+  - ✅ Melhoria de UX 2026-08-29 (pedido do usuário: buscar produto por
+    produto, copiar e colar o `id_produto` manualmente era trabalhoso):
+    cada linha da tela ganhou um botão "Buscar vínculo" que expande um
+    painel abaixo com a busca já disparada usando o próprio nome do
+    produto do MITIZ (`desc_produto` da VHSYS aceita busca parcial —
+    confirmado contra a API real). Cada resultado tem um botão "Vincular"
+    direto, sem digitar nada (`quickLinkProductAction`, id vem da própria
+    resposta da VHSYS). Termo de busca continua editável (nomenclatura da
+    VHSYS costuma ser abreviada/diferente da do MITIZ). Campo manual de
+    ID mantido como alternativa pra quem já sabe o `id_produto`. Painel
+    de busca genérica no topo da tela removido (redundante com a busca
+    por linha).
 
 Não estava no roteiro original nem no backlog (CLAUDE.md §4/§23) — pedido
 novo do usuário (2026-08-13): tela de admin pra cadastrar usuário, dar/tirar

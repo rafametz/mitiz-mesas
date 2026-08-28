@@ -32,3 +32,15 @@ export async function linkProductToVhsysAction(
   revalidatePath("/admin/integracoes/vhsys");
   return { error: null };
 }
+
+// Vincula direto a partir de um resultado já encontrado na busca por nome
+// (painel "Buscar vínculo" de cada linha, pedido do usuário 2026-08-29) —
+// o id_produto vem da própria resposta da VHSYS, não de digitação, então
+// não precisa passar por parseVhsysProductId/formulário com estado de
+// erro. `vhsysProductId` e `productId` já vêm presos via `.bind`, por
+// isso o formulário não precisa de nenhum campo escondido.
+export async function quickLinkProductAction(productId: string, vhsysProductId: number) {
+  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
+  await prisma.product.update({ where: { id: productId }, data: { vhsysProductId } });
+  revalidatePath("/admin/integracoes/vhsys");
+}
