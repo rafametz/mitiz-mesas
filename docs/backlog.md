@@ -805,6 +805,37 @@ impressão) existirem.
   identificador externo e status de integração, **sem** implementar contra
   um fornecedor real até a API oficial ser analisada (seção 21 do
   `CLAUDE.md`).
+- ✅ Análise completa aprovada e Fase 1 implementada (2026-08-25/28, pedido
+  do usuário): integração com a VHSYS (API v2), módulo Vendas Balcão
+  (PDV) — ver ADR 0007
+  (`docs/architecture/decisions/0007-integracao-vhsys-vendas-balcao.md`)
+  para o plano completo (endpoints, sequência de chamadas, idempotência,
+  reprocessamento, riscos da documentação oficial).
+  - ✅ **Fase 1 (implementada)**: vínculo manual `Product.vhsysProductId`
+    ↔ `id_produto` da VHSYS. Cliente HTTP só com `GET /produtos`
+    (`src/lib/vhsys/client.ts`), credenciais via `VHSYS_ACCESS_TOKEN`/
+    `VHSYS_SECRET_ACCESS_TOKEN` (variável de ambiente, nunca em texto
+    puro). Tela `/admin/integracoes/vhsys` (`ADMIN_MANAGE`, sem
+    permissão nova): busca produto na VHSYS por nome (referência) +
+    formulário por produto do MITIZ pra colar o `id_produto`. Vínculo
+    sempre manual e explícito — nunca resolvido por nome no momento da
+    venda (decisão do usuário). Produto sem vínculo nunca bloqueia o
+    fechamento local da mesa.
+  - Fora de escopo desta fase: criação automática da Venda Balcão ao
+    fechar mesa/retirada (Fase 2, aguardando novo pedido do usuário para
+    iniciar); desconto e taxa de serviço na venda VHSYS (suportados no
+    desenho, mas irrelevantes hoje — o MITIZ Mesas não aplica essas
+    modalidades nesse tipo de venda, confirmado pelo usuário
+    2026-08-28); criação automática de produto na VHSYS; emissão de
+    NFC-e/NF-e.
+  - **Restrição de teste explícita do usuário**: nenhum teste
+    automatizado pode criar venda real no PDV da VHSYS; teste manual que
+    lançar de verdade precisa ser estornado/cancelado depois.
+  - **Testes**: 4 unitários novos (`vhsys-link.test.ts`,
+    `parseVhsysProductId`). `tsc --noEmit`, `npm run lint`, `npm run
+    build` e suíte unitária completa (184/184) limpos. Migration
+    `20260828160345_product_vhsys_link` (só `ADD COLUMN`, sem dado
+    existente afetado).
 
 ## Módulo 13 — Administração de usuários ✅
 

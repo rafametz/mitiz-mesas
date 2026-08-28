@@ -499,6 +499,14 @@ model Product {
   available       Boolean @default(true)
   active          Boolean @default(true)
 
+  // Integração VHSYS (venda balcão/PDV, planejada 2026-08-25) — vínculo com
+  // o id_produto correspondente na VHSYS, obtido via GET /produtos e
+  // gravado manualmente pela tela /admin/integracoes/vhsys. Nulo até
+  // alguém vincular; a venda nunca resolve produto por nome (decisão do
+  // usuário) — item sem vínculo bloqueia só a sincronização daquele
+  // atendimento, nunca o fechamento local da mesa.
+  vhsysProductId Int?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
