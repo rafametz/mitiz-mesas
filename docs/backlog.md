@@ -798,6 +798,29 @@ impressão) existirem.
   novas (mesma cobertura, incluindo item `CANCELLED` excluído e
   adicionais somados). `tsc --noEmit`, `npm run lint`, `npm run build` e
   suíte unitária (180/180) limpos.
+- ✅ Investigação 2026-08-29 (relato do usuário: "vendas por produto" não
+  batia entre filtrar dois dias separados e filtrar o intervalo junto) —
+  verificado direto contra o banco, produto a produto: **os totais batiam
+  exatamente**, nenhuma divergência real. A confusão era "Chopp Pilsen"
+  (dia 2) e "Chopp Pilsen - Happy Hour" (dia 1) serem dois produtos
+  diferentes no cadastro, com o nome truncado na tela escondendo a
+  diferença ("Chopp Pilsen -..."). Nenhuma mudança de código foi
+  necessária no motor do relatório — documentado aqui pra não reabrir a
+  mesma investigação à toa se o relato se repetir.
+- ✅ Correção 2026-08-29 (relato do usuário): o filtro De/Até dos 4
+  relatórios tinha dois problemas — (1) o campo "De" usava `max` do HTML
+  preso ao "Até" atual, travando a seleção em vez de só orientar; (2) não
+  existia validação nenhuma se o usuário burlasse isso (ex.: só "Até" sem
+  `min`), rodando a consulta com intervalo invertido e devolvendo
+  silenciosamente zero linhas, sem avisar que a combinação de datas
+  estava errada. `date-range.ts` (`resolveReportDateRange`, novo, usado
+  pelos 4 relatórios) centraliza a leitura de `de`/`ate` e valida sem
+  travar nenhum campo — inválido só aparece como mensagem de erro dentro
+  do próprio card do filtro (CLAUDE.md: erro fica no contexto, valores
+  digitados preservados), e a consulta ao banco nem roda nesse caso.
+  **Testes**: 4 unitários novos (`report-date-range.test.ts`). `tsc
+  --noEmit`, `npm run lint`, `npm run build` e suíte unitária completa
+  (188/188) limpos.
 
 ## Módulo 12 — Integração futura com PDV (preparação)
 

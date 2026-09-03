@@ -5,11 +5,12 @@ import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SummaryField } from "@/components/ui/summary-field";
 import { BarRow } from "@/components/ui/bar-row";
-import { daysAgoSaoPaulo, formatDateKeyShort, saoPauloDateRange, todaySaoPaulo } from "@/lib/datetime";
+import { formatDateKeyShort, saoPauloDateRange } from "@/lib/datetime";
 import { formatBRL, toDecimal, ZERO } from "@/lib/money";
 import { BarChart3 } from "lucide-react";
 import { RelatoriosTabs } from "./tabs";
 import { DateRangeForm } from "./date-range-form";
+import { resolveReportDateRange } from "./date-range";
 
 // Módulo 11 — "vendas por período" (pedido do usuário): faturamento por
 // dia, só de atendimentos CLOSED (mesa cancelada nunca foi venda). Padrão
@@ -22,22 +23,26 @@ export default async function RelatorioVendasPorPeriodoPage({
 }) {
   const restaurant = await getCurrentRestaurant();
   const sp = await searchParams;
-  const from = sp.de ?? daysAgoSaoPaulo(6);
-  const to = sp.ate ?? todaySaoPaulo();
+  const { from, to, invalid } = resolveReportDateRange(sp);
+  // Puro/sem I/O mesmo com invalid=true (start > end, nunca usado nesse
+  // caso) — mais simples do que condicionar o cálculo em si, só a
+  // consulta ao banco é que não roda com intervalo inválido.
   const range = saoPauloDateRange(from, to);
 
-  const sessions = await prisma.serviceSession.findMany({
-    where: {
-      // `restaurantId` direto na sessão, nunca via `table:` (correção
-      // 2026-08-20, relato do usuário) — retirada não tem mesa
-      // (`tableId: null`), `table: { restaurantId }` excluía essas
-      // sessões inteiras do faturamento sem nenhum aviso.
-      restaurantId: restaurant.id,
-      status: "CLOSED",
-      closedAt: { gte: range.start, lt: range.end },
-    },
-    select: { closedAt: true, totalAmount: true },
-  });
+  const sessions = invalid
+    ? []
+    : await prisma.serviceSession.findMany({
+        where: {
+          // `restaurantId` direto na sessão, nunca via `table:` (correção
+          // 2026-08-20, relato do usuário) — retirada não tem mesa
+          // (`tableId: null`), `table: { restaurantId }` excluía essas
+          // sessões inteiras do faturamento sem nenhum aviso.
+          restaurantId: restaurant.id,
+          status: "CLOSED",
+          closedAt: { gte: range.start, lt: range.end },
+        },
+        select: { closedAt: true, totalAmount: true },
+      });
 
   const report = buildSalesByPeriod(
     sessions
@@ -52,32 +57,40 @@ export default async function RelatorioVendasPorPeriodoPage({
     <div className="flex flex-col gap-4">
       <PageHeader title="Relatórios" subtitle="Vendas por período" />
       <RelatoriosTabs active="periodo" />
-      <DateRangeForm from={from} to={to} />
+      <DateRangeForm
+        from={from}
+        to={to}
+        error={invalid ? "A data \"De\" não pode ser depois da data \"Até\". Ajuste e filtre de novo." : undefined}
+      />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <SummaryField label="Faturamento no período" value={formatBRL(report.total)} emphasis />
-        <SummaryField label="Atendimentos fechados" value={String(report.sessionsCount)} />
-        <SummaryField label="Ticket médio" value={formatBRL(averagePerSession)} />
-      </div>
-
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Faturamento por dia</h2>
-        {report.days.length === 0 ? (
-          <EmptyState icon={BarChart3} title="Nenhum atendimento fechado neste período." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {report.days.map((day) => (
-              <BarRow
-                key={day.date}
-                label={formatDateKeyShort(day.date)}
-                title={`${formatDateKeyShort(day.date)}: ${formatBRL(day.total)} (${day.sessionsCount} atendimento(s))`}
-                valueLabel={formatBRL(day.total)}
-                fraction={maxDay.greaterThan(0) ? day.total.div(maxDay).toNumber() : 0}
-              />
-            ))}
+      {!invalid && (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <SummaryField label="Faturamento no período" value={formatBRL(report.total)} emphasis />
+            <SummaryField label="Atendimentos fechados" value={String(report.sessionsCount)} />
+            <SummaryField label="Ticket médio" value={formatBRL(averagePerSession)} />
           </div>
-        )}
-      </Card>
+
+          <Card>
+            <h2 className="mb-3 text-sm font-semibold text-ink">Faturamento por dia</h2>
+            {report.days.length === 0 ? (
+              <EmptyState icon={BarChart3} title="Nenhum atendimento fechado neste período." />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {report.days.map((day) => (
+                  <BarRow
+                    key={day.date}
+                    label={formatDateKeyShort(day.date)}
+                    title={`${formatDateKeyShort(day.date)}: ${formatBRL(day.total)} (${day.sessionsCount} atendimento(s))`}
+                    valueLabel={formatBRL(day.total)}
+                    fraction={maxDay.greaterThan(0) ? day.total.div(maxDay).toNumber() : 0}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   );
 }

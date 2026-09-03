@@ -6,10 +6,11 @@ import { Card, PageHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SummaryField } from "@/components/ui/summary-field";
 import { BarRow } from "@/components/ui/bar-row";
-import { daysAgoSaoPaulo, saoPauloDateRange, todaySaoPaulo } from "@/lib/datetime";
+import { saoPauloDateRange } from "@/lib/datetime";
 import { formatBRL, ZERO } from "@/lib/money";
 import { RelatoriosTabs } from "../tabs";
 import { DateRangeForm } from "../date-range-form";
+import { resolveReportDateRange } from "../date-range";
 
 function formatHourLabel(hour: number): string {
   return `${hour.toString().padStart(2, "0")}h`;
@@ -31,36 +32,37 @@ export default async function RelatorioHorariosDePicoPage({
 }) {
   const restaurant = await getCurrentRestaurant();
   const sp = await searchParams;
-  const from = sp.de ?? daysAgoSaoPaulo(6);
-  const to = sp.ate ?? todaySaoPaulo();
+  const { from, to, invalid } = resolveReportDateRange(sp);
   const range = saoPauloDateRange(from, to);
 
-  const [sessions, items] = await Promise.all([
-    prisma.serviceSession.findMany({
-      where: {
-        // `restaurantId` direto na sessão, nunca via `table:` (correção
-        // 2026-08-20, relato do usuário) — retirada não tem mesa
-        // (`tableId: null`), `table: { restaurantId }` excluía essas
-        // sessões inteiras do relatório sem nenhum aviso.
-        restaurantId: restaurant.id,
-        openedAt: { gte: range.start, lt: range.end },
-      },
-      select: { openedAt: true, guestCount: true },
-    }),
-    prisma.orderItem.findMany({
-      where: {
-        createdAt: { gte: range.start, lt: range.end },
-        order: { serviceSession: { restaurantId: restaurant.id } },
-      },
-      select: {
-        createdAt: true,
-        quantity: true,
-        unitPrice: true,
-        status: true,
-        modifiers: { select: { priceDeltaAtOrder: true, quantity: true } },
-      },
-    }),
-  ]);
+  const [sessions, items] = invalid
+    ? [[], []]
+    : await Promise.all([
+        prisma.serviceSession.findMany({
+          where: {
+            // `restaurantId` direto na sessão, nunca via `table:` (correção
+            // 2026-08-20, relato do usuário) — retirada não tem mesa
+            // (`tableId: null`), `table: { restaurantId }` excluía essas
+            // sessões inteiras do relatório sem nenhum aviso.
+            restaurantId: restaurant.id,
+            openedAt: { gte: range.start, lt: range.end },
+          },
+          select: { openedAt: true, guestCount: true },
+        }),
+        prisma.orderItem.findMany({
+          where: {
+            createdAt: { gte: range.start, lt: range.end },
+            order: { serviceSession: { restaurantId: restaurant.id } },
+          },
+          select: {
+            createdAt: true,
+            quantity: true,
+            unitPrice: true,
+            status: true,
+            modifiers: { select: { priceDeltaAtOrder: true, quantity: true } },
+          },
+        }),
+      ]);
 
   const arrivalsBuckets = buildArrivalsByHour(sessions);
   const revenueBuckets = buildRevenueByOrderHour(items);
@@ -90,64 +92,72 @@ export default async function RelatorioHorariosDePicoPage({
     <div className="flex flex-col gap-4">
       <PageHeader title="Relatórios" subtitle="Horários de pico" />
       <RelatoriosTabs active="horarios" />
-      <DateRangeForm from={from} to={to} />
+      <DateRangeForm
+        from={from}
+        to={to}
+        error={invalid ? "A data \"De\" não pode ser depois da data \"Até\". Ajuste e filtre de novo." : undefined}
+      />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <SummaryField
-          label="Mais gente chegando"
-          value={busiestByGuests ? formatHourLabel(busiestByGuests.hour) : "Sem dados"}
-          emphasis
-        />
-        <SummaryField
-          label="Mais venda saindo"
-          value={busiestByRevenue ? formatHourLabel(busiestByRevenue.hour) : "Sem dados"}
-        />
-      </div>
-
-      <Card>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
-          <Users className="h-4 w-4 text-muted" aria-hidden="true" />
-          Atendimentos abertos por horário
-        </h2>
-        {activeArrivalBuckets.length === 0 ? (
-          <EmptyState icon={Users} title="Nenhuma mesa aberta neste período." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {activeArrivalBuckets.map((bucket) => (
-              <BarRow
-                key={bucket.hour}
-                label={formatHourLabel(bucket.hour)}
-                title={`${formatHourLabel(bucket.hour)}: ${bucket.sessionsOpened} atendimento(s), ${bucket.guests} pessoa(s)`}
-                valueLabel={`${bucket.sessionsOpened}x · ${bucket.guests} pes.`}
-                fraction={maxGuests > 0 ? bucket.guests / maxGuests : 0}
-                colorClass="bg-wine"
-              />
-            ))}
+      {!invalid && (
+        <>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <SummaryField
+              label="Mais gente chegando"
+              value={busiestByGuests ? formatHourLabel(busiestByGuests.hour) : "Sem dados"}
+              emphasis
+            />
+            <SummaryField
+              label="Mais venda saindo"
+              value={busiestByRevenue ? formatHourLabel(busiestByRevenue.hour) : "Sem dados"}
+            />
           </div>
-        )}
-      </Card>
 
-      <Card>
-        <h2 className="text-sm font-semibold text-ink">Faturamento por horário</h2>
-        <p className="mb-3 text-xs text-muted">
-          Somado pelo horário em que cada pedido foi lançado, não pela abertura da mesa.
-        </p>
-        {activeRevenueBuckets.length === 0 ? (
-          <EmptyState icon={Clock} title="Nenhum pedido lançado neste período." />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {activeRevenueBuckets.map((bucket) => (
-              <BarRow
-                key={bucket.hour}
-                label={formatHourLabel(bucket.hour)}
-                title={`${formatHourLabel(bucket.hour)}: ${formatBRL(bucket.revenue)}`}
-                valueLabel={formatBRL(bucket.revenue)}
-                fraction={maxRevenue.greaterThan(0) ? bucket.revenue.div(maxRevenue).toNumber() : 0}
-              />
-            ))}
-          </div>
-        )}
-      </Card>
+          <Card>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+              <Users className="h-4 w-4 text-muted" aria-hidden="true" />
+              Atendimentos abertos por horário
+            </h2>
+            {activeArrivalBuckets.length === 0 ? (
+              <EmptyState icon={Users} title="Nenhuma mesa aberta neste período." />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {activeArrivalBuckets.map((bucket) => (
+                  <BarRow
+                    key={bucket.hour}
+                    label={formatHourLabel(bucket.hour)}
+                    title={`${formatHourLabel(bucket.hour)}: ${bucket.sessionsOpened} atendimento(s), ${bucket.guests} pessoa(s)`}
+                    valueLabel={`${bucket.sessionsOpened}x · ${bucket.guests} pes.`}
+                    fraction={maxGuests > 0 ? bucket.guests / maxGuests : 0}
+                    colorClass="bg-wine"
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <h2 className="text-sm font-semibold text-ink">Faturamento por horário</h2>
+            <p className="mb-3 text-xs text-muted">
+              Somado pelo horário em que cada pedido foi lançado, não pela abertura da mesa.
+            </p>
+            {activeRevenueBuckets.length === 0 ? (
+              <EmptyState icon={Clock} title="Nenhum pedido lançado neste período." />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {activeRevenueBuckets.map((bucket) => (
+                  <BarRow
+                    key={bucket.hour}
+                    label={formatHourLabel(bucket.hour)}
+                    title={`${formatHourLabel(bucket.hour)}: ${formatBRL(bucket.revenue)}`}
+                    valueLabel={formatBRL(bucket.revenue)}
+                    fraction={maxRevenue.greaterThan(0) ? bucket.revenue.div(maxRevenue).toNumber() : 0}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   );
 }
