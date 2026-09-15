@@ -5,6 +5,7 @@ import { Fingerprint } from "lucide-react";
 import { MitizMark } from "@/components/brand/mitiz-mark";
 import { signOut } from "@/app/login/actions";
 import {
+  disableBiometric,
   isBiometricEnabled,
   isUnlockedForSession,
   markUnlockedForSession,
@@ -27,6 +28,17 @@ export function BiometricLockScreen({
   const [locked, setLocked] = useState<boolean | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Depois da primeira falha, mostra um jeito de desativar de vez
+  // (2026-09-15, relato do usuário: em alguns aparelhos o prompt nativo
+  // nunca aparece — a credencial salva não confere mais com o que o
+  // sistema tem cadastrado hoje — e a pessoa ficava presa: "Usar senha em
+  // vez disso" só troca de sessão, não desativa a exigência, então a
+  // próxima vez que entra numa tela que usa este portão cai na mesma
+  // tela de novo). `disableBiometric` some com a credencial guardada
+  // neste aparelho; a pessoa pode reativar depois pela tela Conta se
+  // quiser tentar de novo (ex.: depois de recadastrar a digital no
+  // aparelho).
+  const [attempts, setAttempts] = useState(0);
 
   useEffect(() => {
     const shouldLock = isBiometricEnabled(user.id) && !isUnlockedForSession(user.id);
@@ -43,7 +55,13 @@ export function BiometricLockScreen({
       setLocked(false);
     } else {
       setFailed(true);
+      setAttempts((n) => n + 1);
     }
+  }
+
+  function handleDisable() {
+    disableBiometric(user.id);
+    setLocked(false);
   }
 
   // Tenta sozinho assim que a tela de bloqueio aparece — mais rápido que
@@ -88,12 +106,25 @@ export function BiometricLockScreen({
       {/* Sai de verdade antes de mandar pro login — senão o middleware vê
           a sessão ainda válida e devolve pra cá direto, sem mostrar o
           formulário (src/middleware.ts: usuário autenticado em /login
-          volta pra "/"). */}
+          volta pra "/"). Só troca de sessão — se a biometria continuar
+          quebrada neste aparelho, a próxima navegação pra uma tela com
+          este portão cai aqui de novo. Por isso o botão "Desativar
+          biometria" abaixo, que resolve de vez. */}
       <form action={signOut}>
         <button type="submit" className="text-sm font-medium text-bg/60 underline">
           Usar senha em vez disso
         </button>
       </form>
+
+      {attempts >= 1 && (
+        <button
+          type="button"
+          onClick={handleDisable}
+          className="text-xs font-medium text-bg/40 underline"
+        >
+          Desativar biometria neste aparelho
+        </button>
+      )}
     </div>
   );
 }

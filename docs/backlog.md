@@ -80,6 +80,23 @@ existente, lint/typecheck ok, testado no fluxo real).
   cenário real de uma promise que nunca resolve). `tsc --noEmit`, `npm
   run lint`, `npm run build` e suíte unitária completa (191/191)
   limpos.
+- ✅ Correção 2026-09-15, mesmo dia (relato do usuário, com print do
+  celular: mesmo depois da correção acima, "Usar senha em vez disso"
+  entrava normalmente, mas ao navegar pra dentro de `(staff)` de novo
+  (ex.: abrir mesa) caía na mesma tela de bloqueio, e o toque em
+  "Desbloquear" não fazia o prompt nativo do Android aparecer nenhuma
+  vez): nesses aparelhos a credencial WebAuthn salva não confere mais
+  com o que o sistema operacional tem cadastrado hoje, então a
+  verificação sempre falha silenciosamente e nunca há um jeito de sair
+  do loop — sair pela senha só troca de sessão, não desativa a exigência
+  de biometria, então a próxima tela protegida caía na mesma armadilha.
+  `BiometricLockScreen` ganhou um botão "Desativar biometria neste
+  aparelho" (chama `disableBiometric`, já existente) que aparece depois
+  da primeira falha, resolvendo o portão de vez sem precisar sair do
+  app; a pessoa pode reativar depois pela tela Conta caso resolva o
+  problema do lado do aparelho (ex.: recadastrar a digital). `tsc
+  --noEmit`, `npm run lint`, `npm run build` e suíte unitária completa
+  (191/191) limpos.
 
 ### Bloqueio de rota por perfil/permissão específica — ainda não testado
 
