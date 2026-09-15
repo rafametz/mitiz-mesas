@@ -55,6 +55,32 @@ existente, lint/typecheck ok, testado no fluxo real).
   _Supabase → Authentication → Users → Add user_, vincula-o ao perfil
   Administrador sem o script nunca ver sua senha.
 
+### Desbloqueio por digital/Face ID (portão local, `BiometricLockScreen`)
+
+- ✅ Portão local via WebAuthn (`src/lib/webauthn/biometric-lock.ts`,
+  `src/components/auth/biometric-setup.tsx` e
+  `biometric-lock-screen.tsx`) — não é login remoto: a sessão do
+  Supabase continua sendo a fronteira real de segurança, a biometria só
+  evita digitar senha de novo ao reabrir o app no mesmo aparelho.
+- ✅ Correção 2026-09-15 (relato do usuário: celular preso na tela
+  "MITIZ Mesas bloqueado" / "Confirmando..." para sempre, sem conseguir
+  tentar de novo, depois de abrir uma mesa e reabrir o app): o campo
+  `timeout` do WebAuthn é só uma sugestão pro navegador/SO — em alguns
+  aparelhos Android, se o prompt biométrico falha em aparecer ou é
+  descartado fora do padrão, a promise de `navigator.credentials.*`
+  nunca resolve nem rejeita sozinha, travando a tela de bloqueio (que
+  desabilita o botão enquanto `verifying` for `true`) para sempre.
+  Adicionado `withTimeout` (`Promise.race` contra um limite próprio de
+  15s, com `AbortController` como tentativa extra de cancelar o prompt
+  de verdade) em `registerBiometric` e `verifyBiometric` — agora as duas
+  chamadas **sempre** resolvem dentro do limite, não importa o que o
+  navegador faça, permitindo tentar de novo ou cair para "Usar senha em
+  vez disso". **Testes**: 3 unitários novos
+  (`biometric-lock.test.ts`, com timers falsos simulando exatamente o
+  cenário real de uma promise que nunca resolve). `tsc --noEmit`, `npm
+  run lint`, `npm run build` e suíte unitária completa (191/191)
+  limpos.
+
 ### Bloqueio de rota por perfil/permissão específica — ainda não testado
 
 O mecanismo (`hasPermission`) está pronto e testado isoladamente, mas só

@@ -58,9 +58,45 @@ export function disableBiometric(userId: string): void {
   sessionStorage.removeItem(storageKey(userId));
 }
 
+// Tempo máximo que o app espera pelo prompt nativo antes de desistir por
+// conta própria (2026-09-15, relato do usuário: tela de bloqueio presa em
+// "Confirmando..." pra sempre, sem forma de tentar de novo nem de cair
+// pra senha). O campo `timeout` do WebAuthn é só uma sugestão pro
+// navegador/SO — em alguns aparelhos Android, se o prompt biométrico
+// falha em aparecer ou é descartado de um jeito não padrão, a promise de
+// `navigator.credentials.*` nunca resolve nem rejeita sozinha.
+export const WEBAUTHN_TIMEOUT_MS = 15000;
+
+// Garante que a promise resolvida devolvida daqui SEMPRE se resolve
+// dentro de WEBAUTHN_TIMEOUT_MS, não importa o que o navegador faça —
+// `controller.abort()` é só uma tentativa educada de cancelar o prompt de
+// verdade (nem todo navegador/versão honra `AbortSignal` no WebAuthn,
+// mesma razão do `timeout` não bastar sozinho); quem garante o limite é a
+// corrida (`Promise.race`) contra o próprio timeout, não o abort.
+export function withTimeout<T>(promise: Promise<T>, controller: AbortController): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Tempo esgotado aguardando o prompt biométrico."));
+    }, WEBAUTHN_TIMEOUT_MS);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
 // Registra a biometria já cadastrada no aparelho pra este usuário —
 // abre o prompt nativo (Face ID / digital / Windows Hello). Lança erro se
-// a pessoa cancelar ou negar; quem chama decide como mostrar isso.
+// a pessoa cancelar, negar ou o prompt não responder a tempo; quem chama
+// decide como mostrar isso.
 export async function registerBiometric(user: {
   id: string;
   name: string;
@@ -68,25 +104,30 @@ export async function registerBiometric(user: {
 }): Promise<void> {
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userIdBytes = new TextEncoder().encode(user.id);
+  const controller = new AbortController();
 
-  const credential = (await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: { name: "MITIZ Mesas" },
-      user: { id: userIdBytes, name: user.email, displayName: user.name },
-      pubKeyCredParams: [
-        { type: "public-key", alg: -7 }, // ES256
-        { type: "public-key", alg: -257 }, // RS256
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: "platform",
-        userVerification: "required",
-        residentKey: "preferred",
+  const credential = (await withTimeout(
+    navigator.credentials.create({
+      signal: controller.signal,
+      publicKey: {
+        challenge,
+        rp: { name: "MITIZ Mesas" },
+        user: { id: userIdBytes, name: user.email, displayName: user.name },
+        pubKeyCredParams: [
+          { type: "public-key", alg: -7 }, // ES256
+          { type: "public-key", alg: -257 }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+          residentKey: "preferred",
+        },
+        timeout: WEBAUTHN_TIMEOUT_MS,
+        attestation: "none",
       },
-      timeout: 60000,
-      attestation: "none",
-    },
-  })) as PublicKeyCredential | null;
+    }),
+    controller,
+  )) as PublicKeyCredential | null;
 
   if (!credential) throw new Error("Não foi possível registrar a biometria.");
 
@@ -95,23 +136,29 @@ export async function registerBiometric(user: {
 }
 
 // Pede o prompt biométrico e resolve `true` só se confirmado. Nunca lança
-// pra quem chama em caso de cancelamento/falha — trata como "não
-// desbloqueou" (a pessoa sempre pode cair para o login normal).
+// pra quem chama em caso de cancelamento/falha/travamento — trata como
+// "não desbloqueou" (a pessoa sempre pode tentar de novo ou cair para o
+// login normal por senha).
 export async function verifyBiometric(userId: string): Promise<boolean> {
   const stored = readCredential(userId);
   if (!stored) return false;
 
   const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const controller = new AbortController();
 
   try {
-    const assertion = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        allowCredentials: [{ id: base64UrlToBuffer(stored.credentialId), type: "public-key" }],
-        userVerification: "required",
-        timeout: 60000,
-      },
-    });
+    const assertion = await withTimeout(
+      navigator.credentials.get({
+        signal: controller.signal,
+        publicKey: {
+          challenge,
+          allowCredentials: [{ id: base64UrlToBuffer(stored.credentialId), type: "public-key" }],
+          userVerification: "required",
+          timeout: WEBAUTHN_TIMEOUT_MS,
+        },
+      }),
+      controller,
+    );
     return !!assertion;
   } catch {
     return false;
