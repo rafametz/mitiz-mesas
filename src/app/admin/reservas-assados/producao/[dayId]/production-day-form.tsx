@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { TextAreaField } from "@/components/form/field";
+import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
@@ -39,8 +40,14 @@ export function ProductionDayForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending, state.success]);
 
+  // Sempre inteiro (pedido do usuário 2026-10-04: mesmo padrão da
+  // quantidade de reserva) — um valor fracionado que já existia no banco
+  // (de antes desta regra) aparece arredondado aqui; só grava de volta se
+  // o admin salvar de novo.
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(products.map((p) => [p.roastProductId, String(p.plannedQuantity)])),
+    Object.fromEntries(
+      products.map((p) => [p.roastProductId, String(Math.round(p.plannedQuantity))]),
+    ),
   );
 
   const quantitiesJson = useMemo(() => JSON.stringify(quantities), [quantities]);
@@ -61,17 +68,12 @@ export function ProductionDayForm({
               )}
             </div>
             <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.1"
-                aria-label={`Quantidade planejada de ${product.name}`}
+              <QuantityStepper
+                ariaLabel={`Quantidade planejada de ${product.name}`}
                 value={quantities[product.roastProductId] ?? ""}
-                onChange={(e) =>
-                  setQuantities((prev) => ({ ...prev, [product.roastProductId]: e.target.value }))
+                onChange={(next) =>
+                  setQuantities((prev) => ({ ...prev, [product.roastProductId]: next }))
                 }
-                className="h-11 w-24 rounded-control-sm border border-line bg-surface text-center tabular text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
               />
               <span className="text-xs text-muted">{product.unit}</span>
             </div>

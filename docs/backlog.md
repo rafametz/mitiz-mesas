@@ -1217,16 +1217,27 @@ permissão e ter controle de quem usa o sistema.
   `nextSundayFrom` (`domain/roast/production.ts`), aplicada também em
   "Nova reserva" pra normalizar qualquer link direto/antigo com data
   fora de domingo;
+- ✅ Correção 2026-10-04 (relato do usuário): quantidade planejada na
+  tela de Administração (`/admin/reservas-assados/producao/[dayId]`)
+  também permitia fração (mesmo problema do campo de reserva, corrigido
+  antes) — trocado pelo mesmo `QuantityStepper`, agora movido para
+  `src/components/form/quantity-stepper.tsx` (compartilhado entre a tela
+  do garçom e a do admin); validação de inteiro também no servidor
+  (`manage-production-day.ts`). Um valor fracionado que já existia no
+  banco (de antes desta regra) é arredondado só na exibição, sem
+  reescrever nada até o admin salvar de novo;
 - **Testes**: 16 unitários (`tests/unit/roast-states.test.ts`,
   `tests/unit/roast-production.test.ts`, incluindo `nextSundayFrom`), 4
   do ticket de impressão (`tests/unit/roast-reservation-ticket.test.ts`)
-  e 9 de integração
+  e 12 de integração
   (`tests/integration/roast-reservation.test.ts` — criação, rejeição de
   overbooking, idempotência, concorrência real com duas reservas
   disputando a última unidade, edição ajustando reservado para mais e
   para menos, cancelamento com motivo obrigatório liberando a quantidade,
   entrega definitiva bloqueando edição/cancelamento posterior, quantidade
-  fracionada rejeitada, ticket de impressão criado automaticamente).
+  fracionada rejeitada, ticket de impressão criado automaticamente;
+  `tests/integration/roast-production-day.test.ts` — quantidade inteira
+  aceita, fracionada rejeitada, redução abaixo do reservado bloqueada).
   `tsc --noEmit`, `npm run lint`, `npm run build` e `npm run
   test:integration` limpos.
 

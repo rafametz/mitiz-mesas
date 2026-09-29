@@ -7,8 +7,8 @@ import { SubmitButton } from "@/components/form/submit-button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
+import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { createReservationAction, type FormState } from "../actions";
-import { QuantityStepper } from "../quantity-stepper";
 
 type ProductOption = { roastProductId: string; name: string; unit: string; available: number };
 

@@ -6,8 +6,8 @@ import { TextAreaField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
+import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { editReservationAction, type FormState } from "../../actions";
-import { QuantityStepper } from "../../quantity-stepper";
 
 type ProductOption = {
   roastProductId: string;

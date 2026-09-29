@@ -4,11 +4,13 @@ import { Minus, Plus } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 
 // Quantidade sempre em número inteiro (pedido do usuário 2026-10-04: a
-// MITIZ reserva assado por unidade, nunca fração) — mesmo padrão de
-// stepper +/- já usado em mesas/[id]/pedidos/novo/new-order-form.tsx
+// MITIZ reserva/planeja assado por unidade, nunca fração) — mesmo padrão
+// de stepper +/- já usado em mesas/[id]/pedidos/novo/new-order-form.tsx
 // (campo controlado por string, não por number, pra não travar o "1"
 // pré-marcado ao tentar apagar; normaliza pra inteiro só ao sair do
-// campo, nunca durante a digitação).
+// campo, nunca durante a digitação). Reaproveitado nas telas de
+// criar/editar reserva (garçom) e produção por dia (admin) — módulo
+// Reservas de Assados.
 const MIN_QUANTITY = 0;
 const MAX_QUANTITY = 999;
 

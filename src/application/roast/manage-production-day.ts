@@ -13,7 +13,13 @@ const quantitySchema = z.object({
   roastProductId: z.string().min(1),
   // Aceita vazio/0 = produto não disponível neste dia (não remove o
   // RoastProduct do catálogo, só zera a produção deste dia específico).
-  plannedQuantity: z.coerce.number().min(0).max(100000),
+  // Sempre inteiro (pedido do usuário 2026-10-04, mesmo racional de
+  // create-reservation.ts) — validado aqui, nunca só na UI (regra 24).
+  plannedQuantity: z.coerce
+    .number()
+    .int("Quantidade deve ser um número inteiro")
+    .min(0)
+    .max(100000),
 });
 
 const manageProductionDaySchema = z.object({
