@@ -33,7 +33,7 @@ export default async function NovaReservaPage({
   if (!productionDay) redirect(`/reservas-assados?data=${date}`);
 
   return (
-    <div className="flex flex-col gap-4 py-4">
+    <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pt-6">
       <PageHeader title="Nova reserva" subtitle={date.split("-").reverse().join("/")} />
       <NewReservationForm
         restaurantId={restaurant.id}
