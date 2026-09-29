@@ -111,6 +111,12 @@ enum PrintJobType {
   // pessoa, pagamentos e saldo), não de um Order específico. Ver
   // PrintJob.serviceSessionId abaixo.
   BILL_SUMMARY
+  // Ticket de reserva de assado (módulo Reservas de Assados, 2026-10-04,
+  // pedido do usuário) — impresso automaticamente ao criar a reserva, com
+  // nome do cliente, dia, itens e quantidades, pra quem for entregar não
+  // precisar mais anotar à mão. Não é sobre Order/setor (ver
+  // PrintJob.roastReservationId abaixo).
+  ROAST_RESERVATION
 }
 
 enum DiscountType {
@@ -678,17 +684,20 @@ model OrderItemModifier {
 // ---------------------------------------------------------------------------
 
 model PrintJob {
-  id               String  @id @default(cuid())
+  id                 String  @id @default(cuid())
   // Nulo para BILL_SUMMARY (não é sobre um pedido específico) — todo
   // outro tipo continua exigindo um Order na prática (validado na camada
   // de aplicação, não dá pra expressar "obrigatório conforme o type" no
   // schema).
-  orderId          String?
+  orderId            String?
   // Só para BILL_SUMMARY — vínculo com o atendimento inteiro, não um pedido.
-  serviceSessionId String?
+  serviceSessionId   String?
   // Nulo para BILL_SUMMARY (não pertence a um setor de produção).
-  sectorId         String?
-  printerId        String?
+  sectorId           String?
+  printerId          String?
+  // Só para ROAST_RESERVATION — vínculo com a reserva de assado, não um
+  // pedido nem um atendimento (módulo Reservas de Assados, 2026-10-04).
+  roastReservationId String?
 
   type            PrintJobType
   status          PrintJobStatus @default(PENDING)
@@ -702,13 +711,15 @@ model PrintJob {
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   printedAt DateTime? @db.Timestamptz(6)
 
-  order          Order?            @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  serviceSession ServiceSession?   @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
-  sector         ProductionSector? @relation(fields: [sectorId], references: [id], onDelete: Restrict)
-  printer        Printer?          @relation(fields: [printerId], references: [id], onDelete: SetNull)
+  order            Order?            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  serviceSession   ServiceSession?   @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
+  sector           ProductionSector? @relation(fields: [sectorId], references: [id], onDelete: Restrict)
+  printer          Printer?          @relation(fields: [printerId], references: [id], onDelete: SetNull)
+  roastReservation RoastReservation? @relation(fields: [roastReservationId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([sectorId])
+  @@index([roastReservationId])
   @@map("print_jobs")
 }
 
@@ -999,7 +1010,8 @@ model RoastReservation {
   deliveredBy   User?              @relation("RoastReservationDeliveredBy", fields: [deliveredById], references: [id], onDelete: SetNull)
   cancelledBy   User?              @relation("RoastReservationCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
 
-  items RoastReservationItem[]
+  items     RoastReservationItem[]
+  printJobs PrintJob[]
 
   @@index([restaurantId])
   @@index([productionDayId])

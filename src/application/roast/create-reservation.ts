@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { hasEnoughAvailability, isPositiveQuantity } from "@/domain/roast/production";
 import { recalculateReservedQuantity } from "./recalculate-reserved";
 import { writeAuditLog } from "@/application/audit/write-audit-log";
+import { createRoastReservationPrintJob } from "@/application/printing/create-roast-reservation-print-job";
 import { publishChange } from "@/lib/realtime/publish";
 import {
   restaurantRoastReservationsChannel,
@@ -203,6 +204,22 @@ export async function createRoastReservation(input: CreateRoastReservationInput)
           restaurantRoastReservationsChannel(data.restaurantId),
         ];
         await runAfterResponse(() => publishChange(channels, "roast_reservation.created"));
+
+        // Ticket automático (pedido do usuário 2026-10-04) — mesmo
+        // racional de createPrintJobsForOrder em create-order.ts: a
+        // reserva já está confirmada e válida, uma falha aqui só
+        // significa que o ticket não vai sair impresso desta vez (fica
+        // registrado no log do servidor pra investigar).
+        await runAfterResponse(async () => {
+          try {
+            await createRoastReservationPrintJob(result.reservation.id);
+          } catch (error) {
+            console.error(
+              `[createRoastReservation] falha ao criar PrintJob da reserva ${result.reservation.id}:`,
+              error,
+            );
+          }
+        });
       }
 
       return result.reservation;

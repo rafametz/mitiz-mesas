@@ -59,6 +59,7 @@ const TYPE_LABEL = {
   CANCELLATION: "*** CANCELAMENTO ***",
   REPRINT: "*** REIMPRESSAO ***",
   BILL_SUMMARY: "*** RESUMO DA COMANDA ***",
+  ROAST_RESERVATION: "*** RESERVA DE ASSADO ***",
 };
 
 function formatDateTimeBR(iso) {
@@ -146,12 +147,57 @@ function renderBillSummary(content) {
   printer.cut();
 }
 
+// Ticket de reserva de assado (formato em
+// src/domain/printing/roast-reservation-ticket.ts no projeto principal,
+// módulo Reservas de Assados 2026-10-04) — cliente, dia, itens com nome e
+// quantidade, sem setor nem número de pedido (não é sobre um Order).
+// Impresso automaticamente ao criar a reserva, pra quem for entregar não
+// precisar mais anotar à mão.
+function renderRoastReservation(content) {
+  printer.clear();
+  printer.setTextDoubleHeight();
+  printer.alignCenter();
+  printer.bold(true);
+  printer.println(content.restaurantName);
+  printer.bold(false);
+  printer.println(TYPE_LABEL.ROAST_RESERVATION);
+  printer.drawLine();
+
+  printer.alignLeft();
+  printer.println(`Cliente: ${content.customerName}`);
+  if (content.customerPhone) printer.println(`Telefone: ${content.customerPhone}`);
+  printer.println(`Dia da retirada: ${content.productionDayDateLabel}`);
+  printer.println(`Garcom: ${content.waiterName}`);
+  printer.println(`Hora: ${formatDateTimeBR(content.generatedAt)}`);
+  printer.drawLine();
+
+  for (const item of content.items) {
+    printer.bold(true);
+    printer.println(`${item.quantity}x ${item.productName} (${item.unit})`);
+    printer.bold(false);
+  }
+
+  if (content.notes) {
+    printer.drawLine();
+    printer.bold(true);
+    printer.println(`OBS: ${content.notes}`);
+    printer.bold(false);
+  }
+
+  printer.drawLine();
+  printer.cut();
+}
+
 // Monta o ticket a partir do `contentSnapshot` (formato descrito em
 // src/domain/printing/ticket.ts no projeto principal) — decisão de layout
 // (negrito, corte, largura de coluna) é toda daqui, não do servidor.
 function renderTicket(content) {
   if (content.type === "BILL_SUMMARY") {
     renderBillSummary(content);
+    return;
+  }
+  if (content.type === "ROAST_RESERVATION") {
+    renderRoastReservation(content);
     return;
   }
 

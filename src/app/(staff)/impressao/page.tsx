@@ -50,12 +50,16 @@ export default async function ImpressaoPage({
     }),
   ]);
 
-  // BILL_SUMMARY não tem `order` (orderId nulo) — filtra pelo restaurante
-  // (e, se escolhida, pela mesa) por qualquer um dos dois vínculos
-  // possíveis (order ou serviceSession direto), senão esses jobs somem da
-  // lista inteira. restaurantId direto na ServiceSession (módulo
-  // Retiradas, 2026-08-14) — via table.restaurantId excluiria todo ticket
-  // de retirada, que não tem mesa.
+  // BILL_SUMMARY e ROAST_RESERVATION não têm `order` (orderId nulo) —
+  // filtra pelo restaurante (e, se escolhida, pela mesa) por qualquer um
+  // dos vínculos possíveis (order, serviceSession ou roastReservation
+  // direto), senão esses jobs somem da lista inteira. restaurantId direto
+  // na ServiceSession (módulo Retiradas, 2026-08-14) — via
+  // table.restaurantId excluiria todo ticket de retirada, que não tem
+  // mesa. Reserva de assado não tem mesa nenhuma (módulo Reservas de
+  // Assados, 2026-10-04) — só entra no filtro de restaurante, some da
+  // lista quando um "mesa" específico está selecionado (mesmo
+  // comportamento que retirada já tinha).
   const jobs = await prisma.printJob.findMany({
     where: {
       AND: [
@@ -63,6 +67,7 @@ export default async function ImpressaoPage({
           OR: [
             { order: { serviceSession: { restaurantId: restaurant.id } } },
             { serviceSession: { restaurantId: restaurant.id } },
+            { roastReservation: { restaurantId: restaurant.id } },
           ],
         },
         { createdAt: { gte: dateRange.start, lt: dateRange.end } },
@@ -80,6 +85,7 @@ export default async function ImpressaoPage({
       order: { include: { serviceSession: { include: { table: true } } } },
       serviceSession: { include: { table: true } },
       sector: true,
+      roastReservation: true,
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -156,9 +162,10 @@ export default async function ImpressaoPage({
 
       <div className="flex flex-col gap-2">
         {jobs.map((job) => {
-          // BILL_SUMMARY não tem order/sector (não é sobre um pedido
-          // específico) — resolve pelo vínculo que existir. Rótulo cobre
-          // mesa ou retirada (módulo Retiradas, 2026-08-14).
+          // BILL_SUMMARY e ROAST_RESERVATION não têm order/sector (não são
+          // sobre um pedido específico) — resolve pelo vínculo que existir.
+          // Rótulo cobre mesa, retirada (módulo Retiradas, 2026-08-14) ou
+          // reserva de assado (módulo Reservas de Assados, 2026-10-04).
           const session = job.order?.serviceSession ?? job.serviceSession ?? null;
 
           return (
@@ -166,7 +173,11 @@ export default async function ImpressaoPage({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="font-display font-semibold text-ink">
-                    {session ? formatSessionLabel(session, session.table?.number) : "Não identificado"}
+                    {job.roastReservation
+                      ? `Reserva: ${job.roastReservation.customerName}`
+                      : session
+                        ? formatSessionLabel(session, session.table?.number)
+                        : "Não identificado"}
                   </span>
                   {job.order && (
                     <span className="text-xs text-muted">

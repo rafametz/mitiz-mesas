@@ -273,7 +273,11 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     const claimed = await claimPendingPrintJobs(printerId, 50);
     const claimedOurs = claimed.find((j) => j.id === job!.id);
     expect(claimedOurs).toBeTruthy();
-    expect(claimedOurs?.content.tableNumber).toBeTruthy();
+    const content = claimedOurs?.content;
+    if (content?.type === "BILL_SUMMARY" || content?.type === "ROAST_RESERVATION") {
+      throw new Error("Esperado um ticket de pedido, não um resumo/reserva.");
+    }
+    expect(content?.tableNumber).toBeTruthy();
 
     const reloaded = await prisma.printJob.findUniqueOrThrow({ where: { id: job!.id } });
     expect(reloaded.status).toBe("PROCESSING");

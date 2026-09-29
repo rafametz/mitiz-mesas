@@ -1179,16 +1179,46 @@ permissão e ter controle de quem usa o sistema.
   reserva antes);
 - Fora de escopo por decisão do usuário: integração automática com VHSYS,
   cobrança/sinal, controle de custo, controle de estoque por peso real,
-  WhatsApp, impressão automática, controle de entrega/logística,
-  relatórios financeiros complexos.
+  WhatsApp, controle de entrega/logística, relatórios financeiros
+  complexos.
+- ✅ Correção 2026-10-04 (relato do usuário): quantidade de item na
+  reserva permitia fração (input `number` com `step="0.1"`, as setinhas
+  chegavam a mostrar "0,1"/"0,2") — reserva de assado é sempre por
+  unidade inteira. Trocado por um stepper +/- com campo controlado por
+  texto (`QuantityStepper`, mesmo padrão do lançamento de pedido de
+  mesa), reutilizado nas telas de criar e editar reserva; validação de
+  inteiro também no servidor (`create-reservation.ts`/
+  `edit-reservation.ts`), nunca só na UI (regra 24);
+- ✅ Correção 2026-10-04 (relato do usuário, screenshot em desktop): telas
+  de Nova reserva e Editar reserva não tinham o container centralizado
+  (`mx-auto max-w-3xl`) das demais telas do módulo, esticando os campos
+  por toda a largura em telas grandes;
+- ✅ Impressão automática do ticket de reserva (2026-10-04, pedido do
+  usuário — reverte a decisão de escopo anterior) — mesmo mecanismo de
+  fila/agente do Módulo 7 (`PrintJob`), novo tipo `ROAST_RESERVATION`,
+  criado via `runAfterResponse` logo após a reserva ser confirmada
+  (`create-reservation.ts`). Ticket traz cliente, telefone, dia da
+  retirada, garçom, itens com nome/quantidade/unidade e observação — sem
+  valor financeiro (o módulo não vende, só reserva). Diferente do resumo
+  da comanda, este tipo é reimprimível (conteúdo congelado, não reflete
+  estado que muda depois). Migration
+  `20261004120000_roast_reservation_print_job` (`PrintJob.roastReservationId`,
+  novo valor de enum). Fila `/impressao` e agente local
+  (`printer-agent/agent.js`) atualizados para reconhecer o novo tipo —
+  **o agente físico precisa ser atualizado e reiniciado no computador do
+  balcão** para passar a imprimir este ticket (não é coberto pelo deploy
+  do Vercel). Documentado em `docs/printing/architecture.md`;
 - **Testes**: 12 unitários (`tests/unit/roast-states.test.ts`,
-  `tests/unit/roast-production.test.ts`) e 7 de integração
+  `tests/unit/roast-production.test.ts`), 4 do ticket de impressão
+  (`tests/unit/roast-reservation-ticket.test.ts`) e 9 de integração
   (`tests/integration/roast-reservation.test.ts` — criação, rejeição de
   overbooking, idempotência, concorrência real com duas reservas
   disputando a última unidade, edição ajustando reservado para mais e
   para menos, cancelamento com motivo obrigatório liberando a quantidade,
-  entrega definitiva bloqueando edição/cancelamento posterior). `tsc
-  --noEmit`, `npm run lint` e `npm run build` limpos.
+  entrega definitiva bloqueando edição/cancelamento posterior, quantidade
+  fracionada rejeitada, ticket de impressão criado automaticamente).
+  `tsc --noEmit`, `npm run lint`, `npm run build` e `npm run
+  test:integration` limpos.
 
 ## Ordem de execução recomendada
 

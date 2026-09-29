@@ -10,6 +10,7 @@ import {
   deliverRoastReservation,
   DeliverRoastReservationError,
 } from "@/application/roast/deliver-reservation";
+import { roastReservationTicketContentSchema } from "@/domain/printing/roast-reservation-ticket";
 
 // Módulo Reservas de Assados (2026-09-29) — cobre especialmente o
 // requisito central do usuário: nunca deixar reservar mais do que o
@@ -45,6 +46,12 @@ describe("Reservas de Assados", () => {
   });
 
   afterAll(async () => {
+    // PrintJob.roastReservationId é onDelete: Restrict (regra 7/8 — nada
+    // financeiro/operacional apagado por cascade) — precisa sumir antes
+    // da reserva, senão a limpeza abaixo falha por FK.
+    await prisma.printJob.deleteMany({
+      where: { roastReservation: { productionDayId: { in: productionDayIds } } },
+    });
     await prisma.roastReservationItem.deleteMany({
       where: { roastProduction: { productionDayId: { in: productionDayIds } } },
     });
@@ -72,6 +79,34 @@ describe("Reservas de Assados", () => {
       where: { productionDayId: day.id, roastProductId },
     });
     expect(production.reservedQuantity.toString()).toBe("4");
+  });
+
+  it("cria automaticamente o ticket de impressão da reserva (pedido do usuário 2026-10-04)", async () => {
+    const day = await makeProductionDay(`2030-01-09-${suffix}`, 10);
+
+    const reservation = await createRoastReservation({
+      restaurantId,
+      productionDayId: day.id,
+      waiterId,
+      idempotencyKey: `roast-print-${Date.now()}-${Math.random()}`,
+      customerName: "Cliente Impressão",
+      customerPhone: "11988887777",
+      notes: "Retirar antes das 18h",
+      items: [{ roastProductId, quantity: 2 }],
+    });
+
+    const job = await prisma.printJob.findFirstOrThrow({
+      where: { roastReservationId: reservation.id },
+    });
+    expect(job.type).toBe("ROAST_RESERVATION");
+
+    const content = roastReservationTicketContentSchema.parse(job.contentSnapshot);
+    expect(content.customerName).toBe("Cliente Impressão");
+    expect(content.customerPhone).toBe("11988887777");
+    expect(content.notes).toBe("Retirar antes das 18h");
+    expect(content.items).toEqual([
+      { productName: `Costela teste ${suffix}`, quantity: 2, unit: "kg" },
+    ]);
   });
 
   it("rejeita quantidade fracionada (reserva é sempre por unidade inteira)", async () => {

@@ -85,9 +85,32 @@ usuário 2026-09-29):
 
 Integração automática com VHSYS, cobrança/pagamento de sinal, controle de
 custo, controle de estoque por peso real, notificação por WhatsApp,
-impressão automática de comprovante, controle de entrega/logística,
-relatórios financeiros complexos. Este módulo é só disponibilidade +
-pré-encomenda por dia.
+controle de entrega/logística, relatórios financeiros complexos. Este
+módulo é só disponibilidade + pré-encomenda por dia.
+
+## Adenda 2026-10-04 — ticket de impressão automático
+
+O usuário pediu, numa iteração seguinte, impressão automática de um
+ticket ao criar a reserva (cliente, dia, itens com nome/quantidade), pra
+quem for entregar não precisar mais anotar à mão — mesmo mecanismo de
+fila/agente já usado para pedido de mesa (Módulo 7, `PrintJob`).
+
+Isto **não contradiz** o requisito de independência da seção "Contexto"
+acima ("não pode acionar impressão de cozinha"): o ticket novo
+(`PrintJobType.ROAST_RESERVATION`) não é uma impressão de cozinha — não
+tem `orderId`, não tem `sectorId`, não passa por nenhum `ProductionSector`
+nem pela esteira de status de pedido (SENT/IN_PREPARATION/READY). É um
+tipo de ticket próprio (mesmo racional de `BILL_SUMMARY`, que também não é
+"impressão de cozinha"), roteado pra a mesma impressora física só porque é
+a única cadastrada hoje — o requisito original era sobre não interferir no
+fluxo de comanda/pedido/PDV, que continua intacto. Diferente de
+`BILL_SUMMARY`, porém, este tipo **é** reimprimível — o conteúdo é
+congelado no momento da reserva, não reflete um saldo que muda depois,
+então reimprimir faz sentido (papel perdido/rasgado a caminho da entrega).
+
+Ver `src/domain/printing/roast-reservation-ticket.ts`, migration
+`20261004120000_roast_reservation_print_job` e
+`docs/printing/architecture.md` para o detalhe completo.
 
 ## Consequências
 

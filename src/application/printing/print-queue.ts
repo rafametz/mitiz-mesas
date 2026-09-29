@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { hashPrinterToken } from "@/lib/printing/token";
 import { ticketContentSchema, buildTicketContent } from "@/domain/printing/ticket";
 import { billSummaryContentSchema } from "@/domain/printing/bill-summary";
+import {
+  roastReservationTicketContentSchema,
+  buildRoastReservationTicketContent,
+} from "@/domain/printing/roast-reservation-ticket";
 import { canTransitionPrintJob } from "@/domain/printing/states";
 import { publishChange } from "@/lib/realtime/publish";
 import { sectorChannel } from "@/lib/realtime/channels";
@@ -41,13 +45,16 @@ export async function claimPendingPrintJobs(printerId: string, limit = 10) {
       id: job.id,
       type: job.type,
       attempts: job.attempts,
-      // BILL_SUMMARY tem um formato de conteúdo próprio (bill-summary.ts),
-      // sem setor nem número de pedido — os outros 4 tipos continuam no
-      // formato de ticket.ts.
+      // BILL_SUMMARY e ROAST_RESERVATION têm formato de conteúdo próprio
+      // (bill-summary.ts / roast-reservation-ticket.ts), sem setor nem
+      // número de pedido — os outros tipos continuam no formato de
+      // ticket.ts.
       content:
         job.type === "BILL_SUMMARY"
           ? billSummaryContentSchema.parse(job.contentSnapshot)
-          : ticketContentSchema.parse(job.contentSnapshot),
+          : job.type === "ROAST_RESERVATION"
+            ? roastReservationTicketContentSchema.parse(job.contentSnapshot)
+            : ticketContentSchema.parse(job.contentSnapshot),
     }));
   });
 }
@@ -119,6 +126,46 @@ export async function createReprintJob(originalJobId: string) {
       "Resumo da comanda não é reimprimível. Gere um novo pela tela da mesa (Imprimir conferência), assim ele já sai com o saldo atual.",
     );
   }
+
+  // Ticket de reserva de assado (módulo Reservas de Assados, 2026-10-04):
+  // ao contrário do ticket de pedido, não tem Order — reimpressão aqui é
+  // só gerar outro PrintJob com o mesmo conteúdo congelado (nome, itens,
+  // dia), continua tipo ROAST_RESERVATION mesmo (não existe uma variante
+  // "REPRINT" no schema deste ticket, o histórico de tentativas já mostra
+  // que é uma segunda impressão).
+  if (original.type === "ROAST_RESERVATION") {
+    if (!original.roastReservationId) {
+      throw new PrintJobError("Job de impressão sem reserva vinculada.");
+    }
+    const originalContent = roastReservationTicketContentSchema.parse(original.contentSnapshot);
+    const reservation = await prisma.roastReservation.findUniqueOrThrow({
+      where: { id: original.roastReservationId },
+    });
+    const printer = await prisma.printer.findFirst({
+      where: { restaurantId: reservation.restaurantId, active: true },
+    });
+
+    const content = buildRoastReservationTicketContent({
+      restaurantName: originalContent.restaurantName,
+      customerName: originalContent.customerName,
+      customerPhone: originalContent.customerPhone,
+      productionDayDateLabel: originalContent.productionDayDateLabel,
+      waiterName: originalContent.waiterName,
+      notes: originalContent.notes,
+      items: originalContent.items,
+    });
+
+    const created = await prisma.printJob.create({
+      data: {
+        roastReservationId: original.roastReservationId,
+        printerId: printer?.id ?? original.printerId,
+        type: "ROAST_RESERVATION",
+        contentSnapshot: content,
+      },
+    });
+    return created;
+  }
+
   if (!original.order) {
     throw new PrintJobError("Job de impressão sem pedido vinculado.");
   }

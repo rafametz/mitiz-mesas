@@ -98,6 +98,22 @@ ninguem processar; ver "Fora do escopo desta versão" abaixo).
      caminho certo). Formato próprio em
      `src/domain/printing/bill-summary.ts`, com valores já formatados em
      BRL (o agente não tem Decimal/Intl).
+   - Reserva de assado criada (módulo Reservas de Assados, 2026-10-04,
+     pedido do usuário): tipo `ROAST_RESERVATION`, criado via
+     `runAfterResponse` depois que `createRoastReservation` já confirmou a
+     reserva (mesmo racional do pedido de mesa — uma falha aqui nunca
+     derruba a reserva já criada). Também não é sobre um `Order` nem um
+     setor de produção (`orderId`/`sectorId` ficam nulos), e também não é
+     sobre um atendimento — usa `roastReservationId` em vez de
+     `serviceSessionId`. Conteúdo: cliente, telefone, dia da retirada,
+     garçom, itens com nome/quantidade/unidade e observação — nada
+     financeiro (o módulo não vende, só reserva). Formato próprio em
+     `src/domain/printing/roast-reservation-ticket.ts`. Diferente de
+     `BILL_SUMMARY`, este tipo **é** reimprimível
+     (`createReprintJob`/`/impressao`): o conteúdo é congelado no momento
+     da reserva, não reflete estado que muda depois, então reimprimir o
+     mesmo conteúdo faz sentido (papel perdido/rasgado a caminho da
+     entrega).
 2. **`contentSnapshot`** é montado e congelado no momento da criação — se o
    nome do produto ou da mesa mudar depois, a reimpressão sai igual ao que
    foi impresso da primeira vez (mesmo racional do preço congelado em
