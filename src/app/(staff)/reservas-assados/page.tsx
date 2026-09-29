@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
-import { availableQuantity, isValidDateKey } from "@/domain/roast/production";
+import { availableQuantity, isValidDateKey, nextSundayFrom } from "@/domain/roast/production";
 import { ROAST_RESERVATION_STATUS_LABELS } from "@/domain/roast/labels";
 import { ROAST_RESERVATION_STATUS_TONE } from "@/components/ui/status-tone";
 import { PageHeader, Card } from "@/components/ui/card";
@@ -37,7 +37,12 @@ export default async function ReservasAssadosPage({
   searchParams: Promise<{ data?: string }>;
 }) {
   const { data: dataParam } = await searchParams;
-  const date = dataParam && isValidDateKey(dataParam) ? dataParam : todaySaoPaulo();
+  // Reserva de assado só acontece aos domingos (pedido do usuário
+  // 2026-10-04) — ao abrir a tela sem data escolhida, mostra o próximo
+  // domingo a partir de hoje (hoje mesmo, se hoje já for domingo); os
+  // botões de navegação abaixo pulam de domingo em domingo, nunca
+  // dia a dia.
+  const date = nextSundayFrom(dataParam && isValidDateKey(dataParam) ? dataParam : todaySaoPaulo());
 
   const user = await requirePermission(PERMISSIONS.ROASTS_VIEW);
   const restaurant = await getCurrentRestaurant();
@@ -73,17 +78,17 @@ export default async function ReservasAssadosPage({
 
       <Card padding="sm" className="flex items-center justify-between gap-2">
         <Link
-          href={`/reservas-assados?data=${shiftDateKey(date, -1)}`}
+          href={`/reservas-assados?data=${shiftDateKey(date, -7)}`}
           className="flex h-10 w-10 items-center justify-center rounded-control-sm text-muted hover:bg-ink/5 hover:text-ink"
-          aria-label="Dia anterior"
+          aria-label="Domingo anterior"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
         <span className="text-sm font-semibold capitalize text-ink">{formatDateKeyLong(date)}</span>
         <Link
-          href={`/reservas-assados?data=${shiftDateKey(date, 1)}`}
+          href={`/reservas-assados?data=${shiftDateKey(date, 7)}`}
           className="flex h-10 w-10 items-center justify-center rounded-control-sm text-muted hover:bg-ink/5 hover:text-ink"
-          aria-label="Próximo dia"
+          aria-label="Próximo domingo"
         >
           <ChevronRight className="h-5 w-5" />
         </Link>

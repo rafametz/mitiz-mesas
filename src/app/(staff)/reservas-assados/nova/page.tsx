@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
-import { availableQuantity, isValidDateKey } from "@/domain/roast/production";
+import { availableQuantity, isValidDateKey, nextSundayFrom } from "@/domain/roast/production";
 import { PageHeader } from "@/components/ui/card";
 import { todaySaoPaulo } from "@/lib/datetime";
 import { NewReservationForm } from "./new-reservation-form";
@@ -14,7 +14,9 @@ export default async function NovaReservaPage({
   searchParams: Promise<{ data?: string }>;
 }) {
   const { data: dataParam } = await searchParams;
-  const date = dataParam && isValidDateKey(dataParam) ? dataParam : todaySaoPaulo();
+  // Mesma regra da lista (só domingo) — normaliza aqui também, pra um
+  // link direto/antigo com data fora de domingo não quebrar o fluxo.
+  const date = nextSundayFrom(dataParam && isValidDateKey(dataParam) ? dataParam : todaySaoPaulo());
 
   await requirePermission(PERMISSIONS.ROASTS_CREATE);
   const restaurant = await getCurrentRestaurant();

@@ -4,6 +4,7 @@ import {
   hasEnoughAvailability,
   isPositiveQuantity,
   isValidDateKey,
+  nextSundayFrom,
 } from "@/domain/roast/production";
 
 describe("isValidDateKey", () => {
@@ -40,6 +41,24 @@ describe("hasEnoughAvailability", () => {
 
   it("rejeita quando excede o disponível", () => {
     expect(hasEnoughAvailability(10, 8, 3)).toBe(false);
+  });
+});
+
+describe("nextSundayFrom", () => {
+  it("terça (29/09/2026) -> próximo domingo (04/10/2026), pedido do usuário 2026-10-04", () => {
+    expect(nextSundayFrom("2026-09-29")).toBe("2026-10-04");
+  });
+
+  it("segunda (05/10/2026) -> próximo domingo (11/10/2026)", () => {
+    expect(nextSundayFrom("2026-10-05")).toBe("2026-10-11");
+  });
+
+  it("já sendo domingo, devolve o mesmo dia (não pula pro seguinte)", () => {
+    expect(nextSundayFrom("2026-10-04")).toBe("2026-10-04");
+  });
+
+  it("sábado -> domingo seguinte (+1 dia)", () => {
+    expect(nextSundayFrom("2026-10-10")).toBe("2026-10-11");
   });
 });
 

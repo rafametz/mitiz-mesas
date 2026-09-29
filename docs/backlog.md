@@ -1208,9 +1208,19 @@ permissão e ter controle de quem usa o sistema.
   **o agente físico precisa ser atualizado e reiniciado no computador do
   balcão** para passar a imprimir este ticket (não é coberto pelo deploy
   do Vercel). Documentado em `docs/printing/architecture.md`;
-- **Testes**: 12 unitários (`tests/unit/roast-states.test.ts`,
-  `tests/unit/roast-production.test.ts`), 4 do ticket de impressão
-  (`tests/unit/roast-reservation-ticket.test.ts`) e 9 de integração
+- ✅ Correção 2026-10-04 (relato do usuário): a MITIZ só faz reserva de
+  assado aos domingos — a tela de reservas mostrava qualquer dia da
+  semana, um por um. Navegação por seta agora pula de domingo em domingo
+  (±7 dias, não ±1) e, ao abrir a tela sem data escolhida, mostra sempre
+  o próximo domingo a partir de hoje (o próprio dia, se hoje já for
+  domingo — nunca pula pro seguinte). Nova função pura
+  `nextSundayFrom` (`domain/roast/production.ts`), aplicada também em
+  "Nova reserva" pra normalizar qualquer link direto/antigo com data
+  fora de domingo;
+- **Testes**: 16 unitários (`tests/unit/roast-states.test.ts`,
+  `tests/unit/roast-production.test.ts`, incluindo `nextSundayFrom`), 4
+  do ticket de impressão (`tests/unit/roast-reservation-ticket.test.ts`)
+  e 9 de integração
   (`tests/integration/roast-reservation.test.ts` — criação, rejeição de
   overbooking, idempotência, concorrência real com duas reservas
   disputando a última unidade, edição ajustando reservado para mais e
