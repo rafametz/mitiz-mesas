@@ -74,6 +74,26 @@ describe("Reservas de Assados", () => {
     expect(production.reservedQuantity.toString()).toBe("4");
   });
 
+  it("rejeita quantidade fracionada (reserva é sempre por unidade inteira)", async () => {
+    const day = await makeProductionDay(`2030-01-08-${suffix}`, 10);
+
+    await expect(
+      createRoastReservation({
+        restaurantId,
+        productionDayId: day.id,
+        waiterId,
+        idempotencyKey: `roast-fraction-${Date.now()}-${Math.random()}`,
+        customerName: "Cliente Fração",
+        items: [{ roastProductId, quantity: 2.5 }],
+      }),
+    ).rejects.toThrow();
+
+    const production = await prisma.roastProduction.findFirstOrThrow({
+      where: { productionDayId: day.id, roastProductId },
+    });
+    expect(production.reservedQuantity.toString()).toBe("0");
+  });
+
   it("rejeita reserva acima do disponível", async () => {
     const day = await makeProductionDay(`2030-01-02-${suffix}`, 5);
 

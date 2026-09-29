@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { createReservationAction, type FormState } from "../actions";
+import { QuantityStepper } from "../quantity-stepper";
 
 type ProductOption = { roastProductId: string; name: string; unit: string; available: number };
 
@@ -86,19 +87,13 @@ export function NewReservationForm({
                   {sold ? "Esgotado" : `Disponível: ${product.available} ${product.unit}`}
                 </div>
               </div>
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.1"
+              <QuantityStepper
+                ariaLabel={`Quantidade de ${product.name}`}
                 disabled={sold}
-                aria-label={`Quantidade de ${product.name}`}
                 value={quantities[product.roastProductId] ?? ""}
-                onChange={(e) =>
-                  setQuantities((prev) => ({ ...prev, [product.roastProductId]: e.target.value }))
+                onChange={(next) =>
+                  setQuantities((prev) => ({ ...prev, [product.roastProductId]: next }))
                 }
-                placeholder="0"
-                className="h-11 w-20 rounded-control-sm border border-line bg-surface text-center tabular text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20 disabled:opacity-50"
               />
             </div>
           );

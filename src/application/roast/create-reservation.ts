@@ -16,7 +16,16 @@ export class CreateRoastReservationError extends Error {}
 
 const itemSchema = z.object({
   roastProductId: z.string().min(1),
-  quantity: z.coerce.number().positive("Quantidade deve ser maior que zero").max(100000),
+  // Sempre inteiro (pedido do usuário 2026-10-04: reserva de assado é por
+  // unidade, nunca fração) — o campo no banco continua Decimal(10,3) para
+  // não travar um produto vendido por peso no futuro, mas hoje toda
+  // reserva exige quantidade inteira, validado aqui (nunca só na UI —
+  // regra 24 do CLAUDE.md).
+  quantity: z.coerce
+    .number()
+    .int("Quantidade deve ser um número inteiro")
+    .positive("Quantidade deve ser maior que zero")
+    .max(100000),
 });
 
 const createReservationSchema = z.object({

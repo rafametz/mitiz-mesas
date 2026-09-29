@@ -17,7 +17,12 @@ export class EditRoastReservationError extends Error {}
 
 const itemSchema = z.object({
   roastProductId: z.string().min(1),
-  quantity: z.coerce.number().positive("Quantidade deve ser maior que zero").max(100000),
+  // Sempre inteiro — mesmo racional de create-reservation.ts.
+  quantity: z.coerce
+    .number()
+    .int("Quantidade deve ser um número inteiro")
+    .positive("Quantidade deve ser maior que zero")
+    .max(100000),
 });
 
 const editReservationSchema = z.object({
