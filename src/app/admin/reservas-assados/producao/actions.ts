@@ -1,52 +1,30 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { PERMISSIONS } from "@/domain/auth/permissions";
-import { isValidDateKey } from "@/domain/roast/production";
 import { manageProductionDay, ManageProductionDayError } from "@/application/roast/manage-production-day";
 
 export type FormState = { error: string | null; success?: boolean };
 
-// Abre a tela de um dia de produção — cria o RoastProductionDay na hora se
-// ainda não existir (sem quantidade planejada nenhuma ainda, o
-// Administrador configura na tela seguinte). Redireciona direto, sem
-// FormState: só é chamada por um <form> simples de "ano/mês/dia".
-export async function openProductionDay(formData: FormData) {
-  await requirePermission(PERMISSIONS.ADMIN_MANAGE);
-  const date = String(formData.get("date") ?? "");
-  if (!isValidDateKey(date)) {
-    throw new Error("Data inválida.");
-  }
-
-  const restaurant = await getCurrentRestaurant();
-  const day = await prisma.roastProductionDay.upsert({
-    where: { restaurantId_date: { restaurantId: restaurant.id, date } },
-    update: {},
-    create: { restaurantId: restaurant.id, date },
-  });
-
-  revalidatePath("/admin/reservas-assados/producao");
-  redirect(`/admin/reservas-assados/producao/${day.id}`);
-}
-
 const quantitiesSchema = z.record(z.string(), z.string());
 
+// Só domingo (pedido do usuário 2026-10-04, mesma regra da tela de
+// reservas do garçom — evita configurar produção num dia que nunca vai
+// virar reserva) — quem chama já resolveu `date` sempre para um domingo
+// (page.tsx usa `nextSundayFrom`). `manageProductionDay` faz upsert do
+// RoastProductionDay por (restaurantId, date): não precisa mais existir
+// antes de salvar, cria na hora se for a primeira vez que este domingo é
+// configurado.
 export async function saveProductionDayAction(
-  productionDayId: string,
+  date: string,
   _prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
   const restaurant = await getCurrentRestaurant();
-
-  const day = await prisma.roastProductionDay.findUniqueOrThrow({
-    where: { id: productionDayId },
-  });
 
   let quantitiesRaw: Record<string, string>;
   try {
@@ -63,7 +41,7 @@ export async function saveProductionDayAction(
   try {
     await manageProductionDay({
       restaurantId: restaurant.id,
-      date: day.date,
+      date,
       notes: String(formData.get("notes") ?? ""),
       quantities,
     });
@@ -74,6 +52,5 @@ export async function saveProductionDayAction(
   }
 
   revalidatePath("/admin/reservas-assados/producao");
-  revalidatePath(`/admin/reservas-assados/producao/${productionDayId}`);
   return { error: null, success: true };
 }

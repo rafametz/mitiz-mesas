@@ -13,23 +13,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Fab } from "@/components/ui/fab";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { roastProductionDayChannel, restaurantRoastReservationsChannel } from "@/lib/realtime/channels";
-import { todaySaoPaulo } from "@/lib/datetime";
-
-function shiftDateKey(date: string, deltaDays: number): string {
-  const d = new Date(`${date}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + deltaDays);
-  return d.toISOString().slice(0, 10);
-}
-
-function formatDateKeyLong(date: string): string {
-  const [year, month, day] = date.split("-");
-  return new Date(`${year}-${month}-${day}T12:00:00Z`).toLocaleDateString("pt-BR", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "UTC",
-  });
-}
+import { formatDateKeyWeekday, shiftDateKey, todaySaoPaulo } from "@/lib/datetime";
 
 export default async function ReservasAssadosPage({
   searchParams,
@@ -84,7 +68,7 @@ export default async function ReservasAssadosPage({
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
-        <span className="text-sm font-semibold capitalize text-ink">{formatDateKeyLong(date)}</span>
+        <span className="text-sm font-semibold capitalize text-ink">{formatDateKeyWeekday(date)}</span>
         <Link
           href={`/reservas-assados?data=${shiftDateKey(date, 7)}`}
           className="flex h-10 w-10 items-center justify-center rounded-control-sm text-muted hover:bg-ink/5 hover:text-ink"

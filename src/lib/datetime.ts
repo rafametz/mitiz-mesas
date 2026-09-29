@@ -72,6 +72,28 @@ export function formatDateKeyShort(dateStr: string): string {
   return `${day}/${month}`;
 }
 
+// "AAAA-MM-DD" +/- N dias, como outra chave "AAAA-MM-DD" — navegação por
+// dia/semana em telas com seta anterior/próximo (Reservas de Assados,
+// telas do garçom e do admin). `T12:00:00Z` evita problema de fuso na
+// borda da meia-noite.
+export function shiftDateKey(dateStr: string, deltaDays: number): string {
+  const date = new Date(`${dateStr}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
+}
+
+// "AAAA-MM-DD" -> "dom., 04/10" (dia da semana curto + DD/MM) — cabeçalho
+// das telas de navegação por data acima.
+export function formatDateKeyWeekday(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-");
+  return new Date(`${year}-${month}-${day}T12:00:00Z`).toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
 // "HH:mm" (horário previsto de retirada, tela "Nova retirada" — módulo
 // Retiradas) -> instante UTC do dia civil de hoje em America/Sao_Paulo.
 // Mesmo offset fixo -03:00 de saoPauloDayRange (Brasil não tem mais

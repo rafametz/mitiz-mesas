@@ -6,7 +6,7 @@ import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
-import { saveProductionDayAction, type FormState } from "../actions";
+import { saveProductionDayAction, type FormState } from "./actions";
 
 type ProductRow = {
   roastProductId: string;
@@ -18,17 +18,22 @@ type ProductRow = {
 
 const initialState: FormState = { error: null };
 
+// Trabalha por `date` (não por um `dayId` fixo) — o dia de produção pode
+// ainda não existir quando o admin navega pra um domingo nunca
+// configurado antes (mesmo racional da tela de reservas do garçom, que
+// também navega por data). `manageProductionDay` já faz upsert por
+// (restaurantId, date), então salvar aqui cria o dia na hora se precisar.
 export function ProductionDayForm({
-  productionDayId,
+  date,
   notes,
   products,
 }: {
-  productionDayId: string;
+  date: string;
   notes: string;
   products: ProductRow[];
 }) {
   const { showToast } = useToast();
-  const action = saveProductionDayAction.bind(null, productionDayId);
+  const action = saveProductionDayAction.bind(null, date);
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   const wasPending = useRef(false);
@@ -43,7 +48,9 @@ export function ProductionDayForm({
   // Sempre inteiro (pedido do usuário 2026-10-04: mesmo padrão da
   // quantidade de reserva) — um valor fracionado que já existia no banco
   // (de antes desta regra) aparece arredondado aqui; só grava de volta se
-  // o admin salvar de novo.
+  // o admin salvar de novo. Quem chama passa `key={date}` (ver page.tsx)
+  // pra este estado reiniciar sozinho ao trocar de domingo, em vez de um
+  // efeito manual comparando a data anterior.
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       products.map((p) => [p.roastProductId, String(Math.round(p.plannedQuantity))]),

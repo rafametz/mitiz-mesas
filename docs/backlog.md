@@ -1226,6 +1226,18 @@ permissão e ter controle de quem usa o sistema.
   (`manage-production-day.ts`). Um valor fracionado que já existia no
   banco (de antes desta regra) é arredondado só na exibição, sem
   reescrever nada até o admin salvar de novo;
+- ✅ Correção 2026-10-04 (relato do usuário): tela de "Produção por dia"
+  (Administração) tinha um calendário livre + botão "Abrir" pra escolher
+  o dia — trocado pela mesma navegação por seta (só domingo, ±7 dias) já
+  usada na tela de reservas do garçom, evitando configurar produção num
+  dia que nunca vira reserva de verdade. As duas telas (lista/abrir dia e
+  configurar aquele dia) viraram uma só
+  (`/admin/reservas-assados/producao?data=AAAA-MM-DD`, sempre um
+  domingo) — rota antiga por `dayId` removida, `manageProductionDay` já
+  fazia upsert por data, então salvar cria o dia na hora se for a
+  primeira vez que aquele domingo é configurado. `shiftDateKey`/
+  `formatDateKeyWeekday` (antes só na tela do garçom) foram pra
+  `lib/datetime.ts`, compartilhadas pelas duas telas;
 - **Testes**: 16 unitários (`tests/unit/roast-states.test.ts`,
   `tests/unit/roast-production.test.ts`, incluindo `nextSundayFrom`), 4
   do ticket de impressão (`tests/unit/roast-reservation-ticket.test.ts`)
