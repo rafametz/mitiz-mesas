@@ -1136,6 +1136,60 @@ permissão e ter controle de quem usa o sistema.
   `npm run lint`, `npm run build`, `npm test` (170/170) e
   `npm run test:integration` (69/69) limpos.
 
+## Módulo 16 — Reservas de Assados ✅
+
+- Pedido do usuário: substituir o controle em planilha Excel de reserva de
+  carnes assadas por encomenda (côstela de boi, côstela BBQ, panceta,
+  cupim, maionese, maminha) por um módulo dentro do app, com
+  disponibilidade por dia e prevenção de overbooking — proposta detalhada
+  (17 pontos + exemplo de uso) apresentada e aprovada pelo usuário antes de
+  qualquer código, conforme pedido explícito na especificação original.
+  Decisão de arquitetura completa em ADR 0008
+  (`docs/architecture/decisions/0008-reservas-de-assados.md`);
+- ✅ 5 modelos novos (`RoastProduct`, `RoastProductionDay`,
+  `RoastProduction`, `RoastReservation`, `RoastReservationItem`) e enum
+  `RoastReservationStatus` — migrations `20260929120000_roast_reservations`
+  e `20260929121500_roast_reservation_idempotency_key`. Nenhuma tabela
+  existente foi alterada: módulo inteiramente independente, sem tocar em
+  `Table`/`ServiceSession`/`Order`/PDV/impressão (requisito central do
+  usuário);
+- ✅ Concorrência: criar/editar reserva rodam em transação `Serializable`
+  com retry (até 3 tentativas), mesmo padrão comprovado de
+  `create-order.ts` — testado sob concorrência real (duas reservas
+  disputando a última unidade ao mesmo tempo, `tests/integration/
+  roast-reservation.test.ts`), nunca deixa reservar acima do planejado;
+- ✅ Permissões novas: `roasts.view`/`roasts.create`/`roasts.edit`/
+  `roasts.deliver`/`roasts.cancel`. Garçom tem todas; Caixa só
+  `roasts.view`; configurar produção por dia não tem código próprio (vive
+  em `/admin`, já protegido por `admin.manage`);
+- ✅ Decisões de fluxo aprovadas pelo usuário: garçom cancela reserva
+  pendente direto, sem autorização do admin (diferente do fluxo de
+  cancelamento de pedido de mesa); reserva `DELIVERED` é definitiva no v1,
+  sem reabertura, sem editar, sem cancelar depois de entregue;
+- ✅ App do garçom: aba própria "Reservas" na barra inferior (não aninhada
+  em Mesas) — painel de disponibilidade por dia (planejado menos
+  reservado), lista de reservas do dia, criar/editar/cancelar/marcar como
+  entregue, tudo em tempo real (Supabase Broadcast, mesmo padrão de
+  Mesas/Retiradas);
+- ✅ Administração: catálogo de produtos assados (`/admin/reservas-assados`,
+  nome + unidade livre como "kg"/"un", sem preço — este módulo não vende
+  nada) e configuração de produção por dia
+  (`/admin/reservas-assados/producao/[dayId]`, quantidade planejada por
+  produto, bloqueada de reduzir abaixo do já reservado sem cancelar
+  reserva antes);
+- Fora de escopo por decisão do usuário: integração automática com VHSYS,
+  cobrança/sinal, controle de custo, controle de estoque por peso real,
+  WhatsApp, impressão automática, controle de entrega/logística,
+  relatórios financeiros complexos.
+- **Testes**: 12 unitários (`tests/unit/roast-states.test.ts`,
+  `tests/unit/roast-production.test.ts`) e 7 de integração
+  (`tests/integration/roast-reservation.test.ts` — criação, rejeição de
+  overbooking, idempotência, concorrência real com duas reservas
+  disputando a última unidade, edição ajustando reservado para mais e
+  para menos, cancelamento com motivo obrigatório liberando a quantidade,
+  entrega definitiva bloqueando edição/cancelamento posterior). `tsc
+  --noEmit`, `npm run lint` e `npm run build` limpos.
+
 ## Ordem de execução recomendada
 
 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12

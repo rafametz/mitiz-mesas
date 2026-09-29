@@ -30,6 +30,18 @@ export function restaurantPickupsChannel(restaurantId: string): string {
   return `restaurant:${restaurantId}:pickups`;
 }
 
+// Módulo Reservas de Assados (2026-09-29) — um canal por dia de produção
+// (painel de disponibilidade e lista de reservas daquele dia) e um geral
+// por restaurante (para telas que não fixam um dia específico, ex.: uma
+// futura visão consolidada de admin).
+export function roastProductionDayChannel(productionDayId: string): string {
+  return `roast-day:${productionDayId}`;
+}
+
+export function restaurantRoastReservationsChannel(restaurantId: string): string {
+  return `restaurant:${restaurantId}:roast-reservations`;
+}
+
 // Nome do evento de broadcast em todos os canais acima. Um só nome — o
 // payload carrega só um `type` textual (ex.: "table.opened",
 // "order.created"), nunca dado de negócio (ver src/lib/realtime/publish.ts).

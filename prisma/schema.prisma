@@ -176,6 +176,17 @@ enum MeatPoint {
   NAO_SE_APLICA
 }
 
+// Módulo Reservas de Assados (2026-09-29) — reserva de carnes assadas por
+// encomenda (côstela, panceta, cupim, maminha etc.), independente de mesa,
+// comanda, PDV ou impressão (proposta aprovada pelo usuário). Só PENDING
+// pode ser editada ou cancelada; DELIVERED é definitivo no v1 (sem
+// reabertura), decisão explícita do usuário.
+enum RoastReservationStatus {
+  PENDING
+  DELIVERED
+  CANCELLED
+}
+
 // ---------------------------------------------------------------------------
 // Unidade / multi-tenant (ADR 0001, item 6 — preparado, sem UI no MVP)
 // ---------------------------------------------------------------------------
@@ -200,6 +211,10 @@ model Restaurant {
   // um atendimento de retirada não tem mesa, então precisa de um caminho
   // próprio até o restaurante (ver ServiceSession.restaurantId).
   serviceSessions   ServiceSession[]
+
+  roastProducts       RoastProduct[]
+  roastProductionDays RoastProductionDay[]
+  roastReservations   RoastReservation[]
 
   @@map("restaurants")
 }
@@ -274,6 +289,10 @@ model User {
   paymentsRegistered    Payment[]        @relation("PaymentRegisteredBy")
   paymentsVoided        Payment[]        @relation("PaymentVoidedBy")
   auditLogs             AuditLog[]
+
+  roastReservationsMade      RoastReservation[] @relation("RoastReservationWaiter")
+  roastReservationsDelivered RoastReservation[] @relation("RoastReservationDeliveredBy")
+  roastReservationsCancelled RoastReservation[] @relation("RoastReservationCancelledBy")
 
   @@index([restaurantId])
   @@map("users")
@@ -856,4 +875,156 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([tableId])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Reservas de Assados (2026-09-29) — módulo independente de pré-encomenda de
+// carnes assadas, substitui o controle em planilha. Propositalmente não usa
+// ServiceSession/Table/Order: não ocupa mesa, não gera comanda, não gera
+// venda de PDV e não aciona impressão de cozinha (requisito explícito do
+// usuário na proposta aprovada) — é só um controle de disponibilidade e
+// pré-encomenda por dia.
+// ---------------------------------------------------------------------------
+
+// Catálogo dos itens assados que podem ser reservados (côstela de boi,
+// côstela BBQ, panceta, cupim, maionese, maminha etc.) — cadastro do
+// Administrador, mesmo racional de Product mas sem preço, categoria ou
+// setor: este módulo não vende nada, só reserva.
+model RoastProduct {
+  id           String  @id @default(cuid())
+  restaurantId String
+  name         String
+  // Unidade livre exibida ao lado da quantidade ("kg", "un", "peça") — texto
+  // simples, sem conversão nem controle de estoque real (fora de escopo,
+  // proposta aprovada).
+  unit         String
+  sortOrder    Int     @default(0)
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  restaurant  Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  productions RoastProduction[]
+
+  @@unique([restaurantId, name])
+  @@map("roast_products")
+}
+
+// Um dia de produção configurado pelo Administrador — só existe reserva
+// para um dia que tenha ao menos uma RoastProduction definida (não dá para
+// reservar em um dia que ninguém configurou disponibilidade). `date` é o
+// dia civil em America/Sao_Paulo no formato "AAAA-MM-DD", mesma convenção
+// de src/app/admin/relatorios/date-range.ts — este é um conceito de "dia",
+// nunca de horário, então string evita qualquer ambiguidade de fuso que um
+// DateTime traria.
+model RoastProductionDay {
+  id           String  @id @default(cuid())
+  restaurantId String
+  date         String
+  notes        String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  productions  RoastProduction[]
+  reservations RoastReservation[]
+
+  @@unique([restaurantId, date])
+  @@map("roast_production_days")
+}
+
+// Quantidade planejada de um produto assado em um dia de produção — a
+// "disponibilidade" que o painel mostra é sempre plannedQuantity menos
+// reservedQuantity, nunca um valor solto.
+model RoastProduction {
+  id               String  @id @default(cuid())
+  productionDayId  String
+  roastProductId   String
+  plannedQuantity  Decimal @db.Decimal(10, 3)
+  // Cache, recalculado de forma transacional a cada reserva criada, editada
+  // ou cancelada (mesmo racional de ServiceSession.subtotalAmount) — nunca
+  // a única fonte de verdade; sempre derivável da soma de
+  // RoastReservationItem cuja reserva não está CANCELLED.
+  reservedQuantity Decimal @default(0) @db.Decimal(10, 3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  productionDay RoastProductionDay     @relation(fields: [productionDayId], references: [id], onDelete: Restrict)
+  roastProduct  RoastProduct           @relation(fields: [roastProductId], references: [id], onDelete: Restrict)
+  items         RoastReservationItem[]
+
+  @@unique([productionDayId, roastProductId])
+  @@map("roast_productions")
+}
+
+// Cabeçalho de uma reserva de cliente para um dia de produção. Sem mesa,
+// sem comanda, sem valor financeiro (fora de escopo — proposta aprovada):
+// isto é só "quem encomendou o quê para qual dia".
+model RoastReservation {
+  id              String                 @id @default(cuid())
+  restaurantId    String
+  productionDayId String
+  waiterId        String
+  customerName    String
+  customerPhone   String?
+  notes           String?
+  status          RoastReservationStatus @default(PENDING)
+  // Garante que duplo toque / reenvio de rede não crie reserva duplicada
+  // (regra 18/19), mesmo racional de Order.idempotencyKey. Gerada pelo
+  // cliente (UUID) no momento em que o formulário abre.
+  idempotencyKey  String                 @unique
+
+  // Cancelamento: garçom cancela reserva PENDING diretamente, sem
+  // autorização do admin (decisão do usuário 2026-09-29, diferente do
+  // fluxo de cancelamento de pedido de mesa) — sempre com motivo (regra 6).
+  cancelledAt   DateTime? @db.Timestamptz(6)
+  cancelledById String?
+  cancelReason  String?
+
+  // Entrega: definitivo no v1, sem reabertura (decisão do usuário
+  // 2026-09-29) — uma vez DELIVERED, a reserva não volta para PENDING nem
+  // pode ser editada ou cancelada.
+  deliveredAt   DateTime? @db.Timestamptz(6)
+  deliveredById String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  restaurant    Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  productionDay RoastProductionDay @relation(fields: [productionDayId], references: [id], onDelete: Restrict)
+  waiter        User               @relation("RoastReservationWaiter", fields: [waiterId], references: [id], onDelete: Restrict)
+  deliveredBy   User?              @relation("RoastReservationDeliveredBy", fields: [deliveredById], references: [id], onDelete: SetNull)
+  cancelledBy   User?              @relation("RoastReservationCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+
+  items RoastReservationItem[]
+
+  @@index([restaurantId])
+  @@index([productionDayId])
+  @@index([status])
+  @@map("roast_reservations")
+}
+
+model RoastReservationItem {
+  id                String @id @default(cuid())
+  reservationId     String
+  roastProductionId String
+
+  // Nome e unidade "congelados" no momento da reserva — alterar o cadastro
+  // do produto depois não muda o que já foi reservado (mesmo racional de
+  // OrderItem.productNameAtOrder, regras 9/10).
+  productNameAtReservation String
+  unitAtReservation        String
+  quantity                 Decimal @db.Decimal(10, 3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  reservation     RoastReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roastProduction RoastProduction  @relation(fields: [roastProductionId], references: [id], onDelete: Restrict)
+
+  @@index([reservationId])
+  @@index([roastProductionId])
+  @@map("roast_reservation_items")
 }

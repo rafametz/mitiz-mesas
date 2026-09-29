@@ -2,10 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChefHat, CircleUserRound, History, Printer, Settings2, UtensilsCrossed } from "lucide-react";
+import {
+  ChefHat,
+  CircleUserRound,
+  Drumstick,
+  History,
+  Printer,
+  Settings2,
+  UtensilsCrossed,
+} from "lucide-react";
 
 const ITEMS = [
   { href: "/mesas", label: "Mesas", icon: UtensilsCrossed, show: "always" as const },
+  { href: "/reservas-assados", label: "Reservas", icon: Drumstick, show: "roasts" as const },
   { href: "/producao", label: "Produção", icon: ChefHat, show: "production" as const },
   { href: "/impressao", label: "Impressão", icon: Printer, show: "print" as const },
   { href: "/historico", label: "Histórico", icon: History, show: "history" as const },
@@ -20,11 +29,13 @@ export function BottomNav({
   canProduction,
   canPrintJobs,
   canViewHistory,
+  canViewRoasts,
 }: {
   isAdmin: boolean;
   canProduction: boolean;
   canPrintJobs: boolean;
   canViewHistory: boolean;
+  canViewRoasts: boolean;
 }) {
   const pathname = usePathname();
   const items = ITEMS.filter((item) => {
@@ -32,6 +43,7 @@ export function BottomNav({
     if (item.show === "production") return canProduction;
     if (item.show === "print") return canPrintJobs;
     if (item.show === "history") return canViewHistory;
+    if (item.show === "roasts") return canViewRoasts;
     return true;
   });
 

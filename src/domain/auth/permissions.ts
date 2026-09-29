@@ -34,6 +34,15 @@ export const PERMISSIONS = {
   // pode ser quebrado em códigos mais finos quando as telas de admin
   // (Módulo 2+) precisarem de granularidade maior.
   ADMIN_MANAGE: "admin.manage",
+  // Módulo Reservas de Assados (2026-09-29) — independente de mesa/pedido,
+  // por isso códigos próprios em vez de reaproveitar ORDERS_*/TABLES_*. A
+  // configuração de produção por dia (quantidade planejada) não tem código
+  // próprio: vive inteiramente em /admin, já protegido por ADMIN_MANAGE.
+  ROASTS_VIEW: "roasts.view",
+  ROASTS_CREATE: "roasts.create",
+  ROASTS_EDIT: "roasts.edit",
+  ROASTS_DELIVER: "roasts.deliver",
+  ROASTS_CANCEL: "roasts.cancel",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -59,6 +68,9 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     PERMISSIONS.TABLES_CLOSE,
     PERMISSIONS.AUDIT_VIEW,
     PERMISSIONS.PRINT_JOBS_MANAGE,
+    // Só consulta o painel de reservas de assados, decisão do usuário
+    // 2026-09-29 — não cria, edita, entrega nem cancela.
+    PERMISSIONS.ROASTS_VIEW,
   ],
   WAITER: [
     PERMISSIONS.TABLES_OPEN,
@@ -70,6 +82,13 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     PERMISSIONS.ORDERS_CREATE,
     PERMISSIONS.ORDERS_SEND,
     PERMISSIONS.ORDERS_CANCEL_REQUEST,
+    PERMISSIONS.ROASTS_VIEW,
+    PERMISSIONS.ROASTS_CREATE,
+    PERMISSIONS.ROASTS_EDIT,
+    PERMISSIONS.ROASTS_DELIVER,
+    // Cancela reserva PENDING direto, sem autorização do admin (decisão
+    // do usuário 2026-09-29).
+    PERMISSIONS.ROASTS_CANCEL,
   ],
   KITCHEN: [PERMISSIONS.PRODUCTION_STATUS_UPDATE, PERMISSIONS.PRINT_JOBS_MANAGE],
 };

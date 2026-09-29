@@ -2,11 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Beef, ChefHat, Plug, Printer, ShoppingBag, Tags, Table2, Users } from "lucide-react";
+import {
+  BarChart3,
+  Beef,
+  ChefHat,
+  Drumstick,
+  Plug,
+  Printer,
+  ShoppingBag,
+  Tags,
+  Table2,
+  Users,
+} from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin/mesas", label: "Mesas", icon: Table2 },
   { href: "/admin/retiradas", label: "Retiradas", icon: ShoppingBag },
+  { href: "/admin/reservas-assados", label: "Reservas de Assados", icon: Drumstick },
   { href: "/admin/setores", label: "Setores", icon: ChefHat },
   { href: "/admin/categorias", label: "Categorias", icon: Tags },
   { href: "/admin/produtos", label: "Produtos", icon: Beef },

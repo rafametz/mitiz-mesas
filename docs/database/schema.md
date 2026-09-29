@@ -211,6 +211,15 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
    partes o saldo aberto de um item compartilhado está dividido agora).
    Camada aditiva — não altera `recalculateSessionTotals` nem nenhuma
    tabela financeira existente.
+9. ✅ Módulo Reservas de Assados (ADR 0008) —
+   `prisma/migrations/20260929120000_roast_reservations` e
+   `20260929121500_roast_reservation_idempotency_key`: 5 tabelas novas
+   (`roast_products`, `roast_production_days`, `roast_productions`,
+   `roast_reservations`, `roast_reservation_items`) e o enum
+   `RoastReservationStatus`. Domínio inteiramente independente de
+   `Table`/`ServiceSession`/`Order` (requisito do usuário — não ocupa
+   mesa, não gera comanda, não vende, não imprime). RLS deny-by-default
+   habilitado nas 5 tabelas novas, mesmo padrão do item 5.
 
 ## 7. Fluxo de migration usado na prática
 

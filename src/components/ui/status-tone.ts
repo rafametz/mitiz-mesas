@@ -3,6 +3,7 @@ import type {
   OrderItemStatus,
   OrderStatus,
   PrintJobStatus,
+  RoastReservationStatus,
   ServiceSessionStatus,
   TableStatus,
 } from "@prisma/client";
@@ -96,4 +97,13 @@ export const AGENT_STATUS_TONE: Record<AgentStatus, "wine" | "muted" | "free"> =
 export const GUEST_STATUS_TONE: Record<GuestStatus, "wine" | "neutral"> = {
   ACTIVE: "wine",
   SETTLED: "neutral",
+};
+
+export const ROAST_RESERVATION_STATUS_TONE: Record<
+  RoastReservationStatus,
+  "wine" | "neutral" | "muted"
+> = {
+  PENDING: "wine",
+  DELIVERED: "neutral",
+  CANCELLED: "muted",
 };
