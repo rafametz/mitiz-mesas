@@ -24,4 +24,16 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Esconde a barra de rolagem visualmente em quem tem `overflow-x-auto`
+     (ex.: navegação inferior com scroll lateral) — o scroll continua
+     funcionando normalmente (arrastar/gesto), só a barra em si não
+     aparece por cima do conteúdo. */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge legado */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Edge */
+  }
 }
