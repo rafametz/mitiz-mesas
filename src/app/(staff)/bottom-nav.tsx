@@ -34,6 +34,16 @@ const ITEMS = [
 // vez de comprimir. Sempre começa no início ao abrir o app — não há
 // nenhum scroll automático pro item ativo, é só o comportamento nativo
 // do navegador (o elemento nasce com scrollLeft = 0).
+//
+// `justify-[safe_center]` (não `justify-center` puro) de propósito: com
+// overflow + `justify-center` simples, o navegador centraliza o
+// CONTEÚDO INTEIRO (inclusive a parte que não cabe), deixando metade do
+// overflow "escondida" antes do scrollLeft = 0 — o primeiro item
+// (Mesas) nascia cortado à esquerda mesmo com a barra no início,
+// contrariando exatamente o pedido do usuário. `safe center` centraliza
+// só quando cabe tudo; quando não cabe, se comporta como alinhado ao
+// início (mesmo racional do `align-items: safe center`), sem cortar
+// nada.
 export function BottomNav({
   isAdmin,
   canProduction,
@@ -62,32 +72,30 @@ export function BottomNav({
       className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-shell"
       aria-label="Navegação principal"
     >
-      <div className="no-scrollbar mx-auto max-w-3xl overflow-x-auto">
-        <div className="flex min-w-full justify-center">
-          {items.map((item) => {
-            // "Mesas" também fica ativo em /retiradas — são abas irmãs da
-            // mesma seção (AtendimentoTabs), módulo Retiradas 2026-08-14.
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href) ||
-                  (item.href === "/mesas" && pathname.startsWith("/retiradas"));
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex min-w-[76px] shrink-0 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
-                  isActive ? "text-gold" : "text-bg/60 hover:text-bg"
-                }`}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <Icon className="h-6 w-6" strokeWidth={isActive ? 2.25 : 1.75} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
+      <div className="no-scrollbar mx-auto flex max-w-3xl justify-[safe_center] overflow-x-auto">
+        {items.map((item) => {
+          // "Mesas" também fica ativo em /retiradas — são abas irmãs da
+          // mesma seção (AtendimentoTabs), módulo Retiradas 2026-08-14).
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href) ||
+                (item.href === "/mesas" && pathname.startsWith("/retiradas"));
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex min-w-[76px] shrink-0 flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${
+                isActive ? "text-gold" : "text-bg/60 hover:text-bg"
+              }`}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <Icon className="h-6 w-6" strokeWidth={isActive ? 2.25 : 1.75} />
+              {item.label}
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
