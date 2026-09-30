@@ -465,6 +465,25 @@ antiga (tabela simples) e se perdeu na reforma: mesa nunca é apagada
 Bloqueada para tirar de operação. Testado no navegador: editar nome de
 verdade (ida e volta) e confirmar que persiste.
 
+- ✅ Correção 2026-09-30 (relato do usuário): a barra de navegação
+  inferior do app do garçom (`bottom-nav.tsx`) dividia a largura em
+  partes iguais (`flex-1`) entre todos os itens visíveis — com mais
+  itens entrando com o tempo (Reservas de Assados, mais os condicionais
+  por permissão), cada ícone/rótulo ia ficando mais espremido. Trocado
+  por rolagem horizontal: cada item tem uma largura mínima confortável
+  (76px) e a barra rola de lado quando os itens não cabem, em vez de
+  comprimir. Barra de rolagem escondida visualmente (`.no-scrollbar` em
+  `globals.css`), sem tirar a funcionalidade de arrastar.
+  `justify-[safe_center]` (não `justify-center` puro) no container —
+  achado ao testar em produção: com overflow real, `justify-center`
+  simples faz o navegador centralizar o conteúdo inteiro (inclusive a
+  parte que não cabe), cortando o primeiro item mesmo com o scroll no
+  início; `safe center` (CSS Box Alignment nível 3) centraliza só
+  quando cabe tudo e se comporta como alinhado ao início quando há
+  overflow — no desktop (cabe tudo) continua centralizado como antes,
+  sem nenhuma regressão. Testado nos dois: mobile (375px, 7 itens,
+  scroll de ponta a ponta) e desktop (tudo visível, sem scroll).
+
 ## Módulo 5 — Tempo real ✅
 
 Decisão de arquitetura registrada em
