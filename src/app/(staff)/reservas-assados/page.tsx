@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Drumstick, Plus } from "lucide-react";
 import { prisma } from "@/lib/prisma";
@@ -15,12 +16,29 @@ import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { roastProductionDayChannel, restaurantRoastReservationsChannel } from "@/lib/realtime/channels";
 import { formatDateKeyWeekday, shiftDateKey, todaySaoPaulo } from "@/lib/datetime";
 
+const STATUS_FILTERS = [
+  { value: "todas", label: "Todas" },
+  { value: "pendentes", label: "Pendentes" },
+  { value: "entregues", label: "Entregues" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["value"];
+
+const STATUS_WHERE: Record<StatusFilter, Prisma.RoastReservationWhereInput["status"]> = {
+  todas: { not: "CANCELLED" },
+  pendentes: "PENDING",
+  entregues: "DELIVERED",
+};
+
 export default async function ReservasAssadosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ data?: string }>;
+  searchParams: Promise<{ data?: string; status?: string }>;
 }) {
-  const { data: dataParam } = await searchParams;
+  const { data: dataParam, status: statusParam } = await searchParams;
+  const statusFilter: StatusFilter = STATUS_FILTERS.some((f) => f.value === statusParam)
+    ? (statusParam as StatusFilter)
+    : "todas";
   // Reserva de assado só acontece aos domingos (pedido do usuário
   // 2026-10-04) — ao abrir a tela sem data escolhida, mostra o próximo
   // domingo a partir de hoje (hoje mesmo, se hoje já for domingo); os
@@ -40,7 +58,7 @@ export default async function ReservasAssadosPage({
         orderBy: { roastProduct: { sortOrder: "asc" } },
       },
       reservations: {
-        where: { status: { not: "CANCELLED" } },
+        where: { status: STATUS_WHERE[statusFilter] },
         include: { items: true },
         orderBy: { createdAt: "desc" },
       },
@@ -62,7 +80,7 @@ export default async function ReservasAssadosPage({
 
       <Card padding="sm" className="flex items-center justify-between gap-2">
         <Link
-          href={`/reservas-assados?data=${shiftDateKey(date, -7)}`}
+          href={`/reservas-assados?data=${shiftDateKey(date, -7)}&status=${statusFilter}`}
           className="flex h-10 w-10 items-center justify-center rounded-control-sm text-muted hover:bg-ink/5 hover:text-ink"
           aria-label="Domingo anterior"
         >
@@ -70,7 +88,7 @@ export default async function ReservasAssadosPage({
         </Link>
         <span className="text-sm font-semibold capitalize text-ink">{formatDateKeyWeekday(date)}</span>
         <Link
-          href={`/reservas-assados?data=${shiftDateKey(date, 7)}`}
+          href={`/reservas-assados?data=${shiftDateKey(date, 7)}&status=${statusFilter}`}
           className="flex h-10 w-10 items-center justify-center rounded-control-sm text-muted hover:bg-ink/5 hover:text-ink"
           aria-label="Próximo domingo"
         >
@@ -114,10 +132,29 @@ export default async function ReservasAssadosPage({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <h2 className="font-display text-base font-semibold text-ink">
               Reservas ({productionDay.reservations.length})
             </h2>
+            <nav aria-label="Filtrar reservas por situação" className="flex gap-2">
+              {STATUS_FILTERS.map((filter) => {
+                const isActive = filter.value === statusFilter;
+                return (
+                  <Link
+                    key={filter.value}
+                    href={`/reservas-assados?data=${date}&status=${filter.value}`}
+                    aria-current={isActive ? "true" : undefined}
+                    className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-wine text-bg"
+                        : "border border-line text-ink hover:bg-ink/5"
+                    }`}
+                  >
+                    {filter.label}
+                  </Link>
+                );
+              })}
+            </nav>
             <ul className="flex flex-col gap-2">
               {productionDay.reservations.map((reservation) => {
                 const tone = ROAST_RESERVATION_STATUS_TONE[reservation.status];
@@ -142,7 +179,15 @@ export default async function ReservasAssadosPage({
                 );
               })}
               {productionDay.reservations.length === 0 && (
-                <EmptyState title="Nenhuma reserva para este dia ainda." />
+                <EmptyState
+                  title={
+                    statusFilter === "pendentes"
+                      ? "Nenhuma reserva pendente neste dia."
+                      : statusFilter === "entregues"
+                        ? "Nenhuma reserva entregue neste dia ainda."
+                        : "Nenhuma reserva para este dia ainda."
+                  }
+                />
               )}
             </ul>
           </div>

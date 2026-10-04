@@ -1263,6 +1263,11 @@ permissão e ter controle de quem usa o sistema.
   com os itens novos), sem apagar o anterior. Registra auditoria
   `roast_reservation.reprinted`. Reserva entregue ou cancelada não
   reimprime (mesma regra das demais ações da tela).
+- ✅ Melhoria 2026-10-04 (pedido do usuário): filtro na lista de reservas
+  do dia (`/reservas-assados`) com as opções Todas, Pendentes e Entregues.
+  Feito por link (`?status=`), sem JavaScript, e mantido ao trocar de
+  domingo com as setas. Reservas canceladas continuam fora da lista, como
+  antes.
 - **Testes**: 16 unitários (`tests/unit/roast-states.test.ts`,
   `tests/unit/roast-production.test.ts`, incluindo `nextSundayFrom`), 4
   do ticket de impressão (`tests/unit/roast-reservation-ticket.test.ts`)
