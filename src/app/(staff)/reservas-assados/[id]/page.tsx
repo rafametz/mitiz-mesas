@@ -16,6 +16,7 @@ import { roastProductionDayChannel } from "@/lib/realtime/channels";
 import { formatDateTime } from "@/lib/datetime";
 import { cancelReservationAction } from "../actions";
 import { DeliverButton } from "./deliver-button";
+import { ReprintButton } from "./reprint-button";
 
 export default async function ReservaDetalhePage({
   params,
@@ -45,6 +46,9 @@ export default async function ReservaDetalhePage({
     isRoastReservationEditable(reservation.status);
   const canDeliver =
     hasPermission(user.permissions, PERMISSIONS.ROASTS_DELIVER) &&
+    isRoastReservationEditable(reservation.status);
+  const canReprint =
+    hasPermission(user.permissions, PERMISSIONS.ROASTS_EDIT) &&
     isRoastReservationEditable(reservation.status);
 
   const tone = ROAST_RESERVATION_STATUS_TONE[reservation.status];
@@ -106,12 +110,13 @@ export default async function ReservaDetalhePage({
         </ul>
       </div>
 
-      {(canEdit || canCancel || canDeliver) && (
+      {(canEdit || canCancel || canDeliver || canReprint) && (
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
           {canEdit && <Button href={`/reservas-assados/${reservation.id}/editar`}>Editar</Button>}
           {canDeliver && (
             <DeliverButton reservationId={reservation.id} customerName={reservation.customerName} />
           )}
+          {canReprint && <ReprintButton reservationId={reservation.id} />}
           {canCancel && (
             <ReasonConfirmForm
               action={cancelReservationAction.bind(null, reservation.id)}

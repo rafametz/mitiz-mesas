@@ -11,6 +11,7 @@ import {
   DeliverRoastReservationError,
 } from "@/application/roast/deliver-reservation";
 import { roastReservationTicketContentSchema } from "@/domain/printing/roast-reservation-ticket";
+import { createRoastReservationPrintJob } from "@/application/printing/create-roast-reservation-print-job";
 
 // Módulo Reservas de Assados (2026-09-29) — cobre especialmente o
 // requisito central do usuário: nunca deixar reservar mais do que o
@@ -79,6 +80,36 @@ describe("Reservas de Assados", () => {
       where: { productionDayId: day.id, roastProductId },
     });
     expect(production.reservedQuantity.toString()).toBe("4");
+  });
+
+  it("reimpressão gera um novo ticket com os itens atuais, sem apagar o anterior", async () => {
+    const day = await makeProductionDay(`2030-01-10-${suffix}`, 10);
+    const reservation = await createRoastReservation({
+      restaurantId,
+      productionDayId: day.id,
+      waiterId,
+      idempotencyKey: `roast-reprint-${Date.now()}-${Math.random()}`,
+      customerName: "Cliente Reimpressão",
+      items: [{ roastProductId, quantity: 2 }],
+    });
+
+    await editRoastReservation({
+      reservationId: reservation.id,
+      editedById: waiterId,
+      customerName: "Cliente Reimpressão",
+      items: [{ roastProductId, quantity: 5 }],
+    });
+
+    await createRoastReservationPrintJob(reservation.id);
+
+    const jobs = await prisma.printJob.findMany({
+      where: { roastReservationId: reservation.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(jobs).toHaveLength(2);
+
+    const latest = roastReservationTicketContentSchema.parse(jobs[1]!.contentSnapshot);
+    expect(latest.items).toEqual([{ productName: `Costela teste ${suffix}`, quantity: 5, unit: "kg" }]);
   });
 
   it("cria automaticamente o ticket de impressão da reserva (pedido do usuário 2026-10-04)", async () => {

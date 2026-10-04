@@ -14,6 +14,9 @@ import {
   deliverRoastReservation,
   DeliverRoastReservationError,
 } from "@/application/roast/deliver-reservation";
+import { createRoastReservationPrintJob } from "@/application/printing/create-roast-reservation-print-job";
+import { writeAuditLog } from "@/application/audit/write-audit-log";
+import { prisma } from "@/lib/prisma";
 
 export type FormState = { error: string | null; success?: boolean };
 
@@ -146,4 +149,40 @@ export async function deliverReservationAction(reservationId: string) {
     if (error instanceof DeliverRoastReservationError) throw error;
     throw new Error("Não foi possível marcar a reserva como entregue.");
   }
+}
+
+export async function reprintReservationAction(reservationId: string): Promise<FormState> {
+  const user = await requirePermission(PERMISSIONS.ROASTS_EDIT);
+
+  const reservation = await prisma.roastReservation.findUnique({
+    where: { id: reservationId },
+    select: { status: true, restaurantId: true },
+  });
+  if (!reservation || reservation.restaurantId !== user.restaurantId) {
+    return { error: "Reserva não encontrada." };
+  }
+  if (reservation.status !== "PENDING") {
+    return { error: "Só é possível imprimir novamente uma reserva pendente." };
+  }
+
+  try {
+    await createRoastReservationPrintJob(reservationId);
+  } catch (error) {
+    console.error("[reservas-assados] falha ao reimprimir ticket:", error);
+    return { error: "Não foi possível enviar o ticket para impressão. Tente novamente." };
+  }
+
+  await prisma.$transaction((tx) =>
+    writeAuditLog(tx, {
+      restaurantId: user.restaurantId,
+      userId: user.id,
+      tableId: null,
+      action: "roast_reservation.reprinted",
+      entityType: "RoastReservation",
+      entityId: reservationId,
+    }),
+  );
+
+  revalidatePath(`/reservas-assados/${reservationId}`);
+  return { error: null, success: true };
 }
