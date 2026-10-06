@@ -221,6 +221,16 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
    mesa, não gera comanda, não vende, não imprime). RLS deny-by-default
    habilitado nas 5 tabelas novas, mesmo padrão do item 5.
 
+10. ✅ Correção de segurança (alerta do Supabase Security Advisor,
+    2026-10-06) — `prisma/migrations/20261006120000_enable_rls_payment_item_allocations`:
+    `payment_item_allocations` (criada no item 8) tinha RLS desligado,
+    deixando os registros de pagamento por item legíveis pela API pública
+    do Supabase (anon key). Habilitado RLS, sem política (deny-by-default,
+    mesmo padrão dos demais itens). Verificado: todas as tabelas de `public`
+    com RLS ligado; leitura anônima passou a devolver vazio mesmo com 1.408
+    linhas. Lição: toda tabela nova precisa de `ENABLE ROW LEVEL SECURITY` na
+    própria migration.
+
 ## 7. Fluxo de migration usado na prática
 
 `prisma migrate dev` (que gera SQL automaticamente a partir de um diff do
