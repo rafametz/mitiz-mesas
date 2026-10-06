@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 const ITEMS = [
-  { href: "/mesas", label: "Mesas", icon: UtensilsCrossed, show: "always" as const },
+  { href: "/mesas", label: "Mesas", icon: UtensilsCrossed, show: "tables" as const },
   { href: "/reservas-assados", label: "Reservas", icon: Drumstick, show: "roasts" as const },
   { href: "/producao", label: "Produção", icon: ChefHat, show: "production" as const },
   { href: "/impressao", label: "Impressão", icon: Printer, show: "print" as const },
@@ -46,12 +46,14 @@ const ITEMS = [
 // nada.
 export function BottomNav({
   isAdmin,
+  canViewTables,
   canProduction,
   canPrintJobs,
   canViewHistory,
   canViewRoasts,
 }: {
   isAdmin: boolean;
+  canViewTables: boolean;
   canProduction: boolean;
   canPrintJobs: boolean;
   canViewHistory: boolean;
@@ -59,6 +61,7 @@ export function BottomNav({
 }) {
   const pathname = usePathname();
   const items = ITEMS.filter((item) => {
+    if (item.show === "tables") return canViewTables;
     if (item.show === "admin") return isAdmin;
     if (item.show === "production") return canProduction;
     if (item.show === "print") return canPrintJobs;

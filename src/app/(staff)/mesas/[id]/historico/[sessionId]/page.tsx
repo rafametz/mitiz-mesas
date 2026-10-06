@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
 import { buildConsolidatedSummary } from "@/domain/order/consolidated-summary";
@@ -23,7 +23,7 @@ export default async function HistoricoDetalhePage({
   params: Promise<{ id: string; sessionId: string }>;
 }) {
   const { id, sessionId } = await params;
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   // "Imprimir conferência" (CLAUDE.md seção 10) — mesma permissão da tela
   // da mesa aberta (pedido do usuário: poder reimprimir o resumo de um
   // atendimento já encerrado pra conferência ou lançamento manual em

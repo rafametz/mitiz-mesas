@@ -230,6 +230,11 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     com RLS ligado; leitura anônima passou a devolver vazio mesmo com 1.408
     linhas. Lição: toda tabela nova precisa de `ENABLE ROW LEVEL SECURITY` na
     própria migration.
+11. ✅ Permissão de leitura de mesas (varredura de segurança 2026-10-06, item 2)
+    — `prisma/migrations/20261006130000_tables_view_permission`: insere o
+    código `tables.view` e o vincula a ADMIN, CASHIER e WAITER. Idempotente
+    (`ON CONFLICT`). Não usa o seed porque ele também regrava o usuário
+    inicial. Produção não recebe a permissão.
 
 ## 7. Fluxo de migration usado na prática
 

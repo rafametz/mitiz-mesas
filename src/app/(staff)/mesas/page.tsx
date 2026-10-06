@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Bell, Clock, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
@@ -25,7 +25,7 @@ import { AtendimentoTabs } from "../atendimento-tabs";
 // pronto para retirar e indicação de pagamento parcial, tudo sem precisar
 // entrar na mesa.
 export default async function MesasPage() {
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const restaurant = await getCurrentRestaurant();
   // "Imprimir conferência" direto do grid (pedido do usuário: não achou o
   // botão na tela da mesa, quis ele aqui) — mesma permissão do botão na

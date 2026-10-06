@@ -1,5 +1,5 @@
 import { Clock, History, Users, Wallet } from "lucide-react";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
@@ -19,7 +19,10 @@ export default async function MesaLayout({
   children: React.ReactNode;
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
+  // Guarda do subtree inteiro de /mesas/[id] (comanda, pagamentos,
+  // histórico). Cada página filha também confere, para não depender só do
+  // layout caso uma rota seja movida depois.
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const { id } = await params;
   const { table, session } = await getTableWithActiveSession(id);
 

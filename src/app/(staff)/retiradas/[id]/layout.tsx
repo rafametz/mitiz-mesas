@@ -1,5 +1,5 @@
 import { Clock, Phone, Wallet } from "lucide-react";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getPickupSession } from "@/application/service-session/get-pickup-with-session";
 import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import {
@@ -24,7 +24,7 @@ export default async function RetiradaLayout({
   children: React.ReactNode;
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const { id } = await params;
   const session = await getPickupSession(id);
 

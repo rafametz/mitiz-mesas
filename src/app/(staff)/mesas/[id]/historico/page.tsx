@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronRight, History } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { requirePermission } from "@/application/auth/get-current-user";
+import { PERMISSIONS } from "@/domain/auth/permissions";
 import { SERVICE_SESSION_STATUS_LABELS } from "@/domain/service-session/labels";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,6 +15,7 @@ import { formatDateTime } from "@/lib/datetime";
 // do usuário), não só o resumo que já cabia aqui.
 export default async function HistoricoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  await requirePermission(PERMISSIONS.TABLES_VIEW);
   const sessions = await prisma.serviceSession.findMany({
     where: { tableId: id, status: { in: ["CLOSED", "CANCELLED"] } },
     orderBy: { openedAt: "desc" },

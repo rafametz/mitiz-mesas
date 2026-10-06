@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Clock, ShoppingBag } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
@@ -22,7 +22,7 @@ import { AtendimentoTabs } from "../atendimento-tabs";
 // aqui já é um atendimento em andamento, não existe "retirada livre" pra
 // abrir. Só as ativas (OPEN/CLOSING); encerradas ficam no Histórico.
 export default async function RetiradasPage() {
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const restaurant = await getCurrentRestaurant();
   const canCreate = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
 

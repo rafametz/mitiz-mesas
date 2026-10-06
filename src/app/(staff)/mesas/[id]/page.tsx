@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronDown, DoorClosed, Plus, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { getTableWithActiveSession } from "@/application/service-session/get-table-with-session";
 import { hasAnyPermission, hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
@@ -41,7 +41,7 @@ import { TransferTableForm } from "./transfer-table-form";
 
 export default async function MesaComandaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const { table, session } = await getTableWithActiveSession(id);
 
   if (!session) {

@@ -15,6 +15,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
   const canPrintJobs = hasPermission(user.permissions, PERMISSIONS.PRINT_JOBS_MANAGE);
   const canViewHistory = hasPermission(user.permissions, PERMISSIONS.AUDIT_VIEW);
   const canViewRoasts = hasPermission(user.permissions, PERMISSIONS.ROASTS_VIEW);
+  const canViewTables = hasPermission(user.permissions, PERMISSIONS.TABLES_VIEW);
 
   return (
     <BiometricLockScreen user={{ id: user.id, name: user.name, email: user.email }}>
@@ -34,6 +35,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         </main>
         <BottomNav
           isAdmin={isAdmin}
+          canViewTables={canViewTables}
           canProduction={canProduction}
           canPrintJobs={canPrintJobs}
           canViewHistory={canViewHistory}

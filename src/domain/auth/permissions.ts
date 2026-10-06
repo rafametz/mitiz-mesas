@@ -11,6 +11,11 @@
 // código de permissão separado, mais restrito, para a ação de "pedir".
 
 export const PERMISSIONS = {
+  // Ver mesas, comandas, totais, históricos e retiradas (leitura). Perfil
+  // Produção não recebe: só enxerga a fila do próprio setor (CLAUDE.md §5).
+  // Sem isto, qualquer usuário logado lia faturamento de todas as mesas
+  // (varredura de segurança 2026-10-06, item 2).
+  TABLES_VIEW: "tables.view",
   TABLES_OPEN: "tables.open",
   TABLES_CLOSE: "tables.close",
   TABLES_CLOSE_REQUEST: "tables.close.request",
@@ -63,6 +68,7 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
 export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
   ADMIN: Object.values(PERMISSIONS),
   CASHIER: [
+    PERMISSIONS.TABLES_VIEW,
     PERMISSIONS.PAYMENTS_REGISTER,
     PERMISSIONS.DISCOUNTS_APPLY,
     PERMISSIONS.TABLES_CLOSE,
@@ -73,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     PERMISSIONS.ROASTS_VIEW,
   ],
   WAITER: [
+    PERMISSIONS.TABLES_VIEW,
     PERMISSIONS.TABLES_OPEN,
     PERMISSIONS.TABLES_CLOSE_REQUEST,
     // CLAUDE.md seção 5: "Transferir itens ou mesas quando autorizado" —

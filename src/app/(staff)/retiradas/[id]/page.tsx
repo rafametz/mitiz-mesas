@@ -1,7 +1,7 @@
 import NextLink from "next/link";
 import { ChevronDown, DoorClosed, Plus, ReceiptText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/application/auth/get-current-user";
+import { requirePermission } from "@/application/auth/get-current-user";
 import { getPickupSession } from "@/application/service-session/get-pickup-with-session";
 import { hasAnyPermission, hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import {
@@ -30,7 +30,7 @@ import { PrintBillSummaryButton } from "../../mesas/print-bill-summary-button";
 // 2026-08-14.
 export default async function RetiradaComandaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const session = await getPickupSession(id);
 
   const orders = await prisma.order.findMany({
