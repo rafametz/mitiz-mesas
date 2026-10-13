@@ -15,7 +15,7 @@ import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { roastProductionDayChannel } from "@/lib/realtime/channels";
 import { formatDateTime } from "@/lib/datetime";
 import { cancelReservationAction } from "../actions";
-import { DeliverButton } from "./deliver-button";
+import { DeliverButton } from "../deliver-button";
 import { ReprintButton } from "./reprint-button";
 
 export default async function ReservaDetalhePage({

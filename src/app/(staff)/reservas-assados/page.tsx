@@ -1,20 +1,19 @@
 import type { Prisma } from "@prisma/client";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Drumstick, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Drumstick } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { availableQuantity, isValidDateKey, nextSundayFrom } from "@/domain/roast/production";
-import { ROAST_RESERVATION_STATUS_LABELS } from "@/domain/roast/labels";
-import { ROAST_RESERVATION_STATUS_TONE } from "@/components/ui/status-tone";
+import { isRoastReservationEditable } from "@/domain/roast/states";
 import { PageHeader, Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Fab } from "@/components/ui/fab";
+import { Button } from "@/components/ui/button";
 import { RealtimeRefresh } from "@/components/realtime/realtime-refresh";
 import { roastProductionDayChannel, restaurantRoastReservationsChannel } from "@/lib/realtime/channels";
 import { formatDateKeyWeekday, shiftDateKey, todaySaoPaulo } from "@/lib/datetime";
+import { ReservationCard } from "./reservation-card";
 
 const STATUS_FILTERS = [
   { value: "todas", label: "Todas" },
@@ -49,6 +48,8 @@ export default async function ReservasAssadosPage({
   const user = await requirePermission(PERMISSIONS.ROASTS_VIEW);
   const restaurant = await getCurrentRestaurant();
   const canCreate = hasPermission(user.permissions, PERMISSIONS.ROASTS_CREATE);
+  const canEditAny = hasPermission(user.permissions, PERMISSIONS.ROASTS_EDIT);
+  const canDeliverAny = hasPermission(user.permissions, PERMISSIONS.ROASTS_DELIVER);
 
   const productionDay = await prisma.roastProductionDay.findUnique({
     where: { restaurantId_date: { restaurantId: restaurant.id, date } },
@@ -76,7 +77,22 @@ export default async function ReservasAssadosPage({
         />
       )}
 
-      <PageHeader title="Reservas de Assados" subtitle="Disponibilidade e reservas por dia" />
+      <PageHeader
+        title="Reservas de Assados"
+        subtitle="Disponibilidade e reservas por dia"
+        // Botão no cabeçalho em vez de Fab flutuante (como "+ Nova mesa" em
+        // /admin/mesas): um Fab fixo no canto cobria o botão "Entregar" do
+        // card sob ele ao abrir a tela no celular, e como o Fab fica acima
+        // na pilha de camadas, o toque nem chegava ao botão (achado da
+        // verificação do redesenho em cards, 2026-10-13). Também deixa
+        // "Entregar"/"Editar" como a ação evidente de cada card, sem
+        // competir com um botão primário flutuante por cima.
+        action={
+          productionDay && canCreate ? (
+            <Button href={`/reservas-assados/nova?data=${date}`}>+ Nova reserva</Button>
+          ) : undefined
+        }
+      />
 
       <Card padding="sm" className="flex items-center justify-between gap-2">
         <Link
@@ -155,48 +171,32 @@ export default async function ReservasAssadosPage({
                 );
               })}
             </nav>
-            <ul className="flex flex-col gap-2">
-              {productionDay.reservations.map((reservation) => {
-                const tone = ROAST_RESERVATION_STATUS_TONE[reservation.status];
-                return (
-                  <li key={reservation.id}>
-                    <Link href={`/reservas-assados/${reservation.id}`}>
-                      <Card padding="sm" className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-ink">
-                            {reservation.customerName}
-                          </div>
-                          <div className="truncate text-xs text-muted">
-                            {reservation.items.length} item(ns)
-                          </div>
-                        </div>
-                        <StatusBadge tone={tone}>
-                          {ROAST_RESERVATION_STATUS_LABELS[reservation.status]}
-                        </StatusBadge>
-                      </Card>
-                    </Link>
-                  </li>
-                );
-              })}
-              {productionDay.reservations.length === 0 && (
-                <EmptyState
-                  title={
-                    statusFilter === "pendentes"
-                      ? "Nenhuma reserva pendente neste dia."
-                      : statusFilter === "entregues"
-                        ? "Nenhuma reserva entregue neste dia ainda."
-                        : "Nenhuma reserva para este dia ainda."
-                  }
-                />
-              )}
-            </ul>
+            {productionDay.reservations.length === 0 ? (
+              <EmptyState
+                title={
+                  statusFilter === "pendentes"
+                    ? "Nenhuma reserva pendente neste dia."
+                    : statusFilter === "entregues"
+                      ? "Nenhuma reserva entregue neste dia ainda."
+                      : "Nenhuma reserva para este dia ainda."
+                }
+              />
+            ) : (
+              // Grade de 2-3 colunas (pedido do usuário 2026-10-13): no
+              // balcão, quem entrega localiza o cliente pelo nome e já vê
+              // os itens e a ação de entregar sem abrir o detalhe.
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {productionDay.reservations.map((reservation) => (
+                  <ReservationCard
+                    key={reservation.id}
+                    reservation={reservation}
+                    canEdit={canEditAny && isRoastReservationEditable(reservation.status)}
+                    canDeliver={canDeliverAny && isRoastReservationEditable(reservation.status)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-
-          {canCreate && (
-            <Fab href={`/reservas-assados/nova?data=${date}`} icon={Plus}>
-              Nova reserva
-            </Fab>
-          )}
         </>
       )}
     </main>

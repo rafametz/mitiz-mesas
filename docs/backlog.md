@@ -1268,6 +1268,20 @@ permissão e ter controle de quem usa o sistema.
   Feito por link (`?status=`), sem JavaScript, e mantido ao trocar de
   domingo com as setas. Reservas canceladas continuam fora da lista, como
   antes.
+- ✅ Melhoria 2026-10-13 (pedido do usuário): lista de reservas virou grade
+  de cards (1 coluna no celular, 2 no tablet, 3 no desktop), cada um
+  mostrando o nome, o status e os itens com quantidade (ex.: "2x Costela
+  Bovina"), em vez de só a contagem de itens. Reserva pendente ganha
+  "Editar" e "Entregar" direto no card (`roasts.edit`/`roasts.deliver`,
+  mesma regra de permissão e confirmação de antes); entregue/cancelada
+  mostra só os itens, sem ação. `DeliverButton` subiu de
+  `reservas-assados/[id]/` para `reservas-assados/`, compartilhado entre o
+  card e a tela de detalhe (mesmo padrão de `PrintBillSummaryButton` em
+  `mesas/`). O botão "Nova reserva" saiu do FAB flutuante e virou botão no
+  cabeçalho (como "+ Nova mesa" em `/admin/mesas`): o FAB fixo cobria o
+  botão "Entregar" do primeiro card ao abrir a tela no celular, e por
+  ficar acima na pilha de camadas, o toque nem chegava ao botão por baixo
+  (achado da verificação, não só estética).
 - **Testes**: 16 unitários (`tests/unit/roast-states.test.ts`,
   `tests/unit/roast-production.test.ts`, incluindo `nextSundayFrom`), 4
   do ticket de impressão (`tests/unit/roast-reservation-ticket.test.ts`)
