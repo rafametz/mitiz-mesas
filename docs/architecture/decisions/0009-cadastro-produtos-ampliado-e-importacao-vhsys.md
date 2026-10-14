@@ -128,6 +128,14 @@ Cristal" (`BBC0001`, também já criada). Nenhum desses 8 produtos foi
 criado — ficam de fora até alguém corrigir o código de barras na origem
 (VHSYS) ou decidir cadastrá-los manualmente sem código de barras.
 
+**Fechamento (2026-10-15)**: confirmado direto no XML do arquivo que a
+duplicidade é real, não notação científica do Excel (célula a célula,
+dígito a dígito — ver conversa). Usuário confirmou a causa: o mesmo
+produto foi lançado duplicado na própria VHSYS. **Decisão do usuário**:
+deixar como está — ele corrige manualmente na VHSYS/no cadastro depois,
+sem urgência. Fase de cadastro de produtos considerada **concluída**
+mesmo com essa pendência (não bloqueia nada das fases seguintes).
+
 Verificado depois da execução: 432 produtos no total (53 + 379), **zero
 produtos da categoria "Loja" com `available=true`** (não aparecem na
 tela de novo pedido), amostra de produto novo conferida campo a campo.
