@@ -956,6 +956,15 @@ impressão) existirem.
     preservando os outros parâmetros da URL (ex.: `semVinculo`). O botão
     "Vincular" (envio de formulário via server action) já não mexia no
     scroll, não precisou de ajuste.
+  - 🔜 **Necessidade futura confirmada pelo usuário (2026-10-14, ao aprovar a
+    ADR 0009)**: o PDV futuro vai precisar vender carnes por peso (quantidade
+    fracionária em KG). Hoje `OrderItem.quantity` é inteiro
+    (`prisma/schema.prisma`) — o cadastro de produtos (ADR 0009) já identifica
+    corretamente qual produto é vendido por `KG`, mas lançar peso fracionário
+    numa comanda/PDV exige mudar `quantity` para decimal, revisando cálculo de
+    subtotal, impressão e todo o fluxo de pedido. Não implementado ainda —
+    registrado aqui para não se perder, aguardando pedido explícito do usuário
+    para entrar em desenvolvimento.
 
 Não estava no roteiro original nem no backlog (CLAUDE.md §4/§23) — pedido
 novo do usuário (2026-08-13): tela de admin pra cadastrar usuário, dar/tirar
