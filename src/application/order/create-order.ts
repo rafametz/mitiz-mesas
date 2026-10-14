@@ -30,7 +30,11 @@ const orderItemSchema = z.object({
   modifierIds: z.array(z.string()).max(20).default([]),
 });
 
-const createOrderSchema = z.object({
+// Exportado (ADR 0010 — Pagamento Combinado): o orquestrador de checkout
+// combinado precisa montar/validar os dados do pedido do PDV fora desta
+// função, antes de compor `createOrderInTx` dentro da própria transação
+// dele.
+export const createOrderSchema = z.object({
   serviceSessionId: z.string().min(1),
   waiterId: z.string().min(1),
   idempotencyKey: z.string().min(1),
@@ -49,192 +53,208 @@ const orderInclude = {
   items: { include: { modifiers: true, guest: true } },
 } satisfies Prisma.OrderInclude;
 
-async function runTransaction(data: z.infer<typeof createOrderSchema>) {
-  return prisma.$transaction(
-    async (tx) => {
-      // Idempotência (regra 18/19): mesma chave já usada -> devolve o
-      // pedido existente em vez de duplicar ou dar erro.
-      const existing = await tx.order.findUnique({
-        where: { idempotencyKey: data.idempotencyKey },
-        include: orderInclude,
-      });
-      if (existing) return { order: existing, created: false as const };
+// Núcleo da criação do pedido, parametrizado numa transação já aberta
+// (ADR 0010 — Pagamento Combinado): extraído de dentro de `runTransaction`
+// pra poder ser composto junto com `registerPaymentInTx` dentro da MESMA
+// transação do checkout combinado (mesa + PDV), sem duplicar nenhuma
+// regra. `createOrder` (abaixo) continua se comportando exatamente igual
+// — só passou a abrir a transação e chamar isto por dentro, em vez de ter
+// o corpo inline. Isolamento/timeout/retry continuam responsabilidade de
+// quem abre a transação (aqui, `runTransaction`; no checkout combinado,
+// o orquestrador novo).
+export async function createOrderInTx(
+  tx: Prisma.TransactionClient,
+  data: z.infer<typeof createOrderSchema>,
+) {
+  // Idempotência (regra 18/19): mesma chave já usada -> devolve o
+  // pedido existente em vez de duplicar ou dar erro.
+  const existing = await tx.order.findUnique({
+    where: { idempotencyKey: data.idempotencyKey },
+    include: orderInclude,
+  });
+  if (existing) return { order: existing, created: false as const };
 
-      const session = await tx.serviceSession.findUniqueOrThrow({
-        where: { id: data.serviceSessionId },
-        include: { table: true, restaurant: true },
-      });
-      if (session.status !== "OPEN") {
-        throw new CreateOrderError("Este atendimento não está aberto para novos pedidos.");
+  const session = await tx.serviceSession.findUniqueOrThrow({
+    where: { id: data.serviceSessionId },
+    include: { table: true, restaurant: true },
+  });
+  if (session.status !== "OPEN") {
+    throw new CreateOrderError("Este atendimento não está aberto para novos pedidos.");
+  }
+
+  const waiter = await tx.user.findUniqueOrThrow({ where: { id: data.waiterId } });
+
+  const guestIds = [...new Set(data.items.map((i) => i.guestId).filter(Boolean))] as string[];
+  if (guestIds.length > 0) {
+    const guestCount = await tx.guest.count({
+      where: { id: { in: guestIds }, serviceSessionId: data.serviceSessionId },
+    });
+    if (guestCount !== guestIds.length) {
+      throw new CreateOrderError("Uma das pessoas selecionadas não pertence a esta mesa.");
+    }
+  }
+
+  // Validação de disponibilidade e preço no servidor — nunca confiar
+  // no que veio do cliente (CLAUDE.md seção 9, "Enviar para produção").
+  const productIds = [...new Set(data.items.map((i) => i.productId))];
+  const products = await tx.product.findMany({
+    where: { id: { in: productIds }, restaurantId: session.restaurantId },
+  });
+  const productsById = new Map(products.map((p) => [p.id, p]));
+
+  for (const item of data.items) {
+    const product = productsById.get(item.productId);
+    if (!product) throw new CreateOrderError("Um dos produtos selecionados não existe.");
+    if (!product.active || !product.available) {
+      throw new CreateOrderError(`"${product.name}" não está disponível no momento.`);
+    }
+  }
+
+  const allModifierIds = [...new Set(data.items.flatMap((i) => i.modifierIds))];
+  const modifiers = allModifierIds.length
+    ? await tx.productModifier.findMany({
+        where: { id: { in: allModifierIds } },
+        include: { group: true },
+      })
+    : [];
+  const modifiersById = new Map(modifiers.map((m) => [m.id, m]));
+
+  for (const item of data.items) {
+    for (const modifierId of item.modifierIds) {
+      const modifier = modifiersById.get(modifierId);
+      if (!modifier || modifier.group.productId !== item.productId) {
+        throw new CreateOrderError("Um dos adicionais selecionados não pertence ao produto.");
       }
-
-      const waiter = await tx.user.findUniqueOrThrow({ where: { id: data.waiterId } });
-
-      const guestIds = [...new Set(data.items.map((i) => i.guestId).filter(Boolean))] as string[];
-      if (guestIds.length > 0) {
-        const guestCount = await tx.guest.count({
-          where: { id: { in: guestIds }, serviceSessionId: data.serviceSessionId },
-        });
-        if (guestCount !== guestIds.length) {
-          throw new CreateOrderError("Uma das pessoas selecionadas não pertence a esta mesa.");
-        }
+      if (!modifier.active) {
+        throw new CreateOrderError(`Adicional "${modifier.name}" não está mais disponível.`);
       }
+    }
+  }
 
-      // Validação de disponibilidade e preço no servidor — nunca confiar
-      // no que veio do cliente (CLAUDE.md seção 9, "Enviar para produção").
-      const productIds = [...new Set(data.items.map((i) => i.productId))];
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, restaurantId: session.restaurantId },
-      });
-      const productsById = new Map(products.map((p) => [p.id, p]));
+  // Respeita obrigatoriedade/mínimo/máximo de cada grupo de
+  // adicionais do produto — validação real de negócio, não só de UI
+  // (CLAUDE.md regra 24).
+  const groups = await tx.productModifierGroup.findMany({
+    where: { productId: { in: productIds }, active: true },
+  });
+  const groupsByProduct = new Map<string, typeof groups>();
+  for (const group of groups) {
+    const list = groupsByProduct.get(group.productId) ?? [];
+    list.push(group);
+    groupsByProduct.set(group.productId, list);
+  }
 
-      for (const item of data.items) {
-        const product = productsById.get(item.productId);
-        if (!product) throw new CreateOrderError("Um dos produtos selecionados não existe.");
-        if (!product.active || !product.available) {
-          throw new CreateOrderError(`"${product.name}" não está disponível no momento.`);
-        }
+  for (const item of data.items) {
+    const productGroups = groupsByProduct.get(item.productId) ?? [];
+    for (const group of productGroups) {
+      const selectedCount = item.modifierIds.filter(
+        (id) => modifiersById.get(id)?.groupId === group.id,
+      ).length;
+
+      if (group.required && selectedCount === 0) {
+        throw new CreateOrderError(`Selecione uma opção em "${group.name}".`);
       }
-
-      const allModifierIds = [...new Set(data.items.flatMap((i) => i.modifierIds))];
-      const modifiers = allModifierIds.length
-        ? await tx.productModifier.findMany({
-            where: { id: { in: allModifierIds } },
-            include: { group: true },
-          })
-        : [];
-      const modifiersById = new Map(modifiers.map((m) => [m.id, m]));
-
-      for (const item of data.items) {
-        for (const modifierId of item.modifierIds) {
-          const modifier = modifiersById.get(modifierId);
-          if (!modifier || modifier.group.productId !== item.productId) {
-            throw new CreateOrderError("Um dos adicionais selecionados não pertence ao produto.");
-          }
-          if (!modifier.active) {
-            throw new CreateOrderError(`Adicional "${modifier.name}" não está mais disponível.`);
-          }
-        }
+      if (selectedCount < group.minSelect) {
+        throw new CreateOrderError(
+          `Selecione ao menos ${group.minSelect} opção(ões) em "${group.name}".`,
+        );
       }
-
-      // Respeita obrigatoriedade/mínimo/máximo de cada grupo de
-      // adicionais do produto — validação real de negócio, não só de UI
-      // (CLAUDE.md regra 24).
-      const groups = await tx.productModifierGroup.findMany({
-        where: { productId: { in: productIds }, active: true },
-      });
-      const groupsByProduct = new Map<string, typeof groups>();
-      for (const group of groups) {
-        const list = groupsByProduct.get(group.productId) ?? [];
-        list.push(group);
-        groupsByProduct.set(group.productId, list);
+      if (selectedCount > group.maxSelect) {
+        throw new CreateOrderError(
+          `Selecione no máximo ${group.maxSelect} opção(ões) em "${group.name}".`,
+        );
       }
+    }
+  }
 
-      for (const item of data.items) {
-        const productGroups = groupsByProduct.get(item.productId) ?? [];
-        for (const group of productGroups) {
-          const selectedCount = item.modifierIds.filter(
-            (id) => modifiersById.get(id)?.groupId === group.id,
-          ).length;
+  const lastOrder = await tx.order.findFirst({
+    where: { serviceSessionId: data.serviceSessionId },
+    orderBy: { sequenceNumber: "desc" },
+  });
+  const sequenceNumber = (lastOrder?.sequenceNumber ?? 0) + 1;
 
-          if (group.required && selectedCount === 0) {
-            throw new CreateOrderError(`Selecione uma opção em "${group.name}".`);
-          }
-          if (selectedCount < group.minSelect) {
-            throw new CreateOrderError(
-              `Selecione ao menos ${group.minSelect} opção(ões) em "${group.name}".`,
-            );
-          }
-          if (selectedCount > group.maxSelect) {
-            throw new CreateOrderError(
-              `Selecione no máximo ${group.maxSelect} opção(ões) em "${group.name}".`,
-            );
-          }
-        }
-      }
-
-      const lastOrder = await tx.order.findFirst({
-        where: { serviceSessionId: data.serviceSessionId },
-        orderBy: { sequenceNumber: "desc" },
-      });
-      const sequenceNumber = (lastOrder?.sequenceNumber ?? 0) + 1;
-
-      const order = await tx.order.create({
-        data: {
-          serviceSessionId: data.serviceSessionId,
-          waiterId: data.waiterId,
-          sequenceNumber,
-          status: "SENT",
-          idempotencyKey: data.idempotencyKey,
-          sentAt: new Date(),
-          items: {
-            create: data.items.map((item) => {
-              const product = productsById.get(item.productId)!;
-              return {
-                productId: item.productId,
-                sectorId: product.defaultSectorId,
-                guestId: item.guestId,
-                productNameAtOrder: product.name,
-                unitPrice: product.price,
-                quantity: item.quantity,
-                meatPoint: item.meatPoint,
-                notes: item.notes,
-                status: "SENT",
-                modifiers: {
-                  create: item.modifierIds.map((modifierId) => {
-                    const modifier = modifiersById.get(modifierId)!;
-                    return {
-                      modifierId,
-                      modifierNameAtOrder: modifier.name,
-                      priceDeltaAtOrder: modifier.priceDelta,
-                    };
-                  }),
-                },
-              };
-            }),
-          },
-        },
-        include: orderInclude,
-      });
-
-      await recalculateSessionTotals(tx, data.serviceSessionId, session);
-
-      // Fila de impressão e publicação de tempo real NÃO entram mais
-      // aqui dentro — são efeito colateral não crítico (mesmo racional
-      // já usado em open-table.ts para publishChange), e o garçom não
-      // deveria esperar nenhum dos dois pra saber que o pedido foi
-      // gravado (docs/performance/optimization-plan.md, Fase 2). Quem
-      // chama createOrder() agenda os dois via after() depois que esta
-      // transação já commitou.
-      return {
-        order,
-        created: true as const,
-        session,
-        restaurantId: session.restaurantId,
-        restaurantName: session.restaurant.name,
-        header: buildTicketHeader(session, session.table?.number ?? null),
-        waiterName: waiter.name,
-        responsibleName: session.responsibleName,
-        sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
-      };
+  const order = await tx.order.create({
+    data: {
+      serviceSessionId: data.serviceSessionId,
+      waiterId: data.waiterId,
+      sequenceNumber,
+      status: "SENT",
+      idempotencyKey: data.idempotencyKey,
+      sentAt: new Date(),
+      items: {
+        create: data.items.map((item) => {
+          const product = productsById.get(item.productId)!;
+          return {
+            productId: item.productId,
+            sectorId: product.defaultSectorId,
+            guestId: item.guestId,
+            productNameAtOrder: product.name,
+            unitPrice: product.price,
+            quantity: item.quantity,
+            meatPoint: item.meatPoint,
+            notes: item.notes,
+            status: "SENT",
+            modifiers: {
+              create: item.modifierIds.map((modifierId) => {
+                const modifier = modifiersById.get(modifierId)!;
+                return {
+                  modifierId,
+                  modifierNameAtOrder: modifier.name,
+                  priceDeltaAtOrder: modifier.priceDelta,
+                };
+              }),
+            },
+          };
+        }),
+      },
     },
-    {
-      // Serializable: reduz a janela de corrida em sequenceNumber quando
-      // dois pedidos são enviados quase ao mesmo tempo para a mesma mesa
-      // (CLAUDE.md — "tratar concorrência"). Retry em runCreateOrder abaixo
-      // cobre o caso raro de falha de serialização.
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      // Timeout maior que o padrão (5s): esta transação faz várias
-      // idas e vindas (validações + pedido + totais + print jobs) via
-      // pooler do Supabase (PgBouncer). Em produção (Vercel -> Supabase),
-      // a latência de rede real às vezes passa de 5s e o motor expira a
-      // transação, gerando P2028 ("Transaction not found") mesmo sem
-      // nenhum problema de dados (confirmado em produção 2026-08-06,
-      // Mesa 2, reproduzido com debug ligado).
-      maxWait: 5000,
-      timeout: 15000,
-    },
-  );
+    include: orderInclude,
+  });
+
+  await recalculateSessionTotals(tx, data.serviceSessionId, session);
+
+  // Fila de impressão e publicação de tempo real NÃO entram mais
+  // aqui dentro — são efeito colateral não crítico (mesmo racional
+  // já usado em open-table.ts para publishChange), e o garçom não
+  // deveria esperar nenhum dos dois pra saber que o pedido foi
+  // gravado (docs/performance/optimization-plan.md, Fase 2). Quem
+  // chama createOrder() agenda os dois via after() depois que esta
+  // transação já commitou.
+  return {
+    order,
+    created: true as const,
+    session,
+    restaurantId: session.restaurantId,
+    restaurantName: session.restaurant.name,
+    header: buildTicketHeader(session, session.table?.number ?? null),
+    waiterName: waiter.name,
+    responsibleName: session.responsibleName,
+    sectorIds: [...new Set(order.items.map((item) => item.sectorId))],
+  };
+}
+
+// Opções de transação usadas tanto aqui (sozinho) quanto pelo orquestrador
+// do checkout combinado (ADR 0010) — mesmo racional documentado abaixo,
+// um único lugar pra não divergir.
+export const createOrderTransactionOptions = {
+  // Serializable: reduz a janela de corrida em sequenceNumber quando
+  // dois pedidos são enviados quase ao mesmo tempo para a mesma mesa
+  // (CLAUDE.md — "tratar concorrência"). Retry em createOrder abaixo
+  // cobre o caso raro de falha de serialização.
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  // Timeout maior que o padrão (5s): esta transação faz várias
+  // idas e vindas (validações + pedido + totais + print jobs) via
+  // pooler do Supabase (PgBouncer). Em produção (Vercel -> Supabase),
+  // a latência de rede real às vezes passa de 5s e o motor expira a
+  // transação, gerando P2028 ("Transaction not found") mesmo sem
+  // nenhum problema de dados (confirmado em produção 2026-08-06,
+  // Mesa 2, reproduzido com debug ligado).
+  maxWait: 5000,
+  timeout: 15000,
+} satisfies Parameters<typeof prisma.$transaction>[1];
+
+function runTransaction(data: z.infer<typeof createOrderSchema>) {
+  return prisma.$transaction((tx) => createOrderInTx(tx, data), createOrderTransactionOptions);
 }
 
 function isRetryableConflict(error: unknown): boolean {

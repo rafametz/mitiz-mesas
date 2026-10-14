@@ -63,7 +63,11 @@ const allocationRequestSchema = z.discriminatedUnion("type", [
 // continua sendo o `.parse` abaixo, isto aqui é só o tipo.
 export type AllocationRequest = z.infer<typeof allocationRequestSchema>;
 
-const registerSchema = z.object({
+// Exportado (ADR 0010 — Pagamento Combinado): o orquestrador do checkout
+// combinado monta/valida os dados de cada perna (mesa, PDV) com este
+// mesmo schema antes de compor `registerPaymentInTx` dentro da própria
+// transação dele.
+export const registerSchema = z.object({
   paymentMethodId: z.string().min(1),
   // Opcional quando `allocations` vem preenchido — o valor final é sempre
   // recalculado no servidor a partir delas, nunca confiado do cliente.
@@ -102,7 +106,12 @@ function toPayableOrderItemInput(item: {
   openShareBaseAmount: Prisma.Decimal | null;
   createdAt: Date;
   modifiers: { modifierNameAtOrder: string; priceDeltaAtOrder: Prisma.Decimal; quantity: number }[];
-  allocations: { kind: "UNITS" | "AMOUNT"; quantity: number | null; amount: Prisma.Decimal; payment: { voidedAt: Date | null } }[];
+  allocations: {
+    kind: "UNITS" | "AMOUNT";
+    quantity: number | null;
+    amount: Prisma.Decimal;
+    payment: { voidedAt: Date | null };
+  }[];
 }): PayableOrderItemInput {
   return {
     id: item.id,
@@ -210,10 +219,17 @@ async function resolveAllocations(
         return true;
       })
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    const sourceItems = groupItems.map((item) => ({ itemId: item.id, openAmount: openAmountForItem(item) }));
+    const sourceItems = groupItems.map((item) => ({
+      itemId: item.id,
+      openAmount: openAmountForItem(item),
+    }));
     const groupOpenAmount = sumDecimals(sourceItems.map((s) => s.openAmount));
 
-    function pushDistribution(target: Prisma.Decimal, shareNumerator: number | null, shareDenominator: number | null) {
+    function pushDistribution(
+      target: Prisma.Decimal,
+      shareNumerator: number | null,
+      shareDenominator: number | null,
+    ) {
       let distribution;
       try {
         distribution = distributeAmountFifo(target, sourceItems);
@@ -257,10 +273,14 @@ async function resolveAllocations(
       }
       const parts = request.parts ?? 1;
       if (parts > denominator) {
-        throw new RegisterPaymentError(`Só há ${denominator} parte(s) em aberto, foi pedido ${parts}.`);
+        throw new RegisterPaymentError(
+          `Só há ${denominator} parte(s) em aberto, foi pedido ${parts}.`,
+        );
       }
       const baseAmount =
-        withParts!.openShareBaseAmount !== null ? toDecimal(withParts!.openShareBaseAmount) : groupOpenAmount;
+        withParts!.openShareBaseAmount !== null
+          ? toDecimal(withParts!.openShareBaseAmount)
+          : groupOpenAmount;
       const nominalPart = baseAmount.div(denominator).toDecimalPlaces(2);
       // O total pedido nunca passa do saldo realmente aberto (defesa: se
       // arredondamento acumulado deixar a última parte um centavo maior
@@ -269,7 +289,11 @@ async function resolveAllocations(
       // própria — aqui só evita passar direto do saldo por conta da base
       // fixa não ter sido atualizada).
       const target = nominalPart.mul(parts);
-      pushDistribution(target.greaterThan(groupOpenAmount) ? groupOpenAmount : target, parts, denominator);
+      pushDistribution(
+        target.greaterThan(groupOpenAmount) ? groupOpenAmount : target,
+        parts,
+        denominator,
+      );
       continue;
     }
 
@@ -295,6 +319,137 @@ function paidUnits(item: PayableOrderItemInput): number {
     .reduce((total, a) => total + (a.quantity ?? 0), 0);
 }
 
+// Núcleo do registro de pagamento, parametrizado numa transação já aberta
+// (ADR 0010 — Pagamento Combinado): extraído pra poder ser composto junto
+// com `createOrderInTx` dentro da MESMA transação do checkout combinado
+// (mesa + PDV), uma vez por perna/origem. `registerPayment` (abaixo)
+// continua se comportando exatamente igual — só passou a abrir a
+// transação e chamar isto por dentro.
+export async function registerPaymentInTx(
+  tx: Prisma.TransactionClient,
+  serviceSessionId: string,
+  actorUserId: string,
+  data: z.infer<typeof registerSchema>,
+) {
+  const existing = await tx.payment.findUnique({
+    where: { idempotencyKey: data.idempotencyKey },
+  });
+  if (existing) return { payment: existing, created: false as const, session: null };
+
+  const session = await tx.serviceSession.findUniqueOrThrow({
+    where: { id: serviceSessionId },
+  });
+
+  if (!canRegisterPayment(session.status)) {
+    throw new RegisterPaymentError("Este atendimento não está ativo para receber pagamento.");
+  }
+
+  const method = await tx.paymentMethod.findFirst({
+    where: { id: data.paymentMethodId, restaurantId: session.restaurantId, active: true },
+  });
+  if (!method) throw new RegisterPaymentError("Forma de pagamento inválida ou inativa.");
+
+  if (data.guestId) {
+    const guest = await tx.guest.findFirst({
+      where: { id: data.guestId, serviceSessionId },
+    });
+    if (!guest) throw new RegisterPaymentError("Esta pessoa não pertence a esta mesa.");
+  }
+
+  let amount: Prisma.Decimal;
+  let resolvedAllocations: ResolvedAllocation[] = [];
+  if (data.allocations?.length) {
+    const { resolved, totalAmount } = await resolveAllocations(
+      tx,
+      serviceSessionId,
+      data.allocations,
+    );
+    if (totalAmount.lessThanOrEqualTo(ZERO)) {
+      throw new RegisterPaymentError("Selecione ao menos um item para pagar.");
+    }
+    resolvedAllocations = resolved;
+    amount = totalAmount;
+  } else {
+    amount = toDecimal(data.amount!);
+  }
+
+  const balance = toDecimal(session.balanceAmount);
+  if (amount.greaterThan(balance)) {
+    throw new RegisterPaymentError(`Valor maior que o saldo restante (${balance.toFixed(2)}).`);
+  }
+
+  const payment = await tx.payment.create({
+    data: {
+      serviceSessionId,
+      paymentMethodId: data.paymentMethodId,
+      guestId: data.guestId,
+      amount,
+      idempotencyKey: data.idempotencyKey,
+      registeredById: actorUserId,
+    },
+  });
+
+  if (resolvedAllocations.length > 0) {
+    await tx.paymentItemAllocation.createMany({
+      data: resolvedAllocations.map((a) => ({
+        paymentId: payment.id,
+        orderItemId: a.orderItemId,
+        kind: a.kind,
+        quantity: a.quantity,
+        shareNumerator: a.shareNumerator,
+        shareDenominator: a.shareDenominator,
+        amount: a.amount,
+      })),
+    });
+  }
+
+  await writeAuditLog(tx, {
+    restaurantId: session.restaurantId,
+    userId: actorUserId,
+    tableId: session.tableId,
+    action: "payment.registered",
+    entityType: "Payment",
+    entityId: payment.id,
+    metadata: {
+      amount: amount.toString(),
+      paymentMethod: method.name,
+      guestId: data.guestId ?? null,
+      allocations: resolvedAllocations.map((a) => ({
+        orderItemId: a.orderItemId,
+        kind: a.kind,
+        quantity: a.quantity,
+        amount: a.amount.toString(),
+      })),
+    },
+  });
+
+  const activePayments = await tx.payment.findMany({
+    where: { serviceSessionId, voidedAt: null },
+  });
+  const paidAmount = sumDecimals(activePayments.map((p) => p.amount));
+
+  // Só recalcula os totais (saldo sobe/desce com consumo e pagamento,
+  // sempre) — nunca mexe em ServiceSession.status/Table.status. Quem
+  // decide fechar é requestClosing/closeTable, ações explícitas e
+  // separadas (docs/product/business-rules.md §6). O rastreamento por
+  // item (PaymentItemAllocation) é uma camada paralela, não muda em
+  // nada esse cálculo.
+  await recalculateSessionTotals(tx, serviceSessionId, {
+    discountAmount: session.discountAmount,
+    serviceChargeAmount: session.serviceChargeAmount,
+    paidAmount,
+  });
+
+  return { payment, created: true as const, session };
+}
+
+// Opções de transação usadas tanto aqui (sozinho) quanto pelo orquestrador
+// do checkout combinado (ADR 0010).
+export const registerPaymentTransactionOptions = {
+  maxWait: 5000,
+  timeout: 15000,
+} satisfies Parameters<typeof prisma.$transaction>[1];
+
 // Registra um pagamento — pode ser chamado várias vezes pra combinar mais
 // de uma forma no mesmo fechamento (regra 13), a qualquer momento do
 // atendimento ativo (OPEN ou CLOSING — revisão 2026-08-10: pagamento nunca
@@ -319,119 +474,8 @@ export async function registerPayment(
   }
 
   const result = await prisma.$transaction(
-    async (tx) => {
-      const existing = await tx.payment.findUnique({
-        where: { idempotencyKey: data.idempotencyKey },
-      });
-      if (existing) return { payment: existing, created: false as const, session: null };
-
-      const session = await tx.serviceSession.findUniqueOrThrow({
-        where: { id: serviceSessionId },
-      });
-
-      if (!canRegisterPayment(session.status)) {
-        throw new RegisterPaymentError("Este atendimento não está ativo para receber pagamento.");
-      }
-
-      const method = await tx.paymentMethod.findFirst({
-        where: { id: data.paymentMethodId, restaurantId: session.restaurantId, active: true },
-      });
-      if (!method) throw new RegisterPaymentError("Forma de pagamento inválida ou inativa.");
-
-      if (data.guestId) {
-        const guest = await tx.guest.findFirst({
-          where: { id: data.guestId, serviceSessionId },
-        });
-        if (!guest) throw new RegisterPaymentError("Esta pessoa não pertence a esta mesa.");
-      }
-
-      let amount: Prisma.Decimal;
-      let resolvedAllocations: ResolvedAllocation[] = [];
-      if (data.allocations?.length) {
-        const { resolved, totalAmount } = await resolveAllocations(
-          tx,
-          serviceSessionId,
-          data.allocations,
-        );
-        if (totalAmount.lessThanOrEqualTo(ZERO)) {
-          throw new RegisterPaymentError("Selecione ao menos um item para pagar.");
-        }
-        resolvedAllocations = resolved;
-        amount = totalAmount;
-      } else {
-        amount = toDecimal(data.amount!);
-      }
-
-      const balance = toDecimal(session.balanceAmount);
-      if (amount.greaterThan(balance)) {
-        throw new RegisterPaymentError(`Valor maior que o saldo restante (${balance.toFixed(2)}).`);
-      }
-
-      const payment = await tx.payment.create({
-        data: {
-          serviceSessionId,
-          paymentMethodId: data.paymentMethodId,
-          guestId: data.guestId,
-          amount,
-          idempotencyKey: data.idempotencyKey,
-          registeredById: actorUserId,
-        },
-      });
-
-      if (resolvedAllocations.length > 0) {
-        await tx.paymentItemAllocation.createMany({
-          data: resolvedAllocations.map((a) => ({
-            paymentId: payment.id,
-            orderItemId: a.orderItemId,
-            kind: a.kind,
-            quantity: a.quantity,
-            shareNumerator: a.shareNumerator,
-            shareDenominator: a.shareDenominator,
-            amount: a.amount,
-          })),
-        });
-      }
-
-      await writeAuditLog(tx, {
-        restaurantId: session.restaurantId,
-        userId: actorUserId,
-        tableId: session.tableId,
-        action: "payment.registered",
-        entityType: "Payment",
-        entityId: payment.id,
-        metadata: {
-          amount: amount.toString(),
-          paymentMethod: method.name,
-          guestId: data.guestId ?? null,
-          allocations: resolvedAllocations.map((a) => ({
-            orderItemId: a.orderItemId,
-            kind: a.kind,
-            quantity: a.quantity,
-            amount: a.amount.toString(),
-          })),
-        },
-      });
-
-      const activePayments = await tx.payment.findMany({
-        where: { serviceSessionId, voidedAt: null },
-      });
-      const paidAmount = sumDecimals(activePayments.map((p) => p.amount));
-
-      // Só recalcula os totais (saldo sobe/desce com consumo e pagamento,
-      // sempre) — nunca mexe em ServiceSession.status/Table.status. Quem
-      // decide fechar é requestClosing/closeTable, ações explícitas e
-      // separadas (docs/product/business-rules.md §6). O rastreamento por
-      // item (PaymentItemAllocation) é uma camada paralela, não muda em
-      // nada esse cálculo.
-      await recalculateSessionTotals(tx, serviceSessionId, {
-        discountAmount: session.discountAmount,
-        serviceChargeAmount: session.serviceChargeAmount,
-        paidAmount,
-      });
-
-      return { payment, created: true as const, session };
-    },
-    { maxWait: 5000, timeout: 15000 },
+    (tx) => registerPaymentInTx(tx, serviceSessionId, actorUserId, data),
+    registerPaymentTransactionOptions,
   );
 
   if (result.created && result.session) {
