@@ -132,6 +132,27 @@ Verificado depois da execução: 432 produtos no total (53 + 379), **zero
 produtos da categoria "Loja" com `available=true`** (não aparecem na
 tela de novo pedido), amostra de produto novo conferida campo a campo.
 
+## 0-C. Segunda camada de proteção: categoria controla visibilidade no pedido (2026-10-14)
+
+Pedido do usuário, na sequência: em vez de depender só de `Product.available`
+produto a produto, um campo na própria `Category` — `visibleInOrders`,
+`DEFAULT true` — decide se os produtos daquela categoria aparecem na tela
+de novo pedido (mesas e retiradas). A categoria "Loja" virou `false`;
+todas as demais ficaram `true` (nenhuma mudança de comportamento pra
+elas). As duas telas de novo pedido (`mesas/[id]/pedidos/novo` e
+`retiradas/[id]/pedidos/novo`) passaram a filtrar também por
+`category: { visibleInOrders: true }`, **somando-se** a
+`active`/`available`, nunca substituindo — um produto só aparece se os
+três estiverem certos. Tela de categorias (`/admin/categorias`) ganhou o
+campo "Mostrar produtos no novo pedido", padrão marcado para categoria
+nova.
+
+Verificado com uma transação desfeita (nunca commitada): marquei
+temporariamente um produto real da categoria Loja como `available: true`
+e comparei a consulta antiga (sem o filtro) com a nova — a antiga
+incluía o produto, a nova não. Nada foi alterado de verdade (rollback).
+Migration `20261014130000_category_visible_in_orders`.
+
 ---
 
 ## 1. Resumo da estrutura atual do cadastro de produtos

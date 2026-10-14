@@ -258,6 +258,17 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     (lição do item 10). Verificado: as 32 tabelas de `public` com RLS
     ligado, `tsc --noEmit`/lint/build limpos, 215 testes unitários e as 88
     de integração (11 arquivos) passando.
+13. ✅ `Category.visibleInOrders` (pedido do usuário 2026-10-14, depois da
+    importação VHSYS) —
+    `prisma/migrations/20261014130000_category_visible_in_orders`: controla
+    se os produtos de uma categoria aparecem na tela de novo pedido
+    (mesas e retiradas), somando-se a `Product.active`/`available`, sem
+    substituir nenhum dos dois. `DEFAULT true` cobre toda categoria já
+    existente automaticamente; a migration já grava `false` só na
+    categoria "Loja" (criada pela importação VHSYS, seção 0-B da ADR
+    0009). Verificado com uma transação desfeita (nunca commitada): com um
+    produto da Loja marcado `available: true`, a consulta antiga (sem o
+    filtro de categoria) o incluía, a nova não.
 
 ## 7. Fluxo de migration usado na prática
 

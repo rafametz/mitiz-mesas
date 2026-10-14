@@ -24,6 +24,7 @@ export default async function CategoriasPage() {
             <Th>Nome</Th>
             <Th>Ordem</Th>
             <Th>Ativa</Th>
+            <Th>No pedido</Th>
             <Th />
           </Tr>
         </thead>
@@ -33,6 +34,7 @@ export default async function CategoriasPage() {
               <Td>{category.name}</Td>
               <Td>{category.sortOrder}</Td>
               <Td>{category.active ? "Sim" : "Não"}</Td>
+              <Td>{category.visibleInOrders ? "Sim" : "Não"}</Td>
               <Td>
                 <Link
                   href={`/admin/categorias/${category.id}/editar`}
@@ -45,7 +47,7 @@ export default async function CategoriasPage() {
           ))}
           {categories.length === 0 && (
             <Tr>
-              <Td colSpan={4} className="text-muted">
+              <Td colSpan={5} className="text-muted">
                 Nenhuma categoria cadastrada ainda.
               </Td>
             </Tr>
@@ -59,6 +61,11 @@ export default async function CategoriasPage() {
           <TextField label="Nome" name="name" required maxLength={80} />
           <TextField label="Ordem de exibição" name="sortOrder" type="number" defaultValue={0} />
           <CheckboxField label="Ativa" name="active" defaultChecked />
+          <CheckboxField
+            label="Mostrar produtos no novo pedido (mesas e retiradas)"
+            name="visibleInOrders"
+            defaultChecked
+          />
           <SubmitButton>Criar categoria</SubmitButton>
         </form>
       </div>

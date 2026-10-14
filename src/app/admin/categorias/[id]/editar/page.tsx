@@ -23,6 +23,11 @@ export default async function EditarCategoriaPage({ params }: { params: Promise<
           defaultValue={category.sortOrder}
         />
         <CheckboxField label="Ativa" name="active" defaultChecked={category.active} />
+        <CheckboxField
+          label="Mostrar produtos no novo pedido (mesas e retiradas)"
+          name="visibleInOrders"
+          defaultChecked={category.visibleInOrders}
+        />
         <SubmitButton>Salvar</SubmitButton>
       </form>
     </div>

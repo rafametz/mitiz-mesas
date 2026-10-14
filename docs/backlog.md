@@ -148,6 +148,14 @@ quando a primeira rota com restrição por perfil for criada.
   erro do script — sete sabores de caipirinha e dois Baden Baden
   compartilhavam o mesmo código de barras genérico). Resultado registrado
   em `ProductImportBatch`/`ProductImportRow` (schema da Fase 1).
+- ✅ `Category.visibleInOrders` (ADR 0009, 2026-10-14, seção 0-C) — segunda
+  camada de proteção pedida pelo usuário: categoria inteira pode ficar de
+  fora da tela de novo pedido (mesas e retiradas), não só produto a
+  produto. `DEFAULT true` em toda categoria existente; só "Loja" virou
+  `false`. Tela `/admin/categorias` ganhou o campo "Mostrar produtos no
+  novo pedido". Verificado com transação desfeita (sem gravar nada de
+  verdade): produto da Loja marcado `available: true` temporariamente
+  aparecia na consulta antiga e não na nova.
 - Preço do produto congela no `OrderItem.unitPrice` no momento do
   lançamento (regra 9/10) — já garantido pelo schema desde o Módulo 0; o
   teste de ponta a ponta (alterar preço não muda pedido já lançado) só é

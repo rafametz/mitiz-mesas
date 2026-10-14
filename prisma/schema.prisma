@@ -505,6 +505,16 @@ model Category {
   sortOrder    Int     @default(0)
   active       Boolean @default(true)
 
+  // Controla se os produtos desta categoria aparecem na tela de novo
+  // pedido do garçom/retirada (pedido do usuário 2026-10-14, depois da
+  // importação VHSYS — ADR 0009, seção 0-B): categorias normais ficam
+  // `true` (comportamento de sempre); a categoria "Loja" (produtos só de
+  // PDV, ainda não vendidos na mesa) fica `false`. Checado junto de
+  // `Product.active`/`available` nas duas telas de novo pedido
+  // (mesas e retiradas) — não substitui esses dois campos, é mais uma
+  // camada: um produto só aparece se os três estiverem certos.
+  visibleInOrders Boolean @default(true)
+
   // Lembra o mapeamento "categoria X da importação = esta categoria aqui",
   // decidido uma vez pelo administrador na Etapa D do importador (ADR 0009,
   // seção 9) — a próxima importação reconhece automaticamente, sem

@@ -20,7 +20,16 @@ export default async function NovoPedidoRetiradaPage({
 
   const restaurant = await getCurrentRestaurant();
   const products = await prisma.product.findMany({
-    where: { restaurantId: restaurant.id, active: true, available: true },
+    // `category.visibleInOrders` (pedido do usuário 2026-10-14, depois da
+    // importação VHSYS — ADR 0009): categoria "Loja" fica de fora do
+    // pedido de retirada mesmo que algum produto dela um dia vire
+    // `available: true`. Soma-se a active/available, não substitui.
+    where: {
+      restaurantId: restaurant.id,
+      active: true,
+      available: true,
+      category: { visibleInOrders: true },
+    },
     include: {
       category: true,
       modifierGroups: {

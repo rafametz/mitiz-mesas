@@ -11,6 +11,7 @@ const categorySchema = z.object({
   name: z.string().trim().min(1, "Nome é obrigatório").max(80),
   sortOrder: z.coerce.number().int().default(0),
   active: z.boolean(),
+  visibleInOrders: z.boolean(),
 });
 
 function parseCategoryForm(formData: FormData) {
@@ -18,6 +19,7 @@ function parseCategoryForm(formData: FormData) {
     name: formData.get("name"),
     sortOrder: formData.get("sortOrder") || 0,
     active: formData.get("active") === "on",
+    visibleInOrders: formData.get("visibleInOrders") === "on",
   });
 }
 
