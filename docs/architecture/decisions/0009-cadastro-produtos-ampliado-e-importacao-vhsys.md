@@ -1,8 +1,10 @@
 # ADR 0009 — Cadastro de produtos ampliado e importação VHSYS
 
-- **Status**: Aprovada (decisões registradas em 2026-10-14, ver seção 0).
-  Fase 1 (banco de dados) e Fase 2 (tela de produtos) implementadas; Fases
-  3-6 (importador) aguardando.
+- **Status**: Concluída. Fases 1 (banco de dados) e 2 (tela de produtos)
+  implementadas; Fases 3-6 (telas de importador A-F reutilizável)
+  substituídas, a pedido do usuário (2026-10-14), por uma importação única
+  feita diretamente via script — ver seção 0-B. Catálogo real já
+  importado em produção.
 - **Data**: 2026-10-14
 - **Relacionada**: CLAUDE.md §21 (integração futura com PDV), ADR 0007 (integração
   VHSYS — Vendas Balcão/PDV, Fase 1 já implementada)
@@ -65,6 +67,70 @@ Respostas às 8 perguntas da seção 16, nesta ordem:
 O restante deste documento foi atualizado para refletir essas decisões; onde
 o texto original ainda aparecer como pergunta aberta, a resposta acima
 prevalece.
+
+## 0-B. Mudança de estratégia e execução (2026-10-14)
+
+Depois da Fase 2 pronta, o usuário decidiu **não construir as telas A-F do
+importador reutilizável** (seções 7, 14, 19 originais) — pediu uma
+importação única, feita diretamente por mim via script, contra o arquivo
+real, com o resultado registrado nas tabelas de auditoria que a Fase 1 já
+tinha criado (`ProductImportBatch`/`ProductImportRow`), em vez de uma UI.
+
+Antes de rodar, cruzei a planilha com o catálogo real (53 produtos
+usados nas mesas hoje) e apresentei achados concretos para decisão:
+
+- 26 linhas bateram por nome exato com produto já existente (uma delas
+  era a "FANTA LARANJA LATA 350ml" duplicada na planilha, com preços
+  diferentes — usuário confirmou manter só o código com R$5,00).
+- 4 pares de nome parecido, decididos individualmente: 3 são o mesmo
+  produto (ligados manualmente, nunca por heurística automática) e 1
+  ("COCA-COLA ZERO 1L" vs. "Coca Cola Zero 2L" do MITIZ) **não é o
+  mesmo produto** — confirmado como produto novo.
+- **Achado de segurança não previsto no pedido original**: a tela de
+  novo pedido do garçom lista todo produto com `available=true` sem
+  filtrar por setor — importar os produtos novos com o padrão do schema
+  teria feito ~380 itens de prateleira/PDV aparecerem no cardápio da
+  mesa por engano. Corrigido com `available: false` em todo produto
+  novo (usuário confirmou).
+- Categoria única "Loja" para todo produto novo (em vez de recriar as 7
+  categorias da VHSYS, que cobririam só ~90 dos ~380 produtos novos
+  mesmo assim). Setor único "Loja", sem impressão.
+- Produto já existente: nunca muda nome, preço, categoria, setor,
+  unidade, disponibilidade — só preenche campo novo hoje vazio. Preço
+  não é atualizado pela planilha (usuário ajusta manualmente quando
+  quiser).
+
+Script: `scripts/import-vhsys-produtos-2026-10-14.ts` (mantido no
+repositório como registro histórico da execução, não como ferramenta
+reutilizável — mesmo racional de uma migration). Rodado primeiro em modo
+simulação (`DRY_RUN=1`, mesma lógica, sem gravar nada) para conferir os
+números batiam com o esperado, só depois em modo real, com confirmação
+explícita do usuário.
+
+**Resultado da execução real** (lote `cmv8k3wt300lntuqwwig5zmad`):
+
+| Resultado | Quantidade |
+|---|---|
+| Criados | 379 |
+| Atualizados (correspondidos, nome preservado) | 28 |
+| Ignorados | 2 (linha "TAXA DE SERVIÇO" sem produto; código `FL0001`, duplicata de preço desatualizado da Fanta) |
+| Rejeitados | 8 |
+| **Total** | **417** |
+
+Os 8 rejeitados falharam por **código de barras duplicado dentro da
+própria planilha** — não é um problema do script, é dado real da VHSYS:
+sete variantes de "CAIPIRINHA ... 550ML" (`CE-0001`, `CL-0001`, `CM-0001`,
+`CM-0002`, `CMM0001`, `CMM0002`, `CV-0001`) compartilham o mesmo código de
+barras genérico `619205878491` que já tinha sido usado por "CAIPIRINHA
+COCO E LIMÃO - 550ML" (`CCL0002`, criada com sucesso); e "Baden Baden
+Witbier" (`BBW0001`) compartilha `7898230716616` com "Baden Baden
+Cristal" (`BBC0001`, também já criada). Nenhum desses 8 produtos foi
+criado — ficam de fora até alguém corrigir o código de barras na origem
+(VHSYS) ou decidir cadastrá-los manualmente sem código de barras.
+
+Verificado depois da execução: 432 produtos no total (53 + 379), **zero
+produtos da categoria "Loja" com `available=true`** (não aparecem na
+tela de novo pedido), amostra de produto novo conferida campo a campo.
 
 ---
 

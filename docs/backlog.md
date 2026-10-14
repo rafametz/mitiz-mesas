@@ -131,6 +131,23 @@ quando a primeira rota com restrição por perfil for criada.
   verdade zera no banco — achado e corrigido durante a própria
   implementação: campo `undefined` no `update()` do Prisma mantém o valor
   antigo, só `null` limpa de fato) e responsividade mobile.
+- ✅ Importação única do catálogo VHSYS (ADR 0009, 2026-10-14, seção 0-B) —
+  pedido do usuário trocou as telas A-F de importador reutilizável por uma
+  importação única feita via script direto contra produção
+  (`scripts/import-vhsys-produtos-2026-10-14.ts`, mantido como registro
+  histórico), rodado primeiro em modo simulação e só depois com gravação
+  real, com confirmação explícita do usuário. 379 produtos criados
+  (categoria/setor únicos "Loja", `available: false` — achado de segurança
+  não previsto no pedido original: a tela de novo pedido do garçom lista
+  todo produto disponível sem filtrar por setor, então produto novo
+  precisava nascer indisponível pra não vazar pro cardápio da mesa), 28
+  correspondidos a produto já existente (nome/preço/categoria/setor
+  preservados, só campo novo vazio preenchido), 2 ignorados (linha de taxa
+  de serviço da VHSYS; duplicata de preço da Fanta), 8 rejeitados por
+  código de barras duplicado na própria planilha (dado real da VHSYS, não
+  erro do script — sete sabores de caipirinha e dois Baden Baden
+  compartilhavam o mesmo código de barras genérico). Resultado registrado
+  em `ProductImportBatch`/`ProductImportRow` (schema da Fase 1).
 - Preço do produto congela no `OrderItem.unitPrice` no momento do
   lançamento (regra 9/10) — já garantido pelo schema desde o Módulo 0; o
   teste de ponta a ponta (alterar preço não muda pedido já lançado) só é
