@@ -427,18 +427,20 @@ validada.
 
 ## 16. Decisões que precisam da sua aprovação antes de cada fase
 
-**Fase 2 — PDV**:
-1. Nome do novo `ServiceSessionType` (ex. "PDV", "COUNTER", "BALCAO")?
-2. Venda por peso entra na primeira versão (exige mudar
-   `OrderItem.quantity` para decimal, afeta cálculo de subtotal e
-   impressão em todo o sistema, não só no PDV) ou fica para depois,
-   vendendo só por unidade no início?
-3. Troco é só um cálculo de tela (não grava nada novo) ou precisa virar
-   um campo gravado no `Payment` (ex. valor recebido vs. valor líquido)?
-4. O recibo do PDV reaproveita o layout de ticket atual (mais parecido
-   com comanda de cozinha) ou precisa de um formato de "recibo de venda"
-   diferente, com todos os itens e totais num formato mais parecido com
-   nota?
+**Fase 2 — PDV** — ✅ decidido com o usuário em 2026-10-15:
+1. ~~Nome do novo `ServiceSessionType`~~ → **`PDV`**.
+2. ~~Venda por peso na v1?~~ → **Não.** V1 só por unidade;
+   `OrderItem.quantity` continua inteiro por enquanto. Venda por peso
+   (carnes no KG) vira uma etapa própria, depois da v1 validada —
+   registrar no backlog quando chegar a vez, não perder essa decisão.
+3. ~~Troco: cálculo de tela ou campo gravado?~~ → **Só cálculo de tela**
+   por enquanto, nada novo gravado em `Payment`. Revisitar quando o
+   módulo de Caixa (Fase 3) chegar, se a conferência de caixa precisar
+   do valor recebido em dinheiro separado do troco.
+4. ~~Recibo: reaproveita o ticket ou formato novo?~~ → **Formato de
+   recibo de venda** (itens com preço, subtotal, total, forma de
+   pagamento, troco) — 6º tipo de `PrintJob`, reaproveitando fila/agente
+   já existentes, layout próprio.
 
 **Fase 3 — Caixa**:
 5. Um caixa por período (ex. diário) ou por turno/usuário — pode haver
@@ -513,7 +515,7 @@ frente.
 | Fase | Conteúdo | Depende de | Status |
 |---|---|---|---|
 | 1 | Cadastro de produtos ampliado + importação VHSYS | — | ✅ Concluída (2026-10-15) — 8 códigos de barra duplicados deixados para correção manual do usuário, sem bloquear |
-| 2 | PDV (venda rápida, código de barras, formas de pagamento, troco, recibo) | Fase 1 | **Em andamento** — aguardando as decisões da seção 16 |
+| 2 | PDV (venda rápida, código de barras, formas de pagamento, troco, recibo) | Fase 1 | **Em andamento** — decisões tomadas (seção 16), implementação começando |
 | 3 | Caixa e vendas centralizadas (abertura/fechamento, movimentações) | Fase 2 | Aguardando |
 | 4 | Financeiro (contas a pagar/receber, painel, alertas) | Fases 2-3 recomendado, não estritamente obrigatório | Aguardando |
 | 5 | Fiscal (NFC-e, depois NF-e) | Fase 2 + validação externa (contabilidade, provedor) | Aguardando |
