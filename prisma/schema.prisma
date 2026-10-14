@@ -222,6 +222,8 @@ model Restaurant {
   roastProductionDays RoastProductionDay[]
   roastReservations   RoastReservation[]
 
+  productImportBatches ProductImportBatch[]
+
   @@map("restaurants")
 }
 
@@ -299,6 +301,8 @@ model User {
   roastReservationsMade      RoastReservation[] @relation("RoastReservationWaiter")
   roastReservationsDelivered RoastReservation[] @relation("RoastReservationDeliveredBy")
   roastReservationsCancelled RoastReservation[] @relation("RoastReservationCancelledBy")
+
+  productImportBatches ProductImportBatch[]
 
   @@index([restaurantId])
   @@map("users")
@@ -501,12 +505,20 @@ model Category {
   sortOrder    Int     @default(0)
   active       Boolean @default(true)
 
+  // Lembra o mapeamento "categoria X da importação = esta categoria aqui",
+  // decidido uma vez pelo administrador na Etapa D do importador (ADR 0009,
+  // seção 9) — a próxima importação reconhece automaticamente, sem
+  // perguntar de novo. Nulo até a primeira importação que use essa
+  // categoria.
+  externalCode String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
   products   Product[]
 
+  @@unique([restaurantId, externalCode])
   @@unique([restaurantId, name])
   @@map("categories")
 }
@@ -532,6 +544,64 @@ model Product {
   // atendimento, nunca o fechamento local da mesa.
   vhsysProductId Int?
 
+  // Cadastro ampliado (ADR 0009, 2026-10-14) — todos opcionais de propósito,
+  // nenhum produto existente precisa ser preenchido retroativamente. Fonte
+  // original: exportação de produtos do VHSYS (planilha), mas os nomes são
+  // genéricos (sem "vhsys" no nome, pedido do usuário) porque passam a ser
+  // os campos de cadastro do MITIZ dali para frente, não exclusivos dessa
+  // origem — ex.: `sku` também serve para cadastro manual futuro e para o
+  // PDV com leitor de código de barras (preparação, sem implementar o PDV
+  // em si). `sku`/`barcode` são a chave de correspondência da importação
+  // (nunca o nome sozinho) — ver seção 10 da ADR 0009.
+  sku     String? // código interno/SKU — nunca tratado como número (pode ter letras/hífen/zero à esquerda)
+  barcode String? // GTIN-8/12/13/14; comprimento fora desse padrão é só alertado, nunca corrigido sozinho
+  brand   String?
+  // Unidade de venda (ex. "UN", "KG") — texto livre normalizado só em
+  // maiúsculas no importador, mesmo padrão de RoastProduct.unit. Não é um
+  // enum porque a lista real de unidades do VHSYS não é fechada (CX, FD
+  // apareceram na exportação além de UN/KG).
+  unit    String  @default("UN")
+
+  // Estoque e custo — nulo em stockQuantity/stockMinimum significa "sem
+  // controle de estoque" (pedido explícito do usuário), diferente de zero.
+  // Decimal(10,3), mesmo padrão já usado em RoastReservationItem.quantity,
+  // porque a planilha real tem estoque com até 3 casas decimais.
+  costPrice     Decimal? @db.Decimal(10, 2)
+  stockQuantity Decimal? @db.Decimal(10, 3)
+  stockMinimum  Decimal? @db.Decimal(10, 3)
+  weight        Decimal? @db.Decimal(10, 3)
+  netWeight     Decimal? @db.Decimal(10, 3)
+
+  // Dados fiscais — reservados para uma futura emissão de NFC-e/NF-e
+  // (CLAUDE.md §21), não usados em nenhum fluxo hoje. `ncm`/`cest` ficam
+  // como String (nunca Int) para preservar exatamente o valor de origem,
+  // inclusive quando incompleto (ex.: NCM com 7 dígitos na planilha real —
+  // a correção de zero à esquerda é uma decisão humana, não automática).
+  ncm               String?
+  cest              String?
+  origin            Int? // Origem da mercadoria, 0 a 8 (tabela do NCM/ICMS)
+  icmsRate          Decimal? @db.Decimal(5, 2)
+  ipiRate           Decimal? @db.Decimal(5, 2)
+  pisRate           Decimal? @db.Decimal(5, 2)
+  cofinsRate        Decimal? @db.Decimal(5, 2)
+  taxableUnit       String?
+  fiscalBenefitCode String?
+  fiscalClassType   String?
+
+  // Fornecedor — só informativo nesta etapa (sem model Supplier próprio;
+  // promover para tabela separada fica para quando alguma tela precisar
+  // disso de verdade, CLAUDE.md §17 "não criar abstração sem necessidade
+  // real"). `supplierCode` é o identificador externo do fornecedor (nunca
+  // o sentinela "0" de "sem fornecedor" da VHSYS — isso vira null).
+  supplierName String?
+  supplierCode String?
+
+  // Observações importadas — campo separado de `description` de propósito:
+  // `description` já é um campo operacional do MITIZ (pode estar
+  // preenchido com outra coisa); misturar os dois arriscaria sobrescrever
+  // texto que já existia (ADR 0009, seção 3).
+  importNotes String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -541,10 +611,83 @@ model Product {
 
   modifierGroups ProductModifierGroup[]
   orderItems     OrderItem[]
+  importRows     ProductImportRow[]
 
+  @@unique([restaurantId, sku])
+  @@unique([restaurantId, barcode])
   @@index([restaurantId])
   @@index([categoryId])
   @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Importação de produtos (ADR 0009) — trilha de auditoria de cada execução do
+// importador administrativo (planilha do VHSYS ou, no futuro, outra fonte).
+// Nunca grava direto: a confirmação (modo real) e a simulação (modo
+// simulação, roda a mesma lógica dentro de uma transação sempre desfeita no
+// final, para testar contra o banco de produção sem gravar nada) produzem um
+// ProductImportBatch com um ProductImportRow por linha processada.
+// ---------------------------------------------------------------------------
+
+enum ProductImportBatchStatus {
+  PENDING
+  SIMULATED
+  COMPLETED
+  FAILED
+}
+
+enum ProductImportRowOutcome {
+  CREATED
+  UPDATED
+  SKIPPED
+  REJECTED
+}
+
+model ProductImportBatch {
+  id           String                   @id @default(cuid())
+  restaurantId String
+  fileName     String
+  // SHA-256 do arquivo enviado — detecta reimportação do mesmo arquivo
+  // (ADR 0009, seção 11), sem impedir, só avisando antes de prosseguir.
+  fileHash     String
+  importedById String
+  status       ProductImportBatchStatus @default(PENDING)
+
+  totalRows     Int
+  createdCount  Int @default(0)
+  updatedCount  Int @default(0)
+  skippedCount  Int @default(0)
+  rejectedCount Int @default(0)
+
+  startedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  confirmedAt DateTime? @db.Timestamptz(6)
+  finishedAt  DateTime? @db.Timestamptz(6)
+
+  restaurant Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  importedBy User               @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  rows       ProductImportRow[]
+
+  @@index([restaurantId])
+  @@map("product_import_batches")
+}
+
+model ProductImportRow {
+  id          String                  @id @default(cuid())
+  batchId     String
+  rowNumber   Int
+  sku         String?
+  productName String
+  outcome     ProductImportRowOutcome
+  // Obrigatório quando outcome = REJECTED; opcional nos demais (ex.: avisos
+  // não bloqueantes, como NCM com 7 dígitos — ADR 0009, situação 3).
+  reason      String?
+  productId   String?
+
+  batch   ProductImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  product Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@map("product_import_rows")
 }
 
 model ProductModifierGroup {

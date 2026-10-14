@@ -235,6 +235,29 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     código `tables.view` e o vincula a ADMIN, CASHIER e WAITER. Idempotente
     (`ON CONFLICT`). Não usa o seed porque ele também regrava o usuário
     inicial. Produção não recebe a permissão.
+12. ✅ Cadastro de produtos ampliado + trilha de auditoria da importação
+    (ADR 0009, 2026-10-14, Fase 1 do plano de implementação) —
+    `prisma/migrations/20261014120000_cadastro_produtos_ampliado_e_importacao`:
+    `Product` ganha ~20 campos opcionais (`sku`, `barcode`, `brand`, `unit`,
+    custo/estoque, fiscais, fornecedor, `importNotes`) e dois índices únicos
+    parciais (`restaurantId`+`sku`, `restaurantId`+`barcode` — `NULL` nunca
+    colide com `NULL`, mesmo padrão de unicidade opcional já usado no
+    projeto). `Category` ganha `externalCode` (lembra o mapeamento de
+    categoria da importação). Dois modelos novos para auditoria de cada
+    execução do importador (ainda não implementado):
+    `ProductImportBatch`/`ProductImportRow`. Nenhuma coluna/constraint
+    existente foi alterada; nenhum produto precisa ser preenchido
+    retroativamente. Migration gerada com `prisma migrate diff --from-url
+    <DIRECT_URL> --to-schema-datamodel prisma/schema.prisma --script` (a
+    mesma técnica evita escrever à mão e pega qualquer discrepância — um
+    `DROP INDEX` de deriva pré-existente em `service_sessions`, sem relação
+    com esta mudança, foi identificado e removido do arquivo final antes de
+    aplicar). RLS habilitado nas duas tabelas novas em uma migration
+    separada imediatamente em seguida
+    (`20261014120500_enable_rls_product_import`) — não esquecido desta vez
+    (lição do item 10). Verificado: as 32 tabelas de `public` com RLS
+    ligado, `tsc --noEmit`/lint/build limpos, 215 testes unitários e as 88
+    de integração (11 arquivos) passando.
 
 ## 7. Fluxo de migration usado na prática
 
