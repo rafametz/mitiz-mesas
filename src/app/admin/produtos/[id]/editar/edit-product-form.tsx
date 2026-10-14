@@ -2,38 +2,29 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { CheckboxField, SelectField, TextAreaField, TextField } from "@/components/form/field";
-import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useToast } from "@/components/ui/toast";
+import { ProductFormFields, type ProductFormDefaults } from "../../product-form-fields";
 import { updateProduct, type FormState } from "../../actions";
 
 type Option = { id: string; name: string };
-type ProductData = {
-  id: string;
-  name: string;
-  description: string | null;
-  price: string;
-  categoryId: string;
-  defaultSectorId: string;
-  available: boolean;
-  active: boolean;
-};
 
 const initialState: FormState = { error: null };
 
 export function EditProductForm({
-  product,
+  productId,
+  defaults,
   categories,
   sectors,
 }: {
-  product: ProductData;
+  productId: string;
+  defaults: ProductFormDefaults;
   categories: Option[];
   sectors: Option[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const action = updateProduct.bind(null, product.id);
+  const action = updateProduct.bind(null, productId);
   const [state, formAction, isPending] = useActionState(action, initialState);
 
   // Mesmo padrão de novo-produto/mesas — a ação não redireciona no
@@ -50,36 +41,8 @@ export function EditProductForm({
   }, [isPending, state.success]);
 
   return (
-    <form action={formAction} className="flex max-w-sm flex-col gap-4">
-      <TextField label="Nome" name="name" defaultValue={product.name} required maxLength={120} />
-      <TextAreaField
-        label="Descrição (opcional)"
-        name="description"
-        defaultValue={product.description ?? ""}
-        maxLength={500}
-      />
-      <MoneyField label="Preço" name="price" defaultValue={product.price} />
-      <SelectField label="Categoria" name="categoryId" defaultValue={product.categoryId} required>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </SelectField>
-      <SelectField
-        label="Setor de destino"
-        name="defaultSectorId"
-        defaultValue={product.defaultSectorId}
-        required
-      >
-        {sectors.map((sector) => (
-          <option key={sector.id} value={sector.id}>
-            {sector.name}
-          </option>
-        ))}
-      </SelectField>
-      <CheckboxField label="Disponível" name="available" defaultChecked={product.available} />
-      <CheckboxField label="Ativo" name="active" defaultChecked={product.active} />
+    <form action={formAction} className="flex max-w-2xl flex-col gap-4">
+      <ProductFormFields defaults={defaults} categories={categories} sectors={sectors} />
       {state.error && (
         <p role="alert" className="text-sm text-wine">
           {state.error}

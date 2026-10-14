@@ -119,6 +119,18 @@ quando a primeira rota com restrição por perfil for criada.
   do produto (só fazem sentido no contexto de um produto). Migration extra:
   `ProductModifierGroup.active` (não existia, adicionado por consistência
   com `ProductModifier`);
+- ✅ Cadastro de produto ampliado (ADR 0009, 2026-10-14, Fase 2) — formulário
+  em seções (Dados gerais, Preços, Estoque, Dados fiscais, Fornecedor,
+  Informações adicionais — `product-form-fields.tsx`, compartilhado entre
+  criar/editar), busca na listagem por nome/código/código de barras,
+  colunas opcionais Código/Estoque. Validação em
+  `src/domain/product/product-form.ts` (módulo puro, sem import do Next,
+  13 testes unitários). Conflito de `sku`/`barcode` já usado por outro
+  produto devolve mensagem específica (`P2002`), não erro genérico.
+  Verificado no navegador (criação, edição, limpar um campo opcional de
+  verdade zera no banco — achado e corrigido durante a própria
+  implementação: campo `undefined` no `update()` do Prisma mantém o valor
+  antigo, só `null` limpa de fato) e responsividade mobile.
 - Preço do produto congela no `OrderItem.unitPrice` no momento do
   lançamento (regra 9/10) — já garantido pelo schema desde o Módulo 0; o
   teste de ponta a ponta (alterar preço não muda pedido já lançado) só é

@@ -2,10 +2,9 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { CheckboxField, SelectField, TextAreaField, TextField } from "@/components/form/field";
-import { MoneyField } from "@/components/form/money-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { useToast } from "@/components/ui/toast";
+import { EMPTY_PRODUCT_DEFAULTS, ProductFormFields } from "../product-form-fields";
 import { createProduct, type FormState } from "../actions";
 
 type Option = { id: string; name: string };
@@ -37,32 +36,8 @@ export function NewProductForm({
   }, [isPending, state.success]);
 
   return (
-    <form action={formAction} className="flex max-w-sm flex-col gap-4">
-      <TextField label="Nome" name="name" required maxLength={120} />
-      <TextAreaField label="Descrição (opcional)" name="description" maxLength={500} />
-      <MoneyField label="Preço" name="price" />
-      <SelectField label="Categoria" name="categoryId" required defaultValue="">
-        <option value="" disabled>
-          Selecione
-        </option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </SelectField>
-      <SelectField label="Setor de destino" name="defaultSectorId" required defaultValue="">
-        <option value="" disabled>
-          Selecione
-        </option>
-        {sectors.map((sector) => (
-          <option key={sector.id} value={sector.id}>
-            {sector.name}
-          </option>
-        ))}
-      </SelectField>
-      <CheckboxField label="Disponível" name="available" defaultChecked />
-      <CheckboxField label="Ativo" name="active" defaultChecked />
+    <form action={formAction} className="flex max-w-2xl flex-col gap-4">
+      <ProductFormFields defaults={EMPTY_PRODUCT_DEFAULTS} categories={categories} sectors={sectors} />
       {state.error && (
         <p role="alert" className="text-sm text-wine">
           {state.error}

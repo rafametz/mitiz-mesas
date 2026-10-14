@@ -1,7 +1,8 @@
 # ADR 0009 — Cadastro de produtos ampliado e importação VHSYS
 
 - **Status**: Aprovada (decisões registradas em 2026-10-14, ver seção 0).
-  Fase 1 (banco de dados) implementada nesta revisão; Fases 2-6 aguardando.
+  Fase 1 (banco de dados) e Fase 2 (tela de produtos) implementadas; Fases
+  3-6 (importador) aguardando.
 - **Data**: 2026-10-14
 - **Relacionada**: CLAUDE.md §21 (integração futura com PDV), ADR 0007 (integração
   VHSYS — Vendas Balcão/PDV, Fase 1 já implementada)
