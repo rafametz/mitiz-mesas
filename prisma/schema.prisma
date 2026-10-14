@@ -162,6 +162,14 @@ enum GuestStatus {
 enum ServiceSessionType {
   TABLE
   PICKUP
+  // Venda de balcão (Fase 2 do roadmap MITIZ Gestão, docs/product/
+  // visao-mitiz-gestao.md, decidido com o usuário 2026-10-15). Mesmo
+  // `ServiceSession` de TABLE/PICKUP — Order/OrderItem/Payment/Discount/
+  // ServiceCharge/PrintJob e os relatórios funcionam sem nenhuma mudança,
+  // igual já aconteceu quando PICKUP foi criado (ADR 0005). `tableId`
+  // fica nulo (mesmo padrão de PICKUP); `guestCount` fixo em 1 (não é um
+  // grupo de pessoas); `waiterId` é quem operou a venda no balcão.
+  PDV
 }
 
 // Como o cliente fez o pedido de retirada (tela "Nova retirada").

@@ -48,6 +48,16 @@ export const PERMISSIONS = {
   ROASTS_EDIT: "roasts.edit",
   ROASTS_DELIVER: "roasts.deliver",
   ROASTS_CANCEL: "roasts.cancel",
+  // PDV — venda de balcão (Fase 2 do roadmap MITIZ Gestão, decidido com o
+  // usuário 2026-10-15). Um único código cobre abrir a venda, lançar
+  // item e fechar/pagar — mesmo nível de granularidade de TABLES_OPEN/
+  // ORDERS_CREATE combinados, porque é um fluxo rápido de balcão, não um
+  // atendimento de mesa com várias etapas e perfis diferentes em cada
+  // uma. Não reaproveita TABLES_OPEN/ORDERS_CREATE porque Caixa pode
+  // vender no PDV sem poder abrir mesa física nem mandar pedido pra
+  // cozinha — são operações diferentes mesmo usando o mesmo
+  // ServiceSession por baixo.
+  PDV_SELL: "pdv.sell",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -77,6 +87,9 @@ export const ROLE_PERMISSIONS: Record<RoleCode, readonly PermissionCode[]> = {
     // Só consulta o painel de reservas de assados, decisão do usuário
     // 2026-09-29 — não cria, edita, entrega nem cancela.
     PERMISSIONS.ROASTS_VIEW,
+    // Vende no PDV — CLAUDE.md/visão MITIZ Gestão: "Caixa: PDV" (decisão
+    // do usuário 2026-10-15).
+    PERMISSIONS.PDV_SELL,
   ],
   WAITER: [
     PERMISSIONS.TABLES_VIEW,

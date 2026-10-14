@@ -269,6 +269,16 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     0009). Verificado com uma transação desfeita (nunca commitada): com um
     produto da Loja marcado `available: true`, a consulta antiga (sem o
     filtro de categoria) o incluía, a nova não.
+14. ✅ PDV — venda de balcão (Fase 2 do roadmap MITIZ Gestão,
+    `docs/product/visao-mitiz-gestao.md`, decidido com o usuário
+    2026-10-15) —
+    `prisma/migrations/20261015130000_pdv_session_type_and_permission`:
+    `ServiceSessionType` ganha o valor `PDV`, mesmo `ServiceSession` de
+    `TABLE`/`PICKUP` (nenhuma tabela nova, mesmo racional de quando
+    `PICKUP` nasceu — ADR 0005). Permissão nova `pdv.sell`, concedida a
+    ADMIN e CASHIER (idempotente, inserida direto, não pelo seed — mesmo
+    motivo do item 11). Nada além do schema implementado ainda — tela,
+    fechamento e recibo são os próximos passos da Fase 2.
 
 ## 7. Fluxo de migration usado na prática
 

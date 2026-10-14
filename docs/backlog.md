@@ -1343,6 +1343,40 @@ permissão e ter controle de quem usa o sistema.
   `tsc --noEmit`, `npm run lint`, `npm run build` e `npm run
   test:integration` limpos.
 
+## Módulo 17 — PDV (venda de balcão)
+
+Fase 2 do roadmap MITIZ Gestão (`docs/product/visao-mitiz-gestao.md`,
+aprovado pelo usuário 2026-10-15) — reduzir a dependência do VHSYS,
+começando pela venda presencial da boutique de carnes. Decisão
+arquitetural central: **reaproveitar `ServiceSession`/`Order`/`OrderItem`/
+`Payment`/`Discount`/`ServiceCharge`/`PrintJob` já existentes**, com
+`ServiceSessionType = PDV`, em vez de criar um sistema de vendas
+paralelo — mesmo padrão já usado quando Retiradas foi criado (ADR 0005).
+Isso já resolve de graça o requisito de histórico central de vendas sem
+duplicar nada.
+
+Decisões do usuário (2026-10-15, seção 16 da visão): nome `PDV`; venda
+por peso **fora** da v1 (só unidade, `OrderItem.quantity` continua
+inteiro — item de venda por peso fica registrado como próxima etapa
+separada, não perder essa decisão); troco é só cálculo de tela por
+enquanto, nada gravado em `Payment`; recibo usa formato próprio de venda
+(itens com preço, subtotal, total, forma de pagamento, troco), não o
+ticket de cozinha.
+
+- ✅ **Passo 1 — schema** (`prisma/migrations/20261015130000_pdv_session_type_and_permission`):
+  `ServiceSessionType` ganha `PDV`. Permissão nova `pdv.sell`, concedida a
+  ADMIN e CASHIER (Garçom e Produção não vendem no PDV). Nenhuma tabela
+  nova. **Testes**: 3 unitários novos (`pdv-sell-permission.test.ts`).
+  `tsc --noEmit`, lint, build, 231 testes unitários e integração
+  limpos.
+- 🔜 Passo 2 — tela de venda (busca por nome/código/código de barras,
+  carrinho, quantidade) — próximo.
+- 🔜 Passo 3 — fechamento rápido (forma de pagamento, múltiplas formas,
+  troco calculado na tela).
+- 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda).
+- 🔜 Passo 5 — testes de ponta a ponta e validação com o usuário contra
+  uma venda real de balcão.
+
 ## Ordem de execução recomendada
 
 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
