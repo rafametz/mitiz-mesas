@@ -368,5 +368,19 @@ dividida em 4 partes, 1 parte ainda aberta (R$ 20,00).
   `prisma/migrations/20261015140000_combined_checkout`): aditivo, RLS
   habilitado na própria migration. `tsc --noEmit`, lint, build, 231
   testes unitários e 88 de integração limpos.
-- 🔜 Passo 3 — orquestrador (`registerCombinedCheckout`).
-- 🔜 Passos 4-8 (tela, carrinho, recibo, testes, validação) — ver seção 15.
+- ✅ **Passo 3 — orquestrador** (`registerCombinedCheckout`,
+  `src/application/service-session/register-combined-checkout.ts`):
+  compõe `createOrderInTx`/`requestClosingInTx`/`registerPaymentInTx`/
+  `closeTableInTx` numa única transação Serializable com retry. Mesa
+  sempre paga por `allocations`, loja sempre por `amount` (regra pura em
+  `src/domain/service-session/combined-checkout.ts`). PDV nasce `OPEN`,
+  passa a `CLOSING` e fecha sozinho ao zerar o saldo — nunca exposto como
+  etapa separada ao operador. `registerPaymentInTx` ganhou um parâmetro
+  opcional `combinedCheckoutId` (só o orquestrador usa; comportamento de
+  quem chama `registerPayment` isoladamente não muda). 2 testes unitários
+  (validação pura) + 2 de integração cobrindo o exemplo completo da seção
+  16 (mesa + picanha, pagamento manual por origem, idempotência do
+  conjunto, estorno independente por origem). `tsc --noEmit`, lint, build,
+  233 testes unitários e 90 de integração (12 arquivos) limpos.
+- 🔜 Passos 4-8 (tela, carrinho, recibo, testes end-to-end, validação) —
+  ver seção 15.

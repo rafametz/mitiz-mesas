@@ -1385,10 +1385,15 @@ consumo de uma mesa aberta como parte do recebimento.
     mesmo padrão de `createOrderInTx`/`registerPaymentInTx` — preparação
     para compor as três operações numa única transação. `tsc --noEmit`,
     lint, build, 231 testes unitários e 88 de integração limpos.
-  - 🔜 orquestrador `registerCombinedCheckout` (compõe `createOrderInTx`/
-    `registerPaymentInTx`/`closeTableInTx` numa transação Serializable
-    com retry, cria `CombinedCheckout` com idempotência, fecha sozinha
-    só a sessão do PDV ao zerar o saldo).
+  - ✅ orquestrador `registerCombinedCheckout`
+    (`src/application/service-session/register-combined-checkout.ts`):
+    compõe `createOrderInTx`/`requestClosingInTx`/`registerPaymentInTx`/
+    `closeTableInTx` numa transação Serializable com retry, cria
+    `CombinedCheckout` com idempotência, fecha sozinha só a sessão do
+    PDV ao zerar o saldo. **Testes**: 2 unitários (validação pura) + 2
+    de integração (exemplo completo da ADR, idempotência, estorno
+    independente). `tsc --noEmit`, lint, build, 233 testes unitários e
+    90 de integração limpos.
   - 🔜 tela de recebimento combinado (seleção de consumo da mesa +
     formas de pagamento por origem, manual por decisão do usuário).
 - 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda; recibo do
