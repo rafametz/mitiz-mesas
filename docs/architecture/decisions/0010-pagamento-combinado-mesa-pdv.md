@@ -360,7 +360,13 @@ dividida em 4 partes, 1 parte ainda aberta (R$ 20,00).
 ## Implementação — acompanhamento
 
 - ✅ **Passo 1 — extração estrutural** (`registerPaymentInTx`,
-  `createOrderInTx`): em andamento.
-- 🔜 Passo 2 — schema (`CombinedCheckout` + `Payment.combinedCheckoutId`).
+  `createOrderInTx`, `closeTableInTx`): as três operações que o
+  orquestrador vai compor já têm núcleo parametrizado numa transação
+  externa, sem mudar o comportamento dos wrappers públicos existentes.
+  Confirmado sem regressão: 231 testes unitários e as 88 de integração.
+- ✅ **Passo 2 — schema** (`CombinedCheckout` + `Payment.combinedCheckoutId`,
+  `prisma/migrations/20261015140000_combined_checkout`): aditivo, RLS
+  habilitado na própria migration. `tsc --noEmit`, lint, build, 231
+  testes unitários e 88 de integração limpos.
 - 🔜 Passo 3 — orquestrador (`registerCombinedCheckout`).
 - 🔜 Passos 4-8 (tela, carrinho, recibo, testes, validação) — ver seção 15.

@@ -1363,6 +1363,11 @@ enquanto, nada gravado em `Payment`; recibo usa formato próprio de venda
 (itens com preço, subtotal, total, forma de pagamento, troco), não o
 ticket de cozinha.
 
+Pagamento Combinado (mesa + PDV numa confirmação só, ADR 0010, aprovada
+2026-10-15) foi incorporado ao Passo 3 abaixo em vez de virar um módulo
+separado — é o mesmo "fechamento rápido" do PDV, só que também aceita
+consumo de uma mesa aberta como parte do recebimento.
+
 - ✅ **Passo 1 — schema** (`prisma/migrations/20261015130000_pdv_session_type_and_permission`):
   `ServiceSessionType` ganha `PDV`. Permissão nova `pdv.sell`, concedida a
   ADMIN e CASHIER (Garçom e Produção não vendem no PDV). Nenhuma tabela
@@ -1372,10 +1377,24 @@ ticket de cozinha.
 - 🔜 Passo 2 — tela de venda (busca por nome/código/código de barras,
   carrinho, quantidade) — próximo.
 - 🔜 Passo 3 — fechamento rápido (forma de pagamento, múltiplas formas,
-  troco calculado na tela).
-- 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda).
+  troco calculado na tela) + Pagamento Combinado (ADR 0010):
+  - ✅ schema (`prisma/migrations/20261015140000_combined_checkout`):
+    modelo `CombinedCheckout` + `Payment.combinedCheckoutId`, aditivo,
+    RLS habilitado na própria migration. Extraído `closeTableInTx`
+    (núcleo de `closeTable` parametrizado numa transação externa),
+    mesmo padrão de `createOrderInTx`/`registerPaymentInTx` — preparação
+    para compor as três operações numa única transação. `tsc --noEmit`,
+    lint, build, 231 testes unitários e 88 de integração limpos.
+  - 🔜 orquestrador `registerCombinedCheckout` (compõe `createOrderInTx`/
+    `registerPaymentInTx`/`closeTableInTx` numa transação Serializable
+    com retry, cria `CombinedCheckout` com idempotência, fecha sozinha
+    só a sessão do PDV ao zerar o saldo).
+  - 🔜 tela de recebimento combinado (seleção de consumo da mesa +
+    formas de pagamento por origem, manual por decisão do usuário).
+- 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda; recibo do
+  Pagamento Combinado discrimina as duas origens).
 - 🔜 Passo 5 — testes de ponta a ponta e validação com o usuário contra
-  uma venda real de balcão.
+  uma venda real de balcão e contra um Pagamento Combinado real.
 
 ## Ordem de execução recomendada
 

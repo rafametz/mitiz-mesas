@@ -279,6 +279,23 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     ADMIN e CASHIER (idempotente, inserida direto, não pelo seed — mesmo
     motivo do item 11). Nada além do schema implementado ainda — tela,
     fechamento e recibo são os próximos passos da Fase 2.
+15. ✅ Pagamento Combinado mesa + PDV (ADR 0010, aprovada 2026-10-15, passo
+    2 do plano de implementação) —
+    `prisma/migrations/20261015140000_combined_checkout`: novo modelo
+    `CombinedCheckout` (agrupa `Payment` de origens diferentes, mesa e
+    PDV, sob um recibo único) e `Payment.combinedCheckoutId` opcional.
+    Camada puramente aditiva: saldo, idempotência e estorno de cada
+    `Payment` continuam exatamente como já funcionam hoje, sem nenhuma
+    tabela ou coluna financeira existente alterada. RLS habilitado já na
+    mesma migration (lição do item 10, citada no próprio cabeçalho do
+    arquivo). Em paralelo, extraído `closeTableInTx` em
+    `src/application/service-session/close-table.ts` (núcleo de
+    `closeTable` parametrizado numa transação externa), seguindo o mesmo
+    padrão já aplicado em `createOrderInTx`/`registerPaymentInTx` —
+    preparação para compor as três operações numa única transação do
+    checkout combinado (passo 3, ainda não implementado). Verificado:
+    `tsc --noEmit`/lint/build limpos, 231 testes unitários e as 88 de
+    integração (11 arquivos) passando.
 
 ## 7. Fluxo de migration usado na prática
 
