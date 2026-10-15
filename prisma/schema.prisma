@@ -231,6 +231,7 @@ model Restaurant {
   roastReservations   RoastReservation[]
 
   productImportBatches ProductImportBatch[]
+  combinedCheckouts    CombinedCheckout[]
 
   @@map("restaurants")
 }
@@ -311,6 +312,7 @@ model User {
   roastReservationsCancelled RoastReservation[] @relation("RoastReservationCancelledBy")
 
   productImportBatches ProductImportBatch[]
+  combinedCheckouts    CombinedCheckout[]
 
   @@index([restaurantId])
   @@map("users")
@@ -922,19 +924,62 @@ model Payment {
   voidReason String?
   voidedById String?
 
+  // Pagamento Combinado (ADR 0010, mesa + PDV numa operação só) — nulo
+  // num pagamento comum (de hoje, sem mudança nenhuma). Quando uma
+  // confirmação de recebimento cobre mais de uma origem (ex.: parte do
+  // consumo de uma mesa + produtos da loja no PDV), cada origem vira o
+  // seu próprio Payment aqui, sempre dentro de ServiceSession/saldo
+  // normais (nunca um Payment cruzando duas sessões) — este campo só os
+  // agrupa pra gerar um recibo único e pra saber que vieram da mesma
+  // confirmação. Nunca recalcula saldo nem substitui nada: cada Payment
+  // continua 100% dentro das regras que já existem (idempotência, saldo,
+  // estorno, auditoria).
+  combinedCheckoutId String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
-  serviceSession ServiceSession @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
-  paymentMethod  PaymentMethod  @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
-  guest          Guest?         @relation(fields: [guestId], references: [id], onDelete: SetNull)
-  registeredBy   User           @relation("PaymentRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
-  voidedBy       User?          @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  serviceSession   ServiceSession    @relation(fields: [serviceSessionId], references: [id], onDelete: Restrict)
+  paymentMethod    PaymentMethod     @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  guest            Guest?            @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  registeredBy     User              @relation("PaymentRegisteredBy", fields: [registeredById], references: [id], onDelete: Restrict)
+  voidedBy         User?             @relation("PaymentVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  combinedCheckout CombinedCheckout? @relation(fields: [combinedCheckoutId], references: [id], onDelete: SetNull)
 
   allocations PaymentItemAllocation[]
 
   @@index([serviceSessionId])
   @@index([guestId])
+  @@index([combinedCheckoutId])
   @@map("payments")
+}
+
+// Agrupa os Payment de uma confirmação de recebimento que cobriu mais de
+// uma origem — hoje: consumo de mesa/retirada + venda no PDV (ADR 0010,
+// "Pagamento Combinado", pedido do usuário 2026-10-15). Não é um segundo
+// sistema de pagamento: existe só pra gerar um recibo único e pra ligar
+// os Payment de uma mesma confirmação — saldo, idempotência e estorno de
+// cada Payment continuam exatamente como já funcionam hoje, sem saber
+// nem precisar saber que vieram de um checkout combinado. Sem campo de
+// estorno próprio de propósito: "desfazer o combinado inteiro" é
+// estornar cada Payment filho individualmente (voidPayment, já existe),
+// inclusive parcialmente (ex.: devolver só a parte da loja sem mexer no
+// pagamento da mesa) — não há um estado "combinado estornado" à parte
+// pra manter consistente.
+model CombinedCheckout {
+  id             String   @id @default(cuid())
+  restaurantId   String
+  registeredById String
+  // Chave de idempotência da confirmação inteira — não confundir com a
+  // idempotencyKey de cada Payment filho (cada perna também tem a sua).
+  idempotencyKey String   @unique
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  registeredBy User       @relation(fields: [registeredById], references: [id], onDelete: Restrict)
+  payments     Payment[]
+
+  @@index([restaurantId])
+  @@map("combined_checkouts")
 }
 
 // Pagamento por itens e rateio de consumo (2026-08-15) — liga este
