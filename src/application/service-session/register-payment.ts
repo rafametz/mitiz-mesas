@@ -330,6 +330,12 @@ export async function registerPaymentInTx(
   serviceSessionId: string,
   actorUserId: string,
   data: z.infer<typeof registerSchema>,
+  // Preenchido só pelo orquestrador do checkout combinado (ADR 0010) —
+  // nunca vem do cliente (não faz parte de registerSchema): etiqueta este
+  // Payment como parte de uma operação que também cobriu outra origem.
+  // `undefined` aqui é o comportamento de sempre (nenhuma mudança para
+  // quem chama registerPayment isoladamente).
+  options?: { combinedCheckoutId?: string },
 ) {
   const existing = await tx.payment.findUnique({
     where: { idempotencyKey: data.idempotencyKey },
@@ -386,6 +392,7 @@ export async function registerPaymentInTx(
       amount,
       idempotencyKey: data.idempotencyKey,
       registeredById: actorUserId,
+      combinedCheckoutId: options?.combinedCheckoutId,
     },
   });
 
