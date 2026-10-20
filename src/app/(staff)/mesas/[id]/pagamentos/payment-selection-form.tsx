@@ -1,55 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Minus, Plus, Receipt, SplitSquareHorizontal } from "lucide-react";
 import { SelectField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
-import { groupByGuestName } from "@/domain/guest/group-by-guest";
-import { registerItemPaymentAction, setItemShareAction, type FormState } from "./actions";
-import type {
-  ClientPayableLine,
-  ClientShare,
-  ClientSingleLine,
-  ClientUnitsLine,
-} from "./payment-selection-lines";
+import { registerItemPaymentAction, type FormState } from "./actions";
+import { formatCentsBRL, ItemSelectionCards, type CartEntry } from "./item-selection-list";
+import type { ClientPayableLine } from "./payment-selection-lines";
 
 type PaymentMethodOption = { id: string; name: string };
 type GuestOption = { id: string; name: string };
 
-type CartEntry = {
-  key: string;
-  label: string;
-  guestId: string | null;
-  guestName: string | null;
-  amountCents: number;
-  payload:
-    | { type: "UNITS"; orderItemIds: string[]; quantity: number }
-    | { type: "AMOUNT"; orderItemIds: string[]; mode: "FULL" }
-    | { type: "AMOUNT"; orderItemIds: string[]; mode: "SHARE"; parts: number }
-    | { type: "AMOUNT"; orderItemIds: string[]; mode: "CUSTOM"; amount: number };
-};
-
 const initialState: FormState = { error: null };
-
-function formatCentsBRL(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-// Quantas partes do rateio vigente ainda estão em aberto (correção
-// 2026-08-18, pedido do usuário: a linha só mostrava o valor da parte,
-// nunca quantas ainda faltavam nem o saldo em R$ do grupo todo). O
-// nominal da parte é fixo (ver ADR 0006, revisão do valor da parte fixo);
-// o saldo aberto do grupo cai a cada pagamento, então dividir um pelo
-// outro sempre dá a contagem de partes que ainda restam pagar.
-function remainingShareParts(share: ClientShare, openAmountCents: number): number {
-  return Math.round(openAmountCents / share.nominalPartCents);
-}
 
 // Pagamento por itens e rateio de consumo (2026-08-15, ADR 0006). O
 // "carrinho" aqui é puramente local (React state) até o envio final —
@@ -58,6 +22,13 @@ function remainingShareParts(share: ClientShare, openAmountCents: number): numbe
 // confirmar em "Registrar pagamento" é que vira Payment +
 // PaymentItemAllocation, numa transação só, e o servidor revalida tudo de
 // novo contra o banco (regra 24) — o que está aqui é só uma proposta.
+//
+// Os cartões de seleção (UnitsLineCard/SingleLineCard/AmountActions) foram
+// extraídos para item-selection-list.tsx (ADR 0010 — Pagamento Combinado,
+// 2026-10-20), reaproveitados tal e qual pelo PDV ("+ Adicionar consumo de
+// mesa"). Este componente continua dono do carrinho e da etapa final de
+// Recebimento (forma de pagamento + pessoa), que o PDV não usa — lá quem
+// decide a forma de pagamento é a tela combinada de recebimento.
 export function PaymentSelectionForm({
   redirectPath,
   sessionId,
@@ -98,13 +69,13 @@ export function PaymentSelectionForm({
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [guestId, setGuestId] = useState("");
 
-  const cartByKey = useMemo(() => new Map(cart.map((entry) => [entry.key, entry])), [cart]);
-
   // Se todo mundo no carrinho é da mesma pessoa, sugere ela como
   // responsável do pagamento — o operador continua livre para trocar ou
   // deixar em branco (associação nunca é obrigatória).
   useEffect(() => {
-    const guestIds = new Set(cart.map((entry) => entry.guestId).filter((id): id is string => id !== null));
+    const guestIds = new Set(
+      cart.map((entry) => entry.guestId).filter((id): id is string => id !== null),
+    );
     if (guestIds.size === 1) setGuestId((current) => current || [...guestIds][0]!);
   }, [cart]);
 
@@ -120,62 +91,22 @@ export function PaymentSelectionForm({
 
   const allocationsPayload = cart.map((entry) => entry.payload);
 
-  // Agrupado por pessoa (2026-08-20, pedido do usuário): facilita achar
-  // rápido o que uma pessoa específica da mesa está consumindo, na hora
-  // de selecionar o que ela vai pagar. Ordem alfabética, "Consumo geral"
-  // sempre por último — mesmo critério usado no painel "Itens" da tela
-  // de pagamentos (groupByGuestName, compartilhado). Com só um grupo
-  // (mesa sem ninguém nomeado, por exemplo) não mostra cabeçalho — não
-  // há o que diferenciar.
-  const guestGroups = useMemo(() => groupByGuestName(lines), [lines]);
-  const showGuestHeadings = guestGroups.length > 1;
-
-  function renderLine(line: ClientPayableLine) {
-    return line.type === "units" ? (
-      <UnitsLineCard
-        key={line.key}
-        line={line}
-        redirectPath={redirectPath}
-        defaultParts={guestCount}
-        cartEntry={cartByKey.get(line.key)}
-        onChange={upsertEntry}
-        onRemove={removeEntry}
-      />
-    ) : (
-      <SingleLineCard
-        key={line.key}
-        line={line}
-        redirectPath={redirectPath}
-        defaultParts={guestCount}
-        cartEntry={cartByKey.get(line.key)}
-        onChange={upsertEntry}
-        onRemove={removeEntry}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-6 pb-4">
-      {lines.length === 0 ? (
-        <EmptyState
-          icon={Receipt}
-          title="Nenhum item em aberto para selecionar. Use o pagamento sem detalhar itens."
-        />
-      ) : (
-        <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
+        {lines.length > 0 && (
           <h2 className="font-display text-base font-semibold text-ink">Itens em aberto</h2>
-          {guestGroups.map((group) => (
-            <div key={group.guestName ?? "__geral__"} className="flex flex-col gap-2">
-              {showGuestHeadings && (
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  {group.guestName ?? "Consumo geral"}
-                </h3>
-              )}
-              <ul className="flex flex-col gap-2">{group.items.map(renderLine)}</ul>
-            </div>
-          ))}
-        </div>
-      )}
+        )}
+        <ItemSelectionCards
+          redirectPath={redirectPath}
+          lines={lines}
+          guestCount={guestCount}
+          cart={cart}
+          onChange={upsertEntry}
+          onRemove={removeEntry}
+          emptyMessage="Nenhum item em aberto para selecionar. Use o pagamento sem detalhar itens."
+        />
+      </div>
 
       <Card className="flex flex-col gap-3">
         <h2 className="font-display text-base font-semibold text-ink">
@@ -192,7 +123,9 @@ export function PaymentSelectionForm({
                   {entry.guestName && <span className="text-muted"> · {entry.guestName}</span>}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className="tabular font-medium text-ink">{formatCentsBRL(entry.amountCents)}</span>
+                  <span className="tabular font-medium text-ink">
+                    {formatCentsBRL(entry.amountCents)}
+                  </span>
                   <button
                     type="button"
                     onClick={() => removeEntry(entry.key)}
@@ -215,7 +148,11 @@ export function PaymentSelectionForm({
           <h2 className="font-display text-base font-semibold text-ink">Recebimento</h2>
           <form action={formAction} className="flex flex-col gap-3">
             <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-            <input type="hidden" name="allocationsJson" value={JSON.stringify(allocationsPayload)} />
+            <input
+              type="hidden"
+              name="allocationsJson"
+              value={JSON.stringify(allocationsPayload)}
+            />
             <SelectField
               label="Forma de pagamento"
               name="paymentMethodId"
@@ -247,7 +184,10 @@ export function PaymentSelectionForm({
                 ))}
               </SelectField>
             )}
-            <p className="text-xs text-muted">Saldo em aberto da conta: {balance ? formatCentsBRL(Math.round(Number(balance) * 100)) : "R$ 0,00"}</p>
+            <p className="text-xs text-muted">
+              Saldo em aberto da conta:{" "}
+              {balance ? formatCentsBRL(Math.round(Number(balance) * 100)) : "R$ 0,00"}
+            </p>
             {state.error && (
               <p role="alert" className="text-sm text-wine">
                 {state.error}
@@ -260,467 +200,5 @@ export function PaymentSelectionForm({
         </Card>
       )}
     </div>
-  );
-}
-
-function UnitsLineCard({
-  line,
-  redirectPath,
-  defaultParts,
-  cartEntry,
-  onChange,
-  onRemove,
-}: {
-  line: ClientUnitsLine;
-  redirectPath: string;
-  defaultParts: number;
-  cartEntry?: CartEntry;
-  onChange: (entry: CartEntry) => void;
-  onRemove: (key: string) => void;
-}) {
-  // Sempre começa zerado (pedido do usuário 2026-08-15: mostrar "1" sem
-  // nada no carrinho confundia, parecia que já tinha 1 selecionado). Só
-  // reflete o que já está de fato no carrinho.
-  const alreadySelected = cartEntry?.payload.type === "UNITS" ? cartEntry.payload.quantity : 0;
-  const [quantity, setQuantity] = useState(alreadySelected);
-  // Seleção por unidade e "Dividir" disputam a mesma entrada do carrinho
-  // (mesma linha) — usar uma zera a outra automaticamente ao trocar.
-  const isAmountSelected = cartEntry?.payload.type === "AMOUNT";
-
-  function commitUnits(nextQuantity: number) {
-    if (nextQuantity <= 0) {
-      onRemove(line.key);
-      return;
-    }
-    onChange({
-      key: line.key,
-      label: line.label,
-      guestId: line.guestId,
-      guestName: line.guestName,
-      amountCents: nextQuantity * line.unitPriceCents,
-      payload: { type: "UNITS", orderItemIds: line.orderItemIds, quantity: nextQuantity },
-    });
-  }
-
-  return (
-    <li>
-      <Card padding="sm" className={`flex flex-col gap-2 ${isAmountSelected ? "ring-1 ring-inset ring-wine" : ""}`}>
-        <div>
-          <p className="text-sm font-medium text-ink">{line.label}</p>
-          {line.guestName && <p className="text-xs text-muted">{line.guestName}</p>}
-          <p className="tabular text-xs text-muted">
-            {line.totalQuantity} lançado(s) · {line.openQuantity} em aberto ·{" "}
-            {formatCentsBRL(line.unitPriceCents)}/un. · total{" "}
-            {formatCentsBRL(line.unitPriceCents * line.totalQuantity)}
-          </p>
-          {line.share && (
-            <p className="tabular text-xs text-muted">
-              Dividido em {line.share.openParts} parte(s) de {formatCentsBRL(line.share.nominalPartCents)} ·{" "}
-              {remainingShareParts(line.share, line.openAmountCents)} de {line.share.openParts} em aberto · saldo{" "}
-              {formatCentsBRL(line.openAmountCents)}
-            </p>
-          )}
-        </div>
-
-        {line.share ? (
-          // Item dividido não pode também ser pago por unidade
-          // (correção 2026-08-19, relato do usuário): selecionar 1
-          // unidade cobraria o preço cheio dela, sem descontar o que já
-          // foi quitado pelas partes já pagas — as duas formas ficam
-          // divergentes se coexistirem. Enquanto durar a divisão, só
-          // "Dividir"/"Redistribuir"/"Outro valor" continuam
-          // disponíveis (reforçado no servidor também, register-payment.ts).
-          <p className="text-xs text-muted">
-            Item dividido em partes: pague pelas partes abaixo ou remova a divisão antes de selecionar por unidade.
-          </p>
-        ) : (
-          <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Selecionar unidades</p>
-            <div className="flex items-center gap-2">
-              <IconButton
-                label="Diminuir quantidade"
-                icon={Minus}
-                className="border border-line disabled:pointer-events-none disabled:opacity-40"
-                onClick={() => {
-                  const next = Math.max(0, quantity - 1);
-                  setQuantity(next);
-                  commitUnits(next);
-                }}
-                disabled={quantity <= 0}
-              />
-              <span className="tabular w-8 text-center text-sm font-medium text-ink">{quantity}</span>
-              <IconButton
-                label="Aumentar quantidade"
-                icon={Plus}
-                className="border border-line disabled:pointer-events-none disabled:opacity-40"
-                onClick={() => {
-                  const next = Math.min(line.openQuantity, quantity + 1);
-                  setQuantity(next);
-                  commitUnits(next);
-                }}
-                disabled={quantity >= line.openQuantity}
-              />
-              {line.openQuantity > 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuantity(line.openQuantity);
-                    commitUnits(line.openQuantity);
-                  }}
-                  className="text-xs font-medium text-wine underline underline-offset-2"
-                >
-                  Selecionar todas
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">Ou dividir o total</p>
-          <AmountActions
-            redirectPath={redirectPath}
-            cartKey={line.key}
-            label={line.label}
-            guestId={line.guestId}
-            guestName={line.guestName}
-            orderItemIds={line.orderItemIds}
-            openAmountCents={line.openAmountCents}
-            share={line.share}
-            defaultParts={defaultParts}
-            showFull={false}
-            cartEntry={isAmountSelected ? cartEntry : undefined}
-            onChange={(entry) => {
-              setQuantity(0);
-              onChange(entry);
-            }}
-            onRemove={onRemove}
-          />
-        </div>
-      </Card>
-    </li>
-  );
-}
-
-function SingleLineCard({
-  line,
-  redirectPath,
-  defaultParts,
-  cartEntry,
-  onChange,
-  onRemove,
-}: {
-  line: ClientSingleLine;
-  redirectPath: string;
-  defaultParts: number;
-  cartEntry?: CartEntry;
-  onChange: (entry: CartEntry) => void;
-  onRemove: (key: string) => void;
-}) {
-  const isSelected = cartEntry !== undefined;
-
-  return (
-    <li>
-      <Card padding="sm" className={`flex flex-col gap-2 ${isSelected ? "ring-1 ring-inset ring-wine" : ""}`}>
-        <div>
-          <p className="text-sm font-medium text-ink">{line.label}</p>
-          {line.guestName && <p className="text-xs text-muted">{line.guestName}</p>}
-          <p className="tabular text-xs text-muted">
-            {formatCentsBRL(line.lineTotalCents)} lançado · {formatCentsBRL(line.openAmountCents)} em aberto
-          </p>
-          {line.share && (
-            <p className="tabular text-xs text-muted">
-              Dividido em {line.share.openParts} parte(s) de {formatCentsBRL(line.share.nominalPartCents)} ·{" "}
-              {remainingShareParts(line.share, line.openAmountCents)} de {line.share.openParts} em aberto
-            </p>
-          )}
-        </div>
-        <AmountActions
-          redirectPath={redirectPath}
-          cartKey={line.key}
-          label={line.label}
-          guestId={line.guestId}
-          guestName={line.guestName}
-          orderItemIds={[line.itemId]}
-          openAmountCents={line.openAmountCents}
-          share={line.share}
-          defaultParts={defaultParts}
-          showFull
-          cartEntry={cartEntry}
-          onChange={onChange}
-          onRemove={onRemove}
-        />
-      </Card>
-    </li>
-  );
-}
-
-// Ações por valor (pagar inteiro / dividir / valor personalizado) —
-// compartilhadas entre item único e linha de unidades (revisado
-// 2026-08-16: dividir passou a valer pra qualquer item, não só o de
-// quantidade 1; "orderItemIds" cobre uma ou mais linhas de origem reais).
-function AmountActions({
-  redirectPath,
-  cartKey,
-  label,
-  guestId,
-  guestName,
-  orderItemIds,
-  openAmountCents,
-  share,
-  defaultParts,
-  showFull,
-  cartEntry,
-  onChange,
-  onRemove,
-}: {
-  redirectPath: string;
-  cartKey: string;
-  label: string;
-  guestId: string | null;
-  guestName: string | null;
-  orderItemIds: string[];
-  openAmountCents: number;
-  share: ClientShare | null;
-  defaultParts: number;
-  // Units já tem "Selecionar todas" fazendo esse papel — evita duplicar
-  // o mesmo resultado com dois botões diferentes na mesma linha.
-  showFull: boolean;
-  cartEntry?: CartEntry;
-  onChange: (entry: CartEntry) => void;
-  onRemove: (key: string) => void;
-}) {
-  const [customOpen, setCustomOpen] = useState(false);
-  const [customValue, setCustomValue] = useState("");
-  const [shareFormOpen, setShareFormOpen] = useState(false);
-  const isSelected = cartEntry !== undefined;
-  // Cada botão sinaliza só a própria opção selecionada, não qualquer
-  // seleção da linha (correção 2026-08-18, relato do usuário: "Pagar
-  // inteiro" aparecia destacado em vermelho mesmo sem nada selecionado,
-  // e "1 parte" nunca destacava depois de escolhido — variante estava
-  // invertida e as outras não refletiam o carrinho).
-  const selectedPayload = cartEntry?.payload.type === "AMOUNT" ? cartEntry.payload : undefined;
-  const isFullSelected = selectedPayload?.mode === "FULL";
-  const isShareSelected = selectedPayload?.mode === "SHARE";
-  const isCustomSelected = selectedPayload?.mode === "CUSTOM";
-
-  // Quantas partes pagar de uma vez (2026-08-19, pedido do usuário: uma
-  // pessoa no caixa pode estar quitando a parte dela E a de outra ao
-  // mesmo tempo — antes só existia "1 parte" fixo ou "Outro valor", que
-  // não guarda vínculo nenhum com o rateio). Mesmo padrão de
-  // "Selecionar unidades": stepper que já começa refletindo o que está
-  // no carrinho, cada +/- já confirma na hora.
-  const alreadySelectedShareParts = selectedPayload?.mode === "SHARE" ? selectedPayload.parts : 0;
-  const [sharePartsCount, setSharePartsCount] = useState(alreadySelectedShareParts);
-  const maxShareParts = share ? remainingShareParts(share, openAmountCents) : 0;
-
-  function selectFull() {
-    onChange({
-      key: cartKey,
-      label,
-      guestId,
-      guestName,
-      amountCents: openAmountCents,
-      payload: { type: "AMOUNT", orderItemIds, mode: "FULL" },
-    });
-  }
-
-  function commitShareParts(nextParts: number) {
-    if (!share) return;
-    if (nextParts <= 0) {
-      onRemove(cartKey);
-      return;
-    }
-    onChange({
-      key: cartKey,
-      label,
-      guestId,
-      guestName,
-      amountCents: share.nominalPartCents * nextParts,
-      payload: { type: "AMOUNT", orderItemIds, mode: "SHARE", parts: nextParts },
-    });
-  }
-
-  function selectCustom() {
-    const amount = Number(customValue.replace(",", "."));
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const cents = Math.round(amount * 100);
-    if (cents > openAmountCents) return;
-    onChange({
-      key: cartKey,
-      label,
-      guestId,
-      guestName,
-      amountCents: cents,
-      payload: { type: "AMOUNT", orderItemIds, mode: "CUSTOM", amount },
-    });
-    setCustomOpen(false);
-    setCustomValue("");
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {showFull && (
-          <Button variant={isFullSelected ? "secondary" : "outline"} size="sm" onClick={selectFull}>
-            Pagar inteiro
-          </Button>
-        )}
-        {share && (
-          <div
-            className={`flex items-center gap-1 rounded-control-sm border py-0.5 pl-0.5 pr-2 ${
-              isShareSelected ? "border-wine bg-wine/5" : "border-line"
-            }`}
-          >
-            <IconButton
-              label="Diminuir partes a pagar"
-              icon={Minus}
-              size="sm"
-              className="disabled:pointer-events-none disabled:opacity-40"
-              onClick={() => {
-                const next = Math.max(0, sharePartsCount - 1);
-                setSharePartsCount(next);
-                commitShareParts(next);
-              }}
-              disabled={sharePartsCount <= 0}
-            />
-            <span className="tabular w-4 text-center text-sm font-medium text-ink">{sharePartsCount}</span>
-            <IconButton
-              label="Aumentar partes a pagar"
-              icon={Plus}
-              size="sm"
-              className="disabled:pointer-events-none disabled:opacity-40"
-              onClick={() => {
-                const next = Math.min(maxShareParts, sharePartsCount + 1);
-                setSharePartsCount(next);
-                commitShareParts(next);
-              }}
-              disabled={sharePartsCount >= maxShareParts}
-            />
-            <span className="tabular text-xs font-medium text-ink">
-              {sharePartsCount > 0
-                ? `${sharePartsCount} parte(s) (${formatCentsBRL(share.nominalPartCents * sharePartsCount)})`
-                : "partes"}
-            </span>
-          </div>
-        )}
-        <Button
-          variant={isCustomSelected ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setCustomOpen((v) => !v)}
-        >
-          Outro valor
-        </Button>
-        <button
-          type="button"
-          onClick={() => setShareFormOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-xs font-medium text-ink underline underline-offset-2"
-        >
-          <SplitSquareHorizontal className="h-3.5 w-3.5" />
-          {share ? "Redistribuir" : "Dividir"}
-        </button>
-        {isSelected && (
-          <button
-            type="button"
-            onClick={() => onRemove(cartKey)}
-            className="text-xs font-medium text-wine underline underline-offset-2"
-          >
-            Remover seleção
-          </button>
-        )}
-      </div>
-
-      {customOpen && (
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
-              R$
-            </span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={customValue}
-              onChange={(e) => setCustomValue(e.target.value)}
-              placeholder="0,00"
-              aria-label={`Valor personalizado para ${label}`}
-              className="h-10 w-full rounded-control-sm border border-line bg-surface pl-10 pr-3 text-sm text-ink tabular focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
-            />
-          </div>
-          <Button variant="secondary" size="sm" onClick={selectCustom}>
-            Adicionar
-          </Button>
-        </div>
-      )}
-
-      {shareFormOpen && (
-        <ShareItemForm
-          redirectPath={redirectPath}
-          orderItemIds={orderItemIds}
-          currentParts={share?.openParts ?? defaultParts}
-          onDone={() => setShareFormOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-// "Dividir" / "Redistribuir" (ADR 0006, revisado 2026-08-16: opera sobre
-// o grupo inteiro — uma ou mais linhas de origem) — mutação de verdade,
-// imediata, independente do carrinho de pagamento: fica gravada mesmo se
-// o operador não confirmar nenhum pagamento agora (regra confirmada com o
-// usuário 2026-08-15).
-function ShareItemForm({
-  redirectPath,
-  orderItemIds,
-  currentParts,
-  onDone,
-}: {
-  redirectPath: string;
-  orderItemIds: string[];
-  currentParts: number;
-  onDone: () => void;
-}) {
-  const action = setItemShareAction.bind(null, redirectPath, orderItemIds);
-  const [state, formAction, isPending] = useActionState(action, initialState);
-  const [parts, setParts] = useState(Math.max(2, currentParts));
-
-  const wasPending = useRef(false);
-  useEffect(() => {
-    if (wasPending.current && !isPending && state.success) onDone();
-    wasPending.current = isPending;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPending, state.success]);
-
-  return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-control-sm border border-dashed border-line p-2">
-      <input type="hidden" name="parts" value={parts} />
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted">Dividir o saldo aberto em</span>
-        <IconButton
-          label="Diminuir partes"
-          icon={Minus}
-          size="sm"
-          className="border border-line"
-          onClick={() => setParts((p) => Math.max(2, p - 1))}
-        />
-        <span className="tabular w-6 text-center text-sm font-medium text-ink">{parts}</span>
-        <IconButton
-          label="Aumentar partes"
-          icon={Plus}
-          size="sm"
-          className="border border-line"
-          onClick={() => setParts((p) => Math.min(20, p + 1))}
-        />
-        <span className="text-xs text-muted">parte(s)</span>
-      </div>
-      {state.error && (
-        <p role="alert" className="text-xs text-wine">
-          {state.error}
-        </p>
-      )}
-      <SubmitButton pendingLabel="Salvando..." className="h-9 self-start px-3 text-sm">
-        Confirmar divisão
-      </SubmitButton>
-    </form>
   );
 }

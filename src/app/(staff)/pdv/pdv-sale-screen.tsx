@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingBag, ShoppingCart, Trash2, X } from "lucide-react";
+import { Plus, ShoppingBag, ShoppingCart, Table2, Trash2, X } from "lucide-react";
 import { SelectField } from "@/components/form/field";
 import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { SearchField } from "@/components/form/search-field";
@@ -12,7 +12,12 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
-import { sellPdvAction, type FormState } from "./actions";
+import { registerCombinedCheckoutAction, sellPdvAction, type FormState } from "./actions";
+import {
+  TableConsumptionPicker,
+  type TableOption,
+  type TableSelection,
+} from "./table-consumption-picker";
 
 type ProductOption = {
   id: string;
@@ -73,22 +78,37 @@ export function PdvSaleScreen({
   restaurantId,
   products,
   paymentMethods,
+  tables,
 }: {
   restaurantId: string;
   products: ProductOption[];
   paymentMethods: PaymentMethodOption[];
+  tables: TableOption[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const action = sellPdvAction.bind(null, restaurantId);
+  // Pagamento Combinado (ADR 0010): com consumo de mesa selecionado, a
+  // confirmação final vira registerCombinedCheckoutAction em vez de
+  // sellPdvAction — mesmo carrinho de loja, só muda o que acontece ao
+  // confirmar.
+  const [mesaSelection, setMesaSelection] = useState<TableSelection | null>(null);
+  const action = mesaSelection
+    ? registerCombinedCheckoutAction.bind(null, restaurantId)
+    : sellPdvAction.bind(null, restaurantId);
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [orderIdempotencyKey, setOrderIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [combinedIdempotencyKey, setCombinedIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [tablePaymentMethodId, setTablePaymentMethodId] = useState(paymentMethods[0]?.id ?? "");
+  const [tablePaymentIdempotencyKey, setTablePaymentIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  );
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("all");
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
@@ -97,9 +117,12 @@ export function PdvSaleScreen({
     if (wasPending.current && !isPending && state.success) {
       showToast("Venda registrada.");
       setCart([]);
+      setMesaSelection(null);
       setCheckoutOpen(false);
       setCartSheetOpen(false);
       setOrderIdempotencyKey(crypto.randomUUID());
+      setCombinedIdempotencyKey(crypto.randomUUID());
+      setTablePaymentIdempotencyKey(crypto.randomUUID());
       router.refresh();
     }
     wasPending.current = isPending;
@@ -180,17 +203,21 @@ export function PdvSaleScreen({
     }
   }
 
-  const total = round2(cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
+  const lojaTotal = round2(cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
+  const tableTotal = round2((mesaSelection?.totalCents ?? 0) / 100);
+  const grandTotal = round2(lojaTotal + tableTotal);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
   const paymentsTotal = round2(
     paymentLines.reduce((sum, line) => sum + parseBRLInput(line.amountInput), 0),
   );
-  const remaining = round2(total - paymentsTotal);
+  const remaining = round2(lojaTotal - paymentsTotal);
+  const tableLegReady = !mesaSelection || Boolean(tablePaymentMethodId);
 
   function openCheckout() {
-    if (cart.length === 0) return;
-    setPaymentLines([newPaymentLine(paymentMethods[0]?.id ?? "", total)]);
+    if (cart.length === 0 && !mesaSelection) return;
+    setPaymentLines(lojaTotal > 0 ? [newPaymentLine(paymentMethods[0]?.id ?? "", lojaTotal)] : []);
+    setTablePaymentMethodId(paymentMethods[0]?.id ?? "");
     setPaymentError(null);
     setCheckoutOpen(true);
     setCartSheetOpen(false);
@@ -224,15 +251,22 @@ export function PdvSaleScreen({
     idempotencyKey: line.idempotencyKey,
   }));
   const cartPayload = cart.map((line) => ({ productId: line.productId, quantity: line.quantity }));
+  const tableAllocationsPayload = mesaSelection?.entries.map((entry) => entry.payload) ?? [];
 
-  const canConfirm = Math.abs(remaining) < 0.005 && paymentsPayload.every((p) => p.amount > 0);
+  const lojaLegReady =
+    lojaTotal === 0
+      ? paymentsPayload.length === 0
+      : Math.abs(remaining) < 0.005 && paymentsPayload.every((p) => p.amount > 0);
+  const canConfirm = lojaLegReady && tableLegReady && (cart.length > 0 || Boolean(mesaSelection));
 
   function handleSubmit(formData: FormData) {
     if (!canConfirm) {
       setPaymentError(
-        remaining > 0
-          ? `Ainda falta receber ${formatBRLNumber(remaining)}.`
-          : "A soma das formas de pagamento não pode passar do total da venda.",
+        !tableLegReady
+          ? "Selecione a forma de pagamento da mesa."
+          : remaining > 0
+            ? `Ainda falta receber ${formatBRLNumber(remaining)} da loja.`
+            : "A soma das formas de pagamento da loja não pode passar do total.",
       );
       return;
     }
@@ -240,9 +274,29 @@ export function PdvSaleScreen({
     formAction(formData);
   }
 
+  function handleTableConfirm(selection: TableSelection | null) {
+    setMesaSelection(selection);
+    setTablePickerOpen(false);
+  }
+
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
       <div className="flex flex-1 flex-col gap-4">
+        {/* Sempre visível aqui, independente de já ter algo no carrinho —
+            no celular, o painel de carrinho (onde este botão também
+            aparece) só surge depois do primeiro item adicionado; sem isto
+            aqui, não dava pra começar uma venda PELA mesa (correção
+            encontrada testando o fluxo no navegador). */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setTablePickerOpen(true)}
+          className="w-full justify-center lg:hidden"
+        >
+          <Table2 className="h-4 w-4" aria-hidden />
+          {mesaSelection ? `Alterar consumo de mesa — Mesa ${mesaSelection.tableNumber}` : "+ Adicionar consumo de mesa"}
+        </Button>
+
         <SearchField
           value={search}
           onChange={setSearch}
@@ -324,16 +378,19 @@ export function PdvSaleScreen({
         <div className="lg:sticky lg:top-4">
           <CartPanel
             cart={cart}
-            total={total}
+            mesaSelection={mesaSelection}
+            total={grandTotal}
             itemCount={itemCount}
             onSetQuantity={setLineQuantity}
             onRemove={removeLine}
             onCheckout={openCheckout}
+            onAddTable={() => setTablePickerOpen(true)}
+            onRemoveTable={() => setMesaSelection(null)}
           />
         </div>
       </div>
 
-      {cart.length > 0 && !cartSheetOpen && !checkoutOpen && (
+      {(cart.length > 0 || mesaSelection) && !cartSheetOpen && !checkoutOpen && (
         <button
           type="button"
           onClick={() => setCartSheetOpen(true)}
@@ -341,10 +398,10 @@ export function PdvSaleScreen({
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <ShoppingCart className="h-4 w-4" aria-hidden />
-            {itemCount} item(ns)
+            {itemCount} item(ns){mesaSelection ? ` + Mesa ${mesaSelection.tableNumber}` : ""}
           </span>
           <span className="tabular text-sm font-semibold">
-            Ver carrinho · {formatBRLNumber(total)}
+            Ver carrinho · {formatBRLNumber(grandTotal)}
           </span>
         </button>
       )}
@@ -368,15 +425,27 @@ export function PdvSaleScreen({
             </div>
             <CartPanel
               cart={cart}
-              total={total}
+              mesaSelection={mesaSelection}
+              total={grandTotal}
               itemCount={itemCount}
               onSetQuantity={setLineQuantity}
               onRemove={removeLine}
               onCheckout={openCheckout}
+              onAddTable={() => setTablePickerOpen(true)}
+              onRemoveTable={() => setMesaSelection(null)}
               bare
             />
           </div>
         </div>
+      )}
+
+      {tablePickerOpen && (
+        <TableConsumptionPicker
+          tables={tables}
+          initialSelection={mesaSelection}
+          onConfirm={handleTableConfirm}
+          onClose={() => setTablePickerOpen(false)}
+        />
       )}
 
       {checkoutOpen && (
@@ -394,70 +463,80 @@ export function PdvSaleScreen({
             <div className="flex items-baseline justify-between rounded-card bg-surface p-3.5">
               <span className="text-sm text-muted">Total da venda</span>
               <span className="tabular font-display text-2xl font-semibold text-ink">
-                {formatBRLNumber(total)}
+                {formatBRLNumber(grandTotal)}
               </span>
             </div>
 
-            <div className="flex flex-col gap-3">
-              {paymentLines.map((line, index) => {
-                const cash = isCashMethod(line.paymentMethodId);
-                const received = parseBRLInput(line.cashReceivedInput);
-                const owed = parseBRLInput(line.amountInput);
-                const change = cash && received > owed ? round2(received - owed) : 0;
-                return (
-                  <div
-                    key={line.key}
-                    className="flex flex-col gap-2 rounded-card border border-line p-3"
-                  >
-                    <div className="flex items-end gap-2">
-                      <SelectField
-                        label={`Forma de pagamento ${paymentLines.length > 1 ? index + 1 : ""}`}
-                        name={`method-${line.key}`}
-                        value={line.paymentMethodId}
-                        onChange={(e) =>
-                          updatePaymentLine(line.key, { paymentMethodId: e.target.value })
-                        }
-                        className="flex-1"
-                      >
-                        {paymentMethods.map((method) => (
-                          <option key={method.id} value={method.id}>
-                            {method.name}
-                          </option>
-                        ))}
-                      </SelectField>
-                      {paymentLines.length > 1 && (
-                        <IconButton
-                          label="Remover forma de pagamento"
-                          icon={Trash2}
-                          className="shrink-0 border border-line"
-                          onClick={() => removePaymentLine(line.key)}
-                        />
-                      )}
-                    </div>
+            {mesaSelection && (
+              <div className="flex flex-col gap-2 rounded-card border border-line p-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-semibold text-ink">
+                    Mesa {mesaSelection.tableNumber}
+                  </span>
+                  <span className="tabular text-sm font-semibold text-ink">
+                    {formatBRLNumber(tableTotal)}
+                  </span>
+                </div>
+                <SelectField
+                  label="Forma de pagamento da mesa"
+                  name="tablePaymentMethodId"
+                  value={tablePaymentMethodId}
+                  onChange={(e) => setTablePaymentMethodId(e.target.value)}
+                >
+                  {paymentMethods.map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {method.name}
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+            )}
 
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium text-ink">Valor</span>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
-                          R$
-                        </span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={line.amountInput}
+            {lojaTotal > 0 && (
+              <div className="flex flex-col gap-3">
+                {mesaSelection && (
+                  <h3 className="text-sm font-semibold text-ink">
+                    Loja · {formatBRLNumber(lojaTotal)}
+                  </h3>
+                )}
+                {paymentLines.map((line, index) => {
+                  const cash = isCashMethod(line.paymentMethodId);
+                  const received = parseBRLInput(line.cashReceivedInput);
+                  const owed = parseBRLInput(line.amountInput);
+                  const change = cash && received > owed ? round2(received - owed) : 0;
+                  return (
+                    <div
+                      key={line.key}
+                      className="flex flex-col gap-2 rounded-card border border-line p-3"
+                    >
+                      <div className="flex items-end gap-2">
+                        <SelectField
+                          label={`Forma de pagamento ${paymentLines.length > 1 ? index + 1 : ""}`}
+                          name={`method-${line.key}`}
+                          value={line.paymentMethodId}
                           onChange={(e) =>
-                            updatePaymentLine(line.key, { amountInput: e.target.value })
+                            updatePaymentLine(line.key, { paymentMethodId: e.target.value })
                           }
-                          className="tabular h-11 w-full rounded-control-sm border border-line bg-surface pl-10 text-right text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
-                        />
+                          className="flex-1"
+                        >
+                          {paymentMethods.map((method) => (
+                            <option key={method.id} value={method.id}>
+                              {method.name}
+                            </option>
+                          ))}
+                        </SelectField>
+                        {paymentLines.length > 1 && (
+                          <IconButton
+                            label="Remover forma de pagamento"
+                            icon={Trash2}
+                            className="shrink-0 border border-line"
+                            onClick={() => removePaymentLine(line.key)}
+                          />
+                        )}
                       </div>
-                    </label>
 
-                    {cash && (
                       <label className="flex flex-col gap-1.5">
-                        <span className="text-sm font-medium text-ink">
-                          Recebido em dinheiro (opcional, só para calcular o troco)
-                        </span>
+                        <span className="text-sm font-medium text-ink">Valor</span>
                         <div className="relative">
                           <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
                             R$
@@ -465,47 +544,90 @@ export function PdvSaleScreen({
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={line.cashReceivedInput}
+                            value={line.amountInput}
                             onChange={(e) =>
-                              updatePaymentLine(line.key, { cashReceivedInput: e.target.value })
+                              updatePaymentLine(line.key, { amountInput: e.target.value })
                             }
                             className="tabular h-11 w-full rounded-control-sm border border-line bg-surface pl-10 text-right text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
                           />
                         </div>
-                        {change > 0 && (
-                          <p className="tabular text-sm font-semibold text-free-dark">
-                            Troco: {formatBRLNumber(change)}
-                          </p>
-                        )}
                       </label>
-                    )}
-                  </div>
-                );
-              })}
 
-              <Button variant="outline" size="sm" onClick={addPaymentLine} className="self-start">
-                + Adicionar forma de pagamento
-              </Button>
-            </div>
+                      {cash && (
+                        <label className="flex flex-col gap-1.5">
+                          <span className="text-sm font-medium text-ink">
+                            Recebido em dinheiro (opcional, só para calcular o troco)
+                          </span>
+                          <div className="relative">
+                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
+                              R$
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={line.cashReceivedInput}
+                              onChange={(e) =>
+                                updatePaymentLine(line.key, { cashReceivedInput: e.target.value })
+                              }
+                              className="tabular h-11 w-full rounded-control-sm border border-line bg-surface pl-10 text-right text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
+                            />
+                          </div>
+                          {change > 0 && (
+                            <p className="tabular text-sm font-semibold text-free-dark">
+                              Troco: {formatBRLNumber(change)}
+                            </p>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <Button variant="outline" size="sm" onClick={addPaymentLine} className="self-start">
+                  + Adicionar forma de pagamento
+                </Button>
+              </div>
+            )}
 
             <div
               className={`rounded-card p-3 text-center text-sm font-semibold ${
-                Math.abs(remaining) < 0.005
-                  ? "bg-free/10 text-free-dark"
-                  : "bg-gold/15 text-gold-dark"
+                canConfirm ? "bg-free/10 text-free-dark" : "bg-gold/15 text-gold-dark"
               }`}
             >
-              {Math.abs(remaining) < 0.005
-                ? "Valor confere com o total da venda."
-                : remaining > 0
-                  ? `Falta receber ${formatBRLNumber(remaining)}.`
-                  : `Soma ${formatBRLNumber(Math.abs(remaining))} maior que o total. Ajuste os valores.`}
+              {!tableLegReady
+                ? "Selecione a forma de pagamento da mesa."
+                : canConfirm
+                  ? "Valor confere com o total da venda."
+                  : remaining > 0
+                    ? `Falta receber ${formatBRLNumber(remaining)} da loja.`
+                    : `Soma da loja maior que o total. Ajuste os valores.`}
             </div>
 
             <form action={(formData) => handleSubmit(formData)} className="flex flex-col gap-2">
               <input type="hidden" name="orderIdempotencyKey" value={orderIdempotencyKey} />
               <input type="hidden" name="cartJson" value={JSON.stringify(cartPayload)} />
               <input type="hidden" name="paymentsJson" value={JSON.stringify(paymentsPayload)} />
+              {mesaSelection && (
+                <>
+                  <input
+                    type="hidden"
+                    name="combinedIdempotencyKey"
+                    value={combinedIdempotencyKey}
+                  />
+                  <input type="hidden" name="tableSessionId" value={mesaSelection.sessionId} />
+                  <input type="hidden" name="tablePaymentMethodId" value={tablePaymentMethodId} />
+                  <input
+                    type="hidden"
+                    name="tablePaymentIdempotencyKey"
+                    value={tablePaymentIdempotencyKey}
+                  />
+                  <input
+                    type="hidden"
+                    name="tableAllocationsJson"
+                    value={JSON.stringify(tableAllocationsPayload)}
+                  />
+                </>
+              )}
               {(paymentError ?? state.error) && (
                 <p role="alert" className="text-sm text-wine">
                   {paymentError ?? state.error}
@@ -524,21 +646,29 @@ export function PdvSaleScreen({
 
 function CartPanel({
   cart,
+  mesaSelection,
   total,
   itemCount,
   onSetQuantity,
   onRemove,
   onCheckout,
+  onAddTable,
+  onRemoveTable,
   bare = false,
 }: {
   cart: CartLine[];
+  mesaSelection: TableSelection | null;
   total: number;
   itemCount: number;
   onSetQuantity: (key: string, quantityInput: string) => void;
   onRemove: (key: string) => void;
   onCheckout: () => void;
+  onAddTable: () => void;
+  onRemoveTable: () => void;
   bare?: boolean;
 }) {
+  const isEmpty = cart.length === 0 && !mesaSelection;
+
   const content = (
     <div className="flex flex-col gap-3">
       {!bare && (
@@ -548,7 +678,24 @@ function CartPanel({
         </div>
       )}
 
-      {cart.length === 0 ? (
+      <Button variant="outline" size="sm" onClick={onAddTable} className="w-full justify-center">
+        <Table2 className="h-4 w-4" aria-hidden />
+        {mesaSelection ? "Alterar consumo de mesa" : "+ Adicionar consumo de mesa"}
+      </Button>
+
+      {mesaSelection && (
+        <div className="flex items-center justify-between gap-2 rounded-card border border-wine/30 bg-wine/5 p-2.5">
+          <div>
+            <div className="text-sm font-medium text-ink">Mesa {mesaSelection.tableNumber}</div>
+            <div className="tabular text-xs text-muted">
+              {formatBRLNumber(mesaSelection.totalCents / 100)}
+            </div>
+          </div>
+          <IconButton label="Remover consumo de mesa" icon={Trash2} onClick={onRemoveTable} />
+        </div>
+      )}
+
+      {isEmpty ? (
         <EmptyState icon={ShoppingCart} title="Toque num produto para adicionar à venda." />
       ) : (
         <ul className="flex flex-col gap-2">
@@ -588,7 +735,7 @@ function CartPanel({
         </span>
       </div>
 
-      <Button onClick={onCheckout} disabled={cart.length === 0} className="w-full">
+      <Button onClick={onCheckout} disabled={isEmpty} className="w-full">
         Receber
       </Button>
     </div>
