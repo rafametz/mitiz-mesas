@@ -2,19 +2,12 @@ import "server-only";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  createOrderInTx,
-  createOrderSchema,
-  CreateOrderError,
-} from "@/application/order/create-order";
+import { createOrderSchema, CreateOrderError } from "@/application/order/create-order";
 import { registerPaymentInTx, registerSchema, RegisterPaymentError } from "./register-payment";
-import { requestClosingInTx, RequestClosingError } from "./request-closing";
-import { closeTableInTx, CloseTableError } from "./close-table";
-import { canCloseTable } from "@/domain/service-session/closing";
-import {
-  isValidPdvPaymentLine,
-  isValidTablePaymentLine,
-} from "@/domain/service-session/combined-checkout";
+import { RequestClosingError } from "./request-closing";
+import { CloseTableError } from "./close-table";
+import { sellPdvInTx, SellPdvError } from "./sell-pdv";
+import { isValidTablePaymentLine } from "@/domain/service-session/combined-checkout";
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
 import { publishChange } from "@/lib/realtime/publish";
 import { sectorChannel } from "@/lib/realtime/channels";
@@ -54,9 +47,10 @@ export const registerCombinedCheckoutSchema = z.object({
 export type RegisterCombinedCheckoutInput = z.input<typeof registerCombinedCheckoutSchema>;
 
 // Núcleo do checkout combinado, parametrizado numa transação já aberta —
-// reaproveita createOrderInTx/requestClosingInTx/registerPaymentInTx/
-// closeTableInTx (cada um já extraído para este fim, ADR 0010 passo 1),
-// sem duplicar nenhuma validação ou regra de saldo/idempotência delas.
+// a perna do PDV reaproveita sellPdvInTx (venda de balcão, mesmo núcleo da
+// venda pura) e a perna da mesa reaproveita registerPaymentInTx
+// diretamente, sem duplicar nenhuma validação ou regra de saldo/
+// idempotência delas.
 export async function registerCombinedCheckoutInTx(
   tx: Prisma.TransactionClient,
   data: z.infer<typeof registerCombinedCheckoutSchema>,
@@ -84,13 +78,6 @@ export async function registerCombinedCheckoutInTx(
       );
     }
   }
-  for (const line of data.pdv.payments) {
-    if (!isValidPdvPaymentLine(line)) {
-      throw new CombinedCheckoutError(
-        "Pagamento da loja precisa informar o valor, sem seleção de itens.",
-      );
-    }
-  }
 
   const tableSession = await tx.serviceSession.findUniqueOrThrow({
     where: { id: data.table.serviceSessionId },
@@ -107,71 +94,44 @@ export async function registerCombinedCheckoutInTx(
     },
   });
 
-  // PDV nasce OPEN (createOrderInTx exige isso) e só passa a CLOSING
-  // depois do pedido criado — "fecha sozinho" (decisão do usuário) é sobre
-  // não expor "solicitar fechamento" como ação do operador, não sobre
-  // pular a validação de estado de cada passo.
-  const pdvSessionOpen = await tx.serviceSession.create({
-    data: {
+  const pdvResult = await sellPdvInTx(
+    tx,
+    data.registeredById,
+    {
       restaurantId: data.pdv.restaurantId,
-      type: "PDV",
       waiterId: data.pdv.waiterId,
-      guestCount: 1,
+      orderIdempotencyKey: data.pdv.orderIdempotencyKey,
+      items: data.pdv.items,
+      payments: data.pdv.payments,
     },
-  });
-
-  const pdvOrderResult = await createOrderInTx(tx, {
-    serviceSessionId: pdvSessionOpen.id,
-    waiterId: data.pdv.waiterId,
-    idempotencyKey: data.pdv.orderIdempotencyKey,
-    items: data.pdv.items,
-  });
-  // A sessão do PDV acabou de nascer agora mesmo, com sequenceNumber
-  // próprio — a única forma de `created` vir `false` aqui é a chave de
-  // idempotência do pedido já ter sido usada por um pedido de outra
-  // operação, o que indica um bug no chamador (gerar uma chave nova por
-  // confirmação), não uma repetição legítima.
-  if (!pdvOrderResult.created) {
+    { combinedCheckoutId: combinedCheckout.id },
+  );
+  // Defensivo — o CombinedCheckout acabou de nascer agora mesmo (checagem
+  // de idempotência do conjunto no topo desta função), então a chave do
+  // pedido do PDV não deveria já existir; só cai aqui com um bug no
+  // chamador (reaproveitar uma orderIdempotencyKey de outra venda).
+  if (!pdvResult.created) {
     throw new CombinedCheckoutError(
       "Chave de idempotência do pedido da loja já usada por outro pedido.",
     );
   }
-  const pdvOrder = pdvOrderResult;
-
-  await requestClosingInTx(tx, pdvSessionOpen.id, data.registeredById);
 
   for (const line of data.table.payments) {
     await registerPaymentInTx(tx, data.table.serviceSessionId, data.registeredById, line, {
       combinedCheckoutId: combinedCheckout.id,
     });
   }
-  for (const line of data.pdv.payments) {
-    await registerPaymentInTx(tx, pdvSessionOpen.id, data.registeredById, line, {
-      combinedCheckoutId: combinedCheckout.id,
-    });
-  }
 
-  const pdvSessionBeforeClose = await tx.serviceSession.findUniqueOrThrow({
-    where: { id: pdvSessionOpen.id },
+  const freshTableSession = await tx.serviceSession.findUniqueOrThrow({
+    where: { id: data.table.serviceSessionId },
   });
-  if (!canCloseTable(pdvSessionBeforeClose.status, pdvSessionBeforeClose.balanceAmount)) {
-    throw new CombinedCheckoutError(
-      `Pagamento da loja não cobriu o valor da venda (saldo restante: R$ ${pdvSessionBeforeClose.balanceAmount.toFixed(2)}).`,
-    );
-  }
-  await closeTableInTx(tx, pdvSessionOpen.id, data.registeredById);
-
-  const [freshTableSession, freshPdvSession] = await Promise.all([
-    tx.serviceSession.findUniqueOrThrow({ where: { id: data.table.serviceSessionId } }),
-    tx.serviceSession.findUniqueOrThrow({ where: { id: pdvSessionOpen.id } }),
-  ]);
 
   return {
     combinedCheckout,
     created: true as const,
     tableSession: freshTableSession,
-    pdvSession: freshPdvSession,
-    pdvOrder,
+    pdvSession: pdvResult.pdvSession,
+    pdvOrder: pdvResult.order,
   };
 }
 
@@ -242,6 +202,7 @@ export async function registerCombinedCheckout(input: RegisterCombinedCheckoutIn
     } catch (error) {
       if (
         error instanceof CombinedCheckoutError ||
+        error instanceof SellPdvError ||
         error instanceof CreateOrderError ||
         error instanceof RegisterPaymentError ||
         error instanceof RequestClosingError ||
