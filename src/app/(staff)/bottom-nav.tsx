@@ -75,15 +75,17 @@ export function BottomNav({
       className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-shell"
       aria-label="Navegação principal"
     >
-      <div className="no-scrollbar mx-auto flex max-w-3xl justify-[safe_center] overflow-x-auto">
+      <div className="no-scrollbar justify-[safe_center] mx-auto flex max-w-3xl overflow-x-auto">
         {items.map((item) => {
-          // "Mesas" também fica ativo em /retiradas — são abas irmãs da
-          // mesma seção (AtendimentoTabs), módulo Retiradas 2026-08-14).
+          // "Mesas" também fica ativo em /retiradas e /pdv — são abas
+          // irmãs da mesma seção (AtendimentoTabs), módulo Retiradas
+          // 2026-08-14 / Módulo 17 (PDV) 2026-10-20.
           const isActive =
             item.href === "/"
               ? pathname === "/"
               : pathname.startsWith(item.href) ||
-                (item.href === "/mesas" && pathname.startsWith("/retiradas"));
+                (item.href === "/mesas" &&
+                  (pathname.startsWith("/retiradas") || pathname.startsWith("/pdv")));
           const Icon = item.icon;
           return (
             <Link

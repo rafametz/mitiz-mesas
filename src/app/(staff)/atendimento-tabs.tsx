@@ -3,17 +3,26 @@ import Link from "next/link";
 const TABS = [
   { key: "mesas", href: "/mesas", label: "Mesas" },
   { key: "retiradas", href: "/retiradas", label: "Retiradas" },
+  { key: "pdv", href: "/pdv", label: "PDV" },
 ] as const;
 
-// Duas telas irmãs do mesmo público (Garçom/Caixa/Admin) — abas em vez de
-// um sétimo ícone na barra inferior, mesmo padrão já usado em
-// historico/tabs.tsx (CLAUDE.md seção 11: não virar sistema desktop com
-// barra lotada). Módulo Retiradas, 2026-08-14 — decisão confirmada com o
-// usuário.
-export function AtendimentoTabs({ active }: { active: (typeof TABS)[number]["key"] }) {
+// Telas irmãs do mesmo público — abas em vez de mais um ícone na barra
+// inferior, mesmo padrão já usado em historico/tabs.tsx (CLAUDE.md seção
+// 11: não virar sistema desktop com barra lotada). Mesas/Retiradas:
+// módulo Retiradas, 2026-08-14. PDV: Módulo 17 (venda de balcão,
+// 2026-10-20) — só visível com `pdv.sell` (ADMIN/CASHIER), por isso a
+// única aba condicional das três; Garçom nunca vê a aba.
+export function AtendimentoTabs({
+  active,
+  canSellPdv = false,
+}: {
+  active: (typeof TABS)[number]["key"];
+  canSellPdv?: boolean;
+}) {
+  const tabs = TABS.filter((tab) => tab.key !== "pdv" || canSellPdv);
   return (
     <div className="flex gap-1 border-b border-line" role="tablist">
-      {TABS.map((tab) => (
+      {tabs.map((tab) => (
         <Link
           key={tab.key}
           href={tab.href}

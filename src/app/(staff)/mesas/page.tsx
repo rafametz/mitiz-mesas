@@ -3,7 +3,7 @@ import { Bell, Clock, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
-import { hasAnyPermission, PERMISSIONS } from "@/domain/auth/permissions";
+import { hasAnyPermission, hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { ACTIVE_SERVICE_SESSION_STATUSES } from "@/domain/service-session/states";
 import { TABLE_STATUS_LABELS } from "@/domain/table/labels";
 import { Table2 } from "lucide-react";
@@ -35,6 +35,7 @@ export default async function MesasPage() {
     PERMISSIONS.PAYMENTS_REGISTER,
     PERMISSIONS.PRINT_JOBS_MANAGE,
   ]);
+  const canSellPdv = hasPermission(user.permissions, PERMISSIONS.PDV_SELL);
 
   const tables = await prisma.table.findMany({
     where: { restaurantId: restaurant.id },
@@ -56,7 +57,7 @@ export default async function MesasPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-5 p-4 pt-6">
       <RealtimeRefresh channels={[restaurantTablesChannel(restaurant.id)]} />
-      <AtendimentoTabs active="mesas" />
+      <AtendimentoTabs active="mesas" canSellPdv={canSellPdv} />
       <PageHeader title="Mesas" subtitle={`${tables.length} cadastrada(s)`} />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

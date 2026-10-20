@@ -25,6 +25,7 @@ export default async function RetiradasPage() {
   const user = await requirePermission(PERMISSIONS.TABLES_VIEW);
   const restaurant = await getCurrentRestaurant();
   const canCreate = hasPermission(user.permissions, PERMISSIONS.TABLES_OPEN);
+  const canSellPdv = hasPermission(user.permissions, PERMISSIONS.PDV_SELL);
 
   const pickups = await prisma.serviceSession.findMany({
     where: {
@@ -42,7 +43,7 @@ export default async function RetiradasPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-5 p-4 pt-6">
       <RealtimeRefresh channels={[restaurantPickupsChannel(restaurant.id)]} />
-      <AtendimentoTabs active="retiradas" />
+      <AtendimentoTabs active="retiradas" canSellPdv={canSellPdv} />
       <PageHeader
         title="Retiradas"
         subtitle={`${pickups.length} em andamento`}
@@ -68,7 +69,9 @@ export default async function RetiradasPage() {
                   <span className="font-display text-lg font-semibold text-ink">
                     Retirada #{session.pickupNumber}
                   </span>
-                  <StatusBadge tone={tone}>{SERVICE_SESSION_STATUS_LABELS[session.status]}</StatusBadge>
+                  <StatusBadge tone={tone}>
+                    {SERVICE_SESSION_STATUS_LABELS[session.status]}
+                  </StatusBadge>
                 </div>
 
                 <span className="truncate text-sm text-ink">{session.customerName}</span>
@@ -105,7 +108,9 @@ export default async function RetiradasPage() {
             icon={ShoppingBag}
             title="Nenhuma retirada em andamento."
             className="col-span-full"
-            action={canCreate ? <Button href="/retiradas/nova">Criar nova retirada</Button> : undefined}
+            action={
+              canCreate ? <Button href="/retiradas/nova">Criar nova retirada</Button> : undefined
+            }
           />
         )}
       </div>
