@@ -62,16 +62,17 @@ IconButton, Input (+ `TextField`/`SelectField`/`TextAreaField`/
 (`(staff)/bottom-nav.tsx`), Sidebar (`admin/sidebar-nav.tsx`),
 ConfirmDialog (diálogo de confirmação — cobre o papel do "Dialog" desta
 lista), Toast, EmptyState, Skeleton (usado em `loading.tsx` de cada
-rota).
+rota), QuantityStepper (`form/quantity-stepper.tsx`), SearchField
+(`form/search-field.tsx`, primeiro uso real no PDV — Módulo 17,
+2026-10-20).
 
 Ainda não implementados (sem caso de uso real que os justifique até
 agora — CLAUDE.md "toda nova variante deve resolver necessidade real"):
 Select (como componente separado de `SelectField`), TableStatusCard
 (hoje cada listagem tem seu próprio card, ver `table-card.tsx`),
 Drawer, ErrorState (hoje cada `error.tsx` de rota resolve isso
-diretamente), MoneyDisplay, QuantityStepper, OrderItemRow,
-PaymentSummary (os três últimos esperam o Módulo 8 — Caixa e
-pagamentos).
+diretamente), MoneyDisplay, OrderItemRow, PaymentSummary (esperam o
+Módulo 8 — Caixa e pagamentos).
 
 ## Card de mesa
 

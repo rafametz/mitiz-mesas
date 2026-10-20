@@ -1374,10 +1374,17 @@ consumo de uma mesa aberta como parte do recebimento.
   nova. **Testes**: 3 unitários novos (`pdv-sell-permission.test.ts`).
   `tsc --noEmit`, lint, build, 231 testes unitários e integração
   limpos.
-- 🔜 Passo 2 — tela de venda (busca por nome/código/código de barras,
-  carrinho, quantidade) — próximo.
-- 🔜 Passo 3 — fechamento rápido (forma de pagamento, múltiplas formas,
-  troco calculado na tela) + Pagamento Combinado (ADR 0010):
+- ✅ **Passo 2 — tela de venda** (`/pdv`, `src/app/(staff)/pdv/`): busca por
+  nome/SKU/código de barras (leitor USB/Bluetooth via Enter), grid de
+  produtos por categoria (catálogo inteiro, não só a categoria Loja —
+  `visibleInOrders` é sobre esconder a Loja do pedido de MESA, não sobre
+  restringir o PDV), carrinho em painel fixo à direita no desktop /
+  barra flutuante + folha deslizante no celular. Terceira aba em
+  `AtendimentoTabs`, só visível com `pdv.sell`. Componente novo:
+  `SearchField` (primeiro uso real de busca no projeto). Verificado
+  manualmente no navegador, desktop e mobile.
+- ✅ **Passo 3 — fechamento rápido** (forma de pagamento, múltiplas
+  formas, troco calculado na tela) + Pagamento Combinado (ADR 0010):
   - ✅ schema (`prisma/migrations/20261015140000_combined_checkout`):
     modelo `CombinedCheckout` + `Payment.combinedCheckoutId`, aditivo,
     RLS habilitado na própria migration. Extraído `closeTableInTx`
@@ -1392,10 +1399,18 @@ consumo de uma mesa aberta como parte do recebimento.
     `CombinedCheckout` com idempotência, fecha sozinha só a sessão do
     PDV ao zerar o saldo. **Testes**: 2 unitários (validação pura) + 2
     de integração (exemplo completo da ADR, idempotência, estorno
-    independente). `tsc --noEmit`, lint, build, 233 testes unitários e
-    90 de integração limpos.
-  - 🔜 tela de recebimento combinado (seleção de consumo da mesa +
-    formas de pagamento por origem, manual por decisão do usuário).
+    independente).
+  - ✅ venda de balcão pura (`sellPdv`/`sellPdvInTx`,
+    `src/application/service-session/sell-pdv.ts`): mesmo núcleo que
+    `registerCombinedCheckoutInTx` agora reaproveita para a perna do
+    PDV, sem duplicar lógica. Ligado à tela do Passo 2 (ação
+    `sellPdvAction`). **Testes**: 2 de integração (múltiplas formas de
+    pagamento + idempotência, rejeição por pagamento insuficiente).
+  - 🔜 tela de recebimento combinado ("+ Adicionar consumo de mesa"
+    dentro do PDV, seleção por origem, manual por decisão do usuário) —
+    `registerCombinedCheckout` já pronto no backend, falta só a UI.
+  - `tsc --noEmit`, lint, build, 233 testes unitários e 92 de integração
+    (13 arquivos) limpos.
 - 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda; recibo do
   Pagamento Combinado discrimina as duas origens).
 - 🔜 Passo 5 — testes de ponta a ponta e validação com o usuário contra
