@@ -382,5 +382,21 @@ dividida em 4 partes, 1 parte ainda aberta (R$ 20,00).
   16 (mesa + picanha, pagamento manual por origem, idempotência do
   conjunto, estorno independente por origem). `tsc --noEmit`, lint, build,
   233 testes unitários e 90 de integração (12 arquivos) limpos.
-- 🔜 Passos 4-8 (tela, carrinho, recibo, testes end-to-end, validação) —
-  ver seção 15.
+- ✅ **Passos 4-5 — tela e carrinho combinado**
+  (`src/app/(staff)/pdv/table-consumption-picker.tsx`,
+  `pdv-sale-screen.tsx`): "+ Adicionar consumo de mesa" reaproveita tal e
+  qual o componente de seleção da mesa (`UnitsLineCard`/`SingleLineCard`/
+  `AmountActions`, extraído para
+  `mesas/[id]/pagamentos/item-selection-list.tsx` — refatoração mecânica,
+  zero mudança de comportamento, verificada no navegador). Carrinho do
+  PDV mostra "Mesa X" ao lado dos produtos de loja; Receber ganha duas
+  seções (forma de pagamento da mesa — uma só, decisão de manter simples
+  nesta fase — e formas da loja, que continuam aceitando split). Venda
+  combinada real testada no navegador e conferida no banco:
+  `CombinedCheckout` com dois `Payment`, mesa permanece `OPEN` com saldo
+  reduzido, sessão do PDV fecha sozinha.
+- 🔜 Passo 6 — recibo (extensão do `PrintJob` do PDV, discriminando as
+  duas origens).
+- 🔜 Passos 7-8 — testes de integração cobrindo o fluxo combinado a
+  partir da UI e validação com o usuário contra uma operação real — ver
+  seção 15.
