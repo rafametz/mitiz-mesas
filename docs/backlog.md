@@ -1406,9 +1406,20 @@ consumo de uma mesa aberta como parte do recebimento.
     PDV, sem duplicar lógica. Ligado à tela do Passo 2 (ação
     `sellPdvAction`). **Testes**: 2 de integração (múltiplas formas de
     pagamento + idempotência, rejeição por pagamento insuficiente).
-  - 🔜 tela de recebimento combinado ("+ Adicionar consumo de mesa"
-    dentro do PDV, seleção por origem, manual por decisão do usuário) —
-    `registerCombinedCheckout` já pronto no backend, falta só a UI.
+  - ✅ tela de recebimento combinado ("+ Adicionar consumo de mesa" dentro
+    do PDV, `src/app/(staff)/pdv/table-consumption-picker.tsx`): reaproveita
+    o mesmo componente de seleção da mesa (`UnitsLineCard`/`SingleLineCard`/
+    `AmountActions`, extraído para `item-selection-list.tsx` — refatoração
+    mecânica, sem mudar comportamento, verificada no navegador contra a
+    tela de pagamento da mesa antes e depois). Tela de Receber do PDV
+    ganhou duas seções quando há mesa selecionada: forma de pagamento da
+    mesa (uma só, decisão de manter simples) e formas da loja (continuam
+    aceitando split, igual antes). Botão "+ Adicionar consumo de mesa"
+    duplicado como item sempre visível no topo da tela no celular — sem
+    isso, carrinho vazio escondia o único acesso ao recurso (achado
+    testando no navegador). Verificado manualmente: venda combinada real
+    criada e conferida no banco (`CombinedCheckout` com dois `Payment`,
+    mesa permanece `OPEN` com saldo reduzido, PDV fecha sozinho).
   - `tsc --noEmit`, lint, build, 233 testes unitários e 92 de integração
     (13 arquivos) limpos.
 - 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda; recibo do
