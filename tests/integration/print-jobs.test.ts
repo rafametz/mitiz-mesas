@@ -14,6 +14,9 @@ import {
   reprocessPrintJob,
 } from "@/application/printing/print-queue";
 import { createBillSummaryPrintJob } from "@/application/printing/create-bill-summary-print-job";
+import { createPdvSaleReceiptPrintJob } from "@/application/printing/create-pdv-sale-receipt-print-job";
+import { sellPdv } from "@/application/service-session/sell-pdv";
+import { registerCombinedCheckout } from "@/application/service-session/register-combined-checkout";
 import { generatePrinterToken, hashPrinterToken } from "@/lib/printing/token";
 import { formatBRL, toDecimal } from "@/lib/money";
 
@@ -33,6 +36,9 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
   let noPrintSectorId: string;
   let noPrintProductId: string;
   const createdTableIds: string[] = [];
+  // Recibo de venda do PDV (PDV_SALE) não tem mesa — rastreado à parte
+  // pra limpeza, mesmo racional de tests/integration/sell-pdv.test.ts.
+  const createdPdvSessionIds: string[] = [];
 
   beforeAll(async () => {
     const restaurant = await prisma.restaurant.findFirstOrThrow();
@@ -44,7 +50,9 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
       await prisma.category.create({ data: { restaurantId, name: `Cat print ${suffix}` } })
     ).id;
     sectorId = (
-      await prisma.productionSector.create({ data: { restaurantId, name: `Setor print ${suffix}` } })
+      await prisma.productionSector.create({
+        data: { restaurantId, name: `Setor print ${suffix}` },
+      })
     ).id;
     productId = (
       await prisma.product.create({
@@ -99,20 +107,40 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
           { sectorId },
           { sectorId: noPrintSectorId },
           { serviceSession: { tableId: { in: createdTableIds } } },
+          { serviceSessionId: { in: createdPdvSessionIds } },
         ],
       },
     });
-    await prisma.payment.deleteMany({ where: { paymentMethodId } });
-    await prisma.orderItem.deleteMany({ where: { productId: { in: [productId, noPrintProductId] } } });
+    await prisma.paymentItemAllocation.deleteMany({
+      where: {
+        payment: {
+          OR: [{ paymentMethodId }, { serviceSessionId: { in: createdPdvSessionIds } }],
+        },
+      },
+    });
+    await prisma.payment.deleteMany({
+      where: { OR: [{ paymentMethodId }, { serviceSessionId: { in: createdPdvSessionIds } }] },
+    });
+    await prisma.orderItem.deleteMany({
+      where: { productId: { in: [productId, noPrintProductId] } },
+    });
     await prisma.order.deleteMany({
-      where: { serviceSession: { tableId: { in: createdTableIds } } },
+      where: {
+        OR: [
+          { serviceSession: { tableId: { in: createdTableIds } } },
+          { serviceSessionId: { in: createdPdvSessionIds } },
+        ],
+      },
     });
     await prisma.serviceSession.deleteMany({ where: { tableId: { in: createdTableIds } } });
+    await prisma.serviceSession.deleteMany({ where: { id: { in: createdPdvSessionIds } } });
     await prisma.table.deleteMany({ where: { id: { in: createdTableIds } } });
     await prisma.printer.deleteMany({ where: { id: printerId } });
     await prisma.paymentMethod.deleteMany({ where: { id: paymentMethodId } });
     await prisma.product.deleteMany({ where: { id: { in: [productId, noPrintProductId] } } });
-    await prisma.productionSector.deleteMany({ where: { id: { in: [sectorId, noPrintSectorId] } } });
+    await prisma.productionSector.deleteMany({
+      where: { id: { in: [sectorId, noPrintSectorId] } },
+    });
     await prisma.category.deleteMany({ where: { id: categoryId } });
     await prisma.$disconnect();
   });
@@ -274,8 +302,12 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
     const claimedOurs = claimed.find((j) => j.id === job!.id);
     expect(claimedOurs).toBeTruthy();
     const content = claimedOurs?.content;
-    if (content?.type === "BILL_SUMMARY" || content?.type === "ROAST_RESERVATION") {
-      throw new Error("Esperado um ticket de pedido, não um resumo/reserva.");
+    if (
+      content?.type === "BILL_SUMMARY" ||
+      content?.type === "ROAST_RESERVATION" ||
+      content?.type === "PDV_SALE"
+    ) {
+      throw new Error("Esperado um ticket de pedido, não um resumo/reserva/recibo.");
     }
     expect(content?.tableNumber).toBeTruthy();
 
@@ -332,7 +364,10 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
   describe("Imprimir conferência (BILL_SUMMARY)", () => {
     it("gera o resumo com itens consolidados, total e divisão por pessoa", async () => {
       const table = await prisma.table.create({
-        data: { restaurantId, number: `PRINT-BILL-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+        data: {
+          restaurantId,
+          number: `PRINT-BILL-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
       });
       createdTableIds.push(table.id);
       const session = await openTable({ tableId: table.id, waiterId, guestCount: 3 });
@@ -368,7 +403,10 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
 
     it("inclui pagamentos já registrados e o saldo restante", async () => {
       const table = await prisma.table.create({
-        data: { restaurantId, number: `PRINT-BILL-PAY-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+        data: {
+          restaurantId,
+          number: `PRINT-BILL-PAY-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
       });
       createdTableIds.push(table.id);
       const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
@@ -395,7 +433,10 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
 
     it("não é reimprimível — createReprintJob rejeita com mensagem clara", async () => {
       const table = await prisma.table.create({
-        data: { restaurantId, number: `PRINT-BILL-RE-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+        data: {
+          restaurantId,
+          number: `PRINT-BILL-RE-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
       });
       createdTableIds.push(table.id);
       const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
@@ -412,7 +453,10 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
 
     it("claim busca o conteúdo do resumo sem erro de validação", async () => {
       const table = await prisma.table.create({
-        data: { restaurantId, number: `PRINT-BILL-CLAIM-${Date.now()}-${Math.random().toString(36).slice(2)}` },
+        data: {
+          restaurantId,
+          number: `PRINT-BILL-CLAIM-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
       });
       createdTableIds.push(table.id);
       const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
@@ -429,6 +473,153 @@ describe("PrintJob (Módulo 7 — impressão)", () => {
       expect(ours).toBeTruthy();
       expect(ours?.type).toBe("BILL_SUMMARY");
       expect((ours?.content as { total: string }).total).toBeTruthy();
+    });
+  });
+
+  describe("Recibo de venda do PDV (PDV_SALE) — Módulo 17", () => {
+    it("venda pura: uma origem (Loja), troco calculado a partir do valor recebido informado", async () => {
+      const orderIdempotencyKey = `key-pdv-print-1-${Date.now()}-${Math.random()}`;
+      const order = await sellPdv(waiterId, {
+        restaurantId,
+        waiterId,
+        orderIdempotencyKey,
+        items: [{ productId, quantity: 1 }], // R$40,00
+        payments: [{ paymentMethodId, amount: 40, idempotencyKey: `${orderIdempotencyKey}-pay` }],
+      });
+      createdPdvSessionIds.push(order.serviceSessionId);
+
+      // "Recebido em dinheiro" é só informação de impressão (nunca
+      // influencia o valor gravado em Payment) — repassado aqui como o
+      // operador teria digitado na tela (visão da Fase 2, troco).
+      const { job, printerConfigured } = await createPdvSaleReceiptPrintJob(
+        order.serviceSessionId,
+        {
+          [`${orderIdempotencyKey}-pay`]: "50",
+        },
+      );
+
+      expect(job.type).toBe("PDV_SALE");
+      expect(job.orderId).toBeNull();
+      expect(job.sectorId).toBeNull();
+      expect(job.serviceSessionId).toBe(order.serviceSessionId);
+      expect(printerConfigured).toBe(true);
+
+      const content = job.contentSnapshot as {
+        type: string;
+        total: string;
+        origins: {
+          label: string;
+          subtotal: string;
+          payments: { amount: string; change: string | null }[];
+        }[];
+      };
+      expect(content.type).toBe("PDV_SALE");
+      expect(content.origins).toHaveLength(1);
+      expect(content.origins[0]?.label).toBe("Loja");
+      expect(content.origins[0]?.subtotal).toBe(formatBRL("40.00"));
+      expect(content.origins[0]?.payments[0]?.amount).toBe(formatBRL("40.00"));
+      expect(content.origins[0]?.payments[0]?.change).toBe(formatBRL("10.00")); // 50 - 40
+      expect(content.total).toBe(formatBRL("40.00"));
+    });
+
+    it("é reimprimível — ao contrário de BILL_SUMMARY, o conteúdo fica congelado", async () => {
+      const orderIdempotencyKey = `key-pdv-print-2-${Date.now()}-${Math.random()}`;
+      const order = await sellPdv(waiterId, {
+        restaurantId,
+        waiterId,
+        orderIdempotencyKey,
+        items: [{ productId, quantity: 1 }],
+        payments: [{ paymentMethodId, amount: 40, idempotencyKey: `${orderIdempotencyKey}-pay` }],
+      });
+      createdPdvSessionIds.push(order.serviceSessionId);
+
+      const { job } = await createPdvSaleReceiptPrintJob(order.serviceSessionId);
+      const reprinted = await createReprintJob(job.id);
+
+      expect(reprinted.type).toBe("PDV_SALE");
+      expect(reprinted.id).not.toBe(job.id);
+      expect(reprinted.serviceSessionId).toBe(order.serviceSessionId);
+      expect(reprinted.contentSnapshot).toEqual(job.contentSnapshot);
+    });
+
+    it("claim busca o conteúdo do recibo sem erro de validação", async () => {
+      const orderIdempotencyKey = `key-pdv-print-3-${Date.now()}-${Math.random()}`;
+      const order = await sellPdv(waiterId, {
+        restaurantId,
+        waiterId,
+        orderIdempotencyKey,
+        items: [{ productId, quantity: 1 }],
+        payments: [{ paymentMethodId, amount: 40, idempotencyKey: `${orderIdempotencyKey}-pay` }],
+      });
+      createdPdvSessionIds.push(order.serviceSessionId);
+
+      const { job } = await createPdvSaleReceiptPrintJob(order.serviceSessionId);
+      const claimed = await claimPendingPrintJobs(printerId, 50);
+      const ours = claimed.find((j) => j.id === job.id);
+      expect(ours).toBeTruthy();
+      expect(ours?.type).toBe("PDV_SALE");
+      expect((ours?.content as { total: string }).total).toBeTruthy();
+    });
+
+    it("Pagamento Combinado (ADR 0010): discrimina mesa e loja no mesmo recibo", async () => {
+      const table = await prisma.table.create({
+        data: {
+          restaurantId,
+          number: `PRINT-COMBO-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        },
+      });
+      createdTableIds.push(table.id);
+      const session = await openTable({ tableId: table.id, waiterId, guestCount: 1 });
+      const order = await createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-combo-print-${Date.now()}-${Math.random()}`,
+        items: [{ productId, quantity: 1 }], // R$40,00
+      });
+      const tableItemId = order.items[0]!.id;
+
+      const orderIdempotencyKey = `key-pdv-combo-print-${Date.now()}-${Math.random()}`;
+      await registerCombinedCheckout({
+        idempotencyKey: `combo-print-${Date.now()}-${Math.random()}`,
+        registeredById: waiterId,
+        table: {
+          serviceSessionId: session.id,
+          payments: [
+            {
+              paymentMethodId,
+              idempotencyKey: `combo-print-mesa-${Date.now()}-${Math.random()}`,
+              allocations: [{ type: "AMOUNT", orderItemIds: [tableItemId], mode: "FULL" }],
+            },
+          ],
+        },
+        pdv: {
+          restaurantId,
+          waiterId,
+          orderIdempotencyKey,
+          items: [{ productId, quantity: 1 }], // R$40,00
+          payments: [{ paymentMethodId, amount: 40, idempotencyKey: `${orderIdempotencyKey}-pay` }],
+        },
+      });
+
+      const pdvOrder = await prisma.order.findUniqueOrThrow({
+        where: { idempotencyKey: orderIdempotencyKey },
+      });
+      createdPdvSessionIds.push(pdvOrder.serviceSessionId);
+
+      const { job } = await createPdvSaleReceiptPrintJob(pdvOrder.serviceSessionId);
+      const content = job.contentSnapshot as {
+        total: string;
+        origins: { label: string; subtotal: string; items: { label: string; amount: string }[] }[];
+      };
+
+      expect(content.origins).toHaveLength(2);
+      // Mesa sempre primeiro, depois loja — nunca misturadas numa linha só.
+      expect(content.origins[0]?.label).toBe(`Mesa ${table.number}`);
+      expect(content.origins[0]?.subtotal).toBe(formatBRL("40.00"));
+      expect(content.origins[0]?.items[0]?.amount).toBe(formatBRL("40.00"));
+      expect(content.origins[1]?.label).toBe("Loja");
+      expect(content.origins[1]?.subtotal).toBe(formatBRL("40.00"));
+      expect(content.total).toBe(formatBRL("80.00"));
     });
   });
 });

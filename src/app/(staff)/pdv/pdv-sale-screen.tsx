@@ -245,11 +245,19 @@ export function PdvSaleScreen({
     return (method?.name ?? "").toLowerCase().includes("dinheiro");
   }
 
-  const paymentsPayload = paymentLines.map((line) => ({
-    paymentMethodId: line.paymentMethodId,
-    amount: parseBRLInput(line.amountInput),
-    idempotencyKey: line.idempotencyKey,
-  }));
+  const paymentsPayload = paymentLines.map((line) => {
+    const cashReceived = isCashMethod(line.paymentMethodId)
+      ? parseBRLInput(line.cashReceivedInput)
+      : 0;
+    return {
+      paymentMethodId: line.paymentMethodId,
+      amount: parseBRLInput(line.amountInput),
+      idempotencyKey: line.idempotencyKey,
+      // Só para o recibo (troco impresso) — nunca usado pra validar nem
+      // gravar o pagamento em si (decisão do usuário, visão da Fase 2).
+      ...(cashReceived > 0 ? { cashReceived } : {}),
+    };
+  });
   const cartPayload = cart.map((line) => ({ productId: line.productId, quantity: line.quantity }));
   const tableAllocationsPayload = mesaSelection?.entries.map((entry) => entry.payload) ?? [];
 
@@ -294,7 +302,9 @@ export function PdvSaleScreen({
           className="w-full justify-center lg:hidden"
         >
           <Table2 className="h-4 w-4" aria-hidden />
-          {mesaSelection ? `Alterar consumo de mesa — Mesa ${mesaSelection.tableNumber}` : "+ Adicionar consumo de mesa"}
+          {mesaSelection
+            ? `Alterar consumo de mesa — Mesa ${mesaSelection.tableNumber}`
+            : "+ Adicionar consumo de mesa"}
         </Button>
 
         <SearchField

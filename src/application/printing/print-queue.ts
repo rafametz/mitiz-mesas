@@ -7,6 +7,7 @@ import {
   roastReservationTicketContentSchema,
   buildRoastReservationTicketContent,
 } from "@/domain/printing/roast-reservation-ticket";
+import { pdvSaleReceiptContentSchema } from "@/domain/printing/pdv-sale-receipt";
 import { canTransitionPrintJob } from "@/domain/printing/states";
 import { publishChange } from "@/lib/realtime/publish";
 import { sectorChannel } from "@/lib/realtime/channels";
@@ -45,21 +46,28 @@ export async function claimPendingPrintJobs(printerId: string, limit = 10) {
       id: job.id,
       type: job.type,
       attempts: job.attempts,
-      // BILL_SUMMARY e ROAST_RESERVATION têm formato de conteúdo próprio
-      // (bill-summary.ts / roast-reservation-ticket.ts), sem setor nem
-      // número de pedido — os outros tipos continuam no formato de
-      // ticket.ts.
+      // BILL_SUMMARY, ROAST_RESERVATION e PDV_SALE têm formato de conteúdo
+      // próprio (bill-summary.ts / roast-reservation-ticket.ts /
+      // pdv-sale-receipt.ts), sem setor nem número de pedido — os outros
+      // tipos continuam no formato de ticket.ts.
       content:
         job.type === "BILL_SUMMARY"
           ? billSummaryContentSchema.parse(job.contentSnapshot)
           : job.type === "ROAST_RESERVATION"
             ? roastReservationTicketContentSchema.parse(job.contentSnapshot)
-            : ticketContentSchema.parse(job.contentSnapshot),
+            : job.type === "PDV_SALE"
+              ? pdvSaleReceiptContentSchema.parse(job.contentSnapshot)
+              : ticketContentSchema.parse(job.contentSnapshot),
     }));
   });
 }
 
-async function transitionJob(printerId: string, jobId: string, toStatus: "PRINTED" | "FAILED", error?: string) {
+async function transitionJob(
+  printerId: string,
+  jobId: string,
+  toStatus: "PRINTED" | "FAILED",
+  error?: string,
+) {
   const job = await prisma.printJob.findUnique({ where: { id: jobId } });
   if (!job || job.printerId !== printerId) {
     throw new PrintJobError("Job não encontrado para esta impressora.");
@@ -73,7 +81,11 @@ async function transitionJob(printerId: string, jobId: string, toStatus: "PRINTE
     data:
       toStatus === "PRINTED"
         ? { status: "PRINTED", printedAt: new Date() }
-        : { status: "FAILED", lastError: error ?? "Erro não informado", attempts: { increment: 1 } },
+        : {
+            status: "FAILED",
+            lastError: error ?? "Erro não informado",
+            attempts: { increment: 1 },
+          },
   });
 }
 
@@ -161,6 +173,35 @@ export async function createReprintJob(originalJobId: string) {
         printerId: printer?.id ?? original.printerId,
         type: "ROAST_RESERVATION",
         contentSnapshot: content,
+      },
+    });
+    return created;
+  }
+
+  // Recibo de venda do PDV (Módulo 17): ao contrário do resumo da
+  // comanda, o conteúdo é congelado no momento da venda — a sessão do
+  // PDV já fechou e o saldo não muda mais depois, então reimprimir o
+  // mesmo conteúdo faz sentido (papel perdido/rasgado, cliente pediu
+  // outra via). Mesmo racional de ROAST_RESERVATION: continua tipo
+  // PDV_SALE mesmo, não existe uma variante "REPRINT" para este ticket.
+  if (original.type === "PDV_SALE") {
+    if (!original.serviceSessionId) {
+      throw new PrintJobError("Job de impressão sem venda vinculada.");
+    }
+    const originalContent = pdvSaleReceiptContentSchema.parse(original.contentSnapshot);
+    const pdvSession = await prisma.serviceSession.findUniqueOrThrow({
+      where: { id: original.serviceSessionId },
+    });
+    const printer = await prisma.printer.findFirst({
+      where: { restaurantId: pdvSession.restaurantId, active: true },
+    });
+
+    const created = await prisma.printJob.create({
+      data: {
+        serviceSessionId: original.serviceSessionId,
+        printerId: printer?.id ?? original.printerId,
+        type: "PDV_SALE",
+        contentSnapshot: originalContent,
       },
     });
     return created;

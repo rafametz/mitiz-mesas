@@ -60,6 +60,7 @@ const TYPE_LABEL = {
   REPRINT: "*** REIMPRESSAO ***",
   BILL_SUMMARY: "*** RESUMO DA COMANDA ***",
   ROAST_RESERVATION: "*** RESERVA DE ASSADO ***",
+  PDV_SALE: "*** RECIBO DE VENDA ***",
 };
 
 function formatDateTimeBR(iso) {
@@ -188,6 +189,55 @@ function renderRoastReservation(content) {
   printer.cut();
 }
 
+// Recibo de venda do PDV (formato em
+// src/domain/printing/pdv-sale-receipt.ts no projeto principal, Módulo 17
+// — ADR 0010, Pagamento Combinado) — recibo de venda, não ticket de
+// cozinha: itens, subtotal, forma(s) de pagamento (com troco quando o
+// operador informou o valor recebido em dinheiro) e total. `origins` tem
+// 2 entradas quando a venda veio de "+ Adicionar consumo de mesa" (mesa
+// sempre impressa primeiro, depois loja) e 1 numa venda de balcão pura.
+function renderPdvSaleReceipt(content) {
+  printer.clear();
+  printer.setTextDoubleHeight();
+  printer.alignCenter();
+  printer.bold(true);
+  printer.println(content.restaurantName);
+  printer.bold(false);
+  printer.println(TYPE_LABEL.PDV_SALE);
+  printer.drawLine();
+
+  printer.alignLeft();
+  printer.println(`Vendedor: ${content.waiterName}`);
+  printer.println(`Hora: ${formatDateTimeBR(content.generatedAt)}`);
+
+  for (const origin of content.origins) {
+    printer.drawLine();
+    printer.bold(true);
+    printer.println(origin.label);
+    printer.bold(false);
+
+    for (const item of origin.items) {
+      printer.leftRight(`  ${item.label}`, item.amount);
+    }
+    printer.leftRight("  Subtotal", origin.subtotal);
+
+    for (const payment of origin.payments) {
+      printer.leftRight(`  ${payment.methodName}`, payment.amount);
+      if (payment.change) {
+        printer.leftRight("    Troco", payment.change);
+      }
+    }
+  }
+
+  printer.drawLine();
+  printer.bold(true);
+  printer.leftRight("TOTAL", content.total);
+  printer.bold(false);
+
+  printer.drawLine();
+  printer.cut();
+}
+
 // Monta o ticket a partir do `contentSnapshot` (formato descrito em
 // src/domain/printing/ticket.ts no projeto principal) — decisão de layout
 // (negrito, corte, largura de coluna) é toda daqui, não do servidor.
@@ -198,6 +248,10 @@ function renderTicket(content) {
   }
   if (content.type === "ROAST_RESERVATION") {
     renderRoastReservation(content);
+    return;
+  }
+  if (content.type === "PDV_SALE") {
+    renderPdvSaleReceipt(content);
     return;
   }
 

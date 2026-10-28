@@ -117,6 +117,18 @@ enum PrintJobType {
   // precisar mais anotar à mão. Não é sobre Order/setor (ver
   // PrintJob.roastReservationId abaixo).
   ROAST_RESERVATION
+  // Recibo de venda do PDV (Módulo 17, docs/backlog.md — Fase 2 do
+  // roadmap MITIZ Gestão, 2026-10-28) — formato de recibo de venda
+  // (itens, subtotal, total, forma de pagamento, troco), não o ticket de
+  // cozinha. Criado ao confirmar `sellPdv`/`registerCombinedCheckout`,
+  // sempre com `serviceSessionId` da sessão do PDV (nunca `orderId`,
+  // mesmo racional de BILL_SUMMARY). Quando a venda veio de um
+  // Pagamento Combinado (ADR 0010), o recibo discrimina as duas origens
+  // (mesa + loja) em `contentSnapshot.origins`. Ao contrário de
+  // BILL_SUMMARY, o conteúdo é congelado (a venda já fechou, o saldo não
+  // muda mais depois) — por isso é reimprimível, mesmo racional de
+  // ROAST_RESERVATION.
+  PDV_SALE
 }
 
 enum DiscountType {
@@ -848,14 +860,15 @@ model OrderItemModifier {
 
 model PrintJob {
   id                 String  @id @default(cuid())
-  // Nulo para BILL_SUMMARY (não é sobre um pedido específico) — todo
-  // outro tipo continua exigindo um Order na prática (validado na camada
-  // de aplicação, não dá pra expressar "obrigatório conforme o type" no
-  // schema).
+  // Nulo para BILL_SUMMARY/PDV_SALE (não é sobre um pedido específico) —
+  // todo outro tipo continua exigindo um Order na prática (validado na
+  // camada de aplicação, não dá pra expressar "obrigatório conforme o
+  // type" no schema).
   orderId            String?
-  // Só para BILL_SUMMARY — vínculo com o atendimento inteiro, não um pedido.
+  // Para BILL_SUMMARY e PDV_SALE — vínculo com o atendimento inteiro
+  // (mesa ou sessão do PDV), não um pedido.
   serviceSessionId   String?
-  // Nulo para BILL_SUMMARY (não pertence a um setor de produção).
+  // Nulo para BILL_SUMMARY/PDV_SALE (não pertence a um setor de produção).
   sectorId           String?
   printerId          String?
   // Só para ROAST_RESERVATION — vínculo com a reserva de assado, não um

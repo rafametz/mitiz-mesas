@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
 import { PERMISSIONS } from "@/domain/auth/permissions";
 import { sellPdv, SellPdvError } from "@/application/service-session/sell-pdv";
@@ -11,6 +12,8 @@ import {
 } from "@/application/service-session/register-combined-checkout";
 import { RegisterPaymentError } from "@/application/service-session/register-payment";
 import type { AllocationRequest } from "@/application/service-session/register-payment";
+import { createPdvSaleReceiptPrintJob } from "@/application/printing/create-pdv-sale-receipt-print-job";
+import { runAfterResponse } from "@/lib/run-after-response";
 
 export type FormState = { error: string | null; success?: boolean };
 
@@ -22,8 +25,38 @@ const paymentsSchema = z.array(
     paymentMethodId: z.string().min(1),
     amount: z.number().positive(),
     idempotencyKey: z.string().min(1),
+    // Só para o recibo (troco impresso) — decisão do usuário, visão da
+    // Fase 2: "troco é só cálculo de tela", nunca influencia o valor
+    // registrado em sellPdv/registerCombinedCheckout, que nem recebem
+    // este campo (ver createPdvSaleReceiptPrintJob).
+    cashReceived: z.number().positive().optional(),
   }),
 );
+
+function cashReceivedMap(payments: z.infer<typeof paymentsSchema>): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const payment of payments) {
+    if (payment.cashReceived !== undefined)
+      map[payment.idempotencyKey] = String(payment.cashReceived);
+  }
+  return map;
+}
+
+// Mesmo padrão de createOrder/sellPdv: `await` aqui (não dispara e
+// esquece) — dentro de uma requisição real do Next.js, `after()` só
+// agenda e volta na hora, então o `await` não atrasa a resposta; fora de
+// uma requisição (testes/scripts), `runAfterResponse` cai para rodar e
+// esperar `fn()` direto, e sem este `await` esse caminho ficaria
+// desacompanhado.
+async function schedulePdvSaleReceipt(pdvSessionId: string, cashReceived: Record<string, string>) {
+  await runAfterResponse(async () => {
+    try {
+      await createPdvSaleReceiptPrintJob(pdvSessionId, cashReceived);
+    } catch (error) {
+      console.error(`[pdv] falha ao criar o recibo da venda ${pdvSessionId}:`, error);
+    }
+  });
+}
 
 // Carrinho e formas de pagamento montados no cliente (nada gravado até
 // aqui) e enviados como JSON em campos escondidos — mesmo padrão já usado
@@ -53,8 +86,9 @@ export async function sellPdvAction(
   if (items.length === 0) return { error: "Adicione ao menos um produto à venda." };
   if (payments.length === 0) return { error: "Informe ao menos uma forma de pagamento." };
 
+  let order;
   try {
-    await sellPdv(user.id, {
+    order = await sellPdv(user.id, {
       restaurantId,
       waiterId: user.id,
       orderIdempotencyKey,
@@ -66,6 +100,8 @@ export async function sellPdvAction(
     console.error("[sellPdvAction] erro inesperado ao registrar venda:", error);
     return { error: "Não foi possível registrar a venda. Tente de novo." };
   }
+
+  await schedulePdvSaleReceipt(order.serviceSessionId, cashReceivedMap(payments));
 
   revalidatePath("/pdv");
   return { error: null, success: true };
@@ -153,6 +189,16 @@ export async function registerCombinedCheckoutAction(
     );
     return { error: "Não foi possível registrar a venda. Tente de novo." };
   }
+
+  // O pedido da loja é a forma mais direta de achar a sessão do PDV que
+  // acabou de nascer (registerCombinedCheckout devolve só o
+  // CombinedCheckout, que agrupa os dois Payment — não expõe os ids de
+  // sessão diretamente) — a chave já é única por confirmação.
+  const pdvOrder = await prisma.order.findUnique({
+    where: { idempotencyKey: orderIdempotencyKey },
+    select: { serviceSessionId: true },
+  });
+  if (pdvOrder) await schedulePdvSaleReceipt(pdvOrder.serviceSessionId, cashReceivedMap(payments));
 
   revalidatePath("/pdv");
   revalidatePath("/mesas");
