@@ -296,6 +296,19 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     checkout combinado (passo 3, ainda não implementado). Verificado:
     `tsc --noEmit`/lint/build limpos, 231 testes unitários e as 88 de
     integração (11 arquivos) passando.
+16. ✅ Recibo de venda do PDV (Módulo 17 — Fase 2 do roadmap MITIZ Gestão;
+    ADR 0010 passo 6, 2026-10-28) —
+    `prisma/migrations/20261028120000_pdv_sale_print_job_type`: novo
+    valor `PDV_SALE` em `PrintJobType` (aditivo — `ALTER TYPE ... ADD
+    VALUE`, nenhum `PrintJob` existente muda de tipo ou comportamento).
+    Recibo de venda (não ticket de cozinha), sempre com
+    `serviceSessionId` da sessão do PDV; quando a venda veio de um
+    Pagamento Combinado, discrimina mesa e loja em
+    `contentSnapshot.origins` (seção "Conteúdo do ticket" em
+    `docs/printing/architecture.md`). Reimprimível (conteúdo congelado,
+    mesmo racional de `ROAST_RESERVATION`). Verificado: `tsc --noEmit`,
+    lint, build, 242 testes unitários e 96 de integração (13 arquivos)
+    limpos.
 
 ## 7. Fluxo de migration usado na prática
 

@@ -98,6 +98,31 @@ ninguem processar; ver "Fora do escopo desta versão" abaixo).
      caminho certo). Formato próprio em
      `src/domain/printing/bill-summary.ts`, com valores já formatados em
      BRL (o agente não tem Decimal/Intl).
+   - Venda do PDV confirmada (`sellPdv`/`registerCombinedCheckout`,
+     Módulo 17 — Fase 2 do roadmap MITIZ Gestão; ADR 0010, Pagamento
+     Combinado, 2026-10-28): tipo `PDV_SALE`, criado pela camada de ação
+     (`src/app/(staff)/pdv/actions.ts`) via `runAfterResponse` depois
+     que a venda já confirmou — mesmo racional de `createPrintJobsForOrder`,
+     uma falha aqui nunca derruba a venda já registrada. Recibo de
+     venda, não ticket de cozinha: itens, subtotal, total, forma(s) de
+     pagamento e troco (decisão registrada em
+     `docs/product/visao-mitiz-gestao.md`, Fase 2) — "troco" é só
+     informação de impressão, nunca gravada em `Payment` (o valor
+     "recebido em dinheiro" só existe na tela e é repassado até aqui
+     pela ação, nunca até `sellPdv`/`registerCombinedCheckout`).
+     `serviceSessionId` aponta pra sessão do PDV; `orderId`/`sectorId`
+     ficam nulos, mesmo racional de `BILL_SUMMARY`. Quando a venda veio
+     de um Pagamento Combinado, `contentSnapshot.origins` tem duas
+     entradas (mesa sempre primeiro, depois loja), reconstruídas a
+     partir de `PaymentItemAllocation` da perna da mesa — nunca
+     misturadas numa linha só, mesmo racional de nunca existir um
+     `Payment` cobrindo as duas origens (ADR 0010, seção 7). Diferente
+     de `BILL_SUMMARY`, **é** reimprimível: a venda já fechou e o saldo
+     não muda mais depois, então reimprimir o mesmo conteúdo faz
+     sentido (papel perdido/rasgado, cliente pediu outra via) — mesmo
+     racional de `ROAST_RESERVATION`. Formato próprio em
+     `src/domain/printing/pdv-sale-receipt.ts`, montado em
+     `src/application/printing/create-pdv-sale-receipt-print-job.ts`.
    - Reserva de assado criada (módulo Reservas de Assados, 2026-10-04,
      pedido do usuário): tipo `ROAST_RESERVATION`, criado via
      `runAfterResponse` depois que `createRoastReservation` já confirmou a

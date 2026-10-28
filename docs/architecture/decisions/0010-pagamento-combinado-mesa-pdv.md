@@ -395,8 +395,17 @@ dividida em 4 partes, 1 parte ainda aberta (R$ 20,00).
   combinada real testada no navegador e conferida no banco:
   `CombinedCheckout` com dois `Payment`, mesa permanece `OPEN` com saldo
   reduzido, sessão do PDV fecha sozinha.
-- 🔜 Passo 6 — recibo (extensão do `PrintJob` do PDV, discriminando as
-  duas origens).
+- ✅ **Passo 6 — recibo** (`PrintJobType.PDV_SALE`,
+  `src/domain/printing/pdv-sale-receipt.ts`,
+  `src/application/printing/create-pdv-sale-receipt-print-job.ts`): o
+  recibo de venda do PDV discrimina as duas origens em
+  `contentSnapshot.origins` — mesa sempre primeiro (reconstruída a
+  partir de `PaymentItemAllocation` da perna da mesa, nunca de um
+  `Payment` misto), loja depois. Reimprimível (conteúdo congelado).
+  **Testes**: 5 unitários (schema/builder) + 4 de integração, incluindo
+  um cenário combinado completo (mesa + loja discriminadas no mesmo
+  recibo). `tsc --noEmit`, lint, build, 242 testes unitários e 96 de
+  integração (13 arquivos) limpos.
 - 🔜 Passos 7-8 — testes de integração cobrindo o fluxo combinado a
   partir da UI e validação com o usuário contra uma operação real — ver
   seção 15.

@@ -1422,8 +1422,26 @@ consumo de uma mesa aberta como parte do recebimento.
     mesa permanece `OPEN` com saldo reduzido, PDV fecha sozinho).
   - `tsc --noEmit`, lint, build, 233 testes unitários e 92 de integração
     (13 arquivos) limpos.
-- 🔜 Passo 4 — recibo (6º tipo de `PrintJob`, formato de venda; recibo do
-  Pagamento Combinado discrimina as duas origens).
+- ✅ **Passo 4 — recibo** (6º tipo de `PrintJob`, `PDV_SALE`,
+  `prisma/migrations/20261028120000_pdv_sale_print_job_type`; formato em
+  `src/domain/printing/pdv-sale-receipt.ts`, montado em
+  `src/application/printing/create-pdv-sale-receipt-print-job.ts`):
+  recibo de venda (itens, subtotal, total, forma de pagamento, troco —
+  decisão da visão da Fase 2), não o ticket de cozinha. Criado pela ação
+  do PDV (`sellPdvAction`/`registerCombinedCheckoutAction`) depois da
+  venda já confirmada. Recibo do Pagamento Combinado discrimina as duas
+  origens (`contentSnapshot.origins`, mesa sempre antes da loja,
+  reconstruída a partir de `PaymentItemAllocation` — nunca uma linha só
+  misturando as duas). Reimprimível, ao contrário de `BILL_SUMMARY`
+  (conteúdo congelado, mesmo racional de `ROAST_RESERVATION`). Bug real
+  encontrado e corrigido implementando isto: `formatSessionLabel`
+  (`src/domain/service-session/labels.ts`) não tratava sessão do tipo
+  PDV e caía no rótulo genérico "Mesa" na fila de impressão — agora
+  mostra "PDV". **Testes**: 5 unitários (schema/builder) + 4 de
+  integração (venda pura com troco, reimpressão, claim, Pagamento
+  Combinado com as duas origens) + 4 unitários de `formatSessionLabel`.
+  `tsc --noEmit`, lint, build, 242 testes unitários e 96 de integração
+  (13 arquivos) limpos.
 - 🔜 Passo 5 — testes de ponta a ponta e validação com o usuário contra
   uma venda real de balcão e contra um Pagamento Combinado real.
 
