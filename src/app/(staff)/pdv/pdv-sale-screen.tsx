@@ -9,6 +9,7 @@ import { SearchField } from "@/components/form/search-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
@@ -105,10 +106,17 @@ export function PdvSaleScreen({
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("all");
+  // "" (nenhuma categoria escolhida ainda) é o estado inicial, diferente de
+  // "all" ("Todas", escolhida de propósito) — catálogo tem centenas de
+  // produtos (importação VHSYS), então listar tudo de cara deixava a tela
+  // enorme e sem fim; agora só mostra produto depois que a pessoa busca ou
+  // toca numa categoria (decisão do usuário 2026-11-03, comparando com o
+  // PDV do VHSYS que ela já usa).
+  const [categoryId, setCategoryId] = useState("");
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
@@ -138,9 +146,16 @@ export function PdvSaleScreen({
   }, [products]);
 
   const normalizedSearch = search.trim().toLowerCase();
+  // Nada escolhido ainda (nem categoria, nem busca) → não lista produto
+  // nenhum, só o convite abaixo. Busca casa com qualquer trecho do
+  // nome/código/código de barras (não só o começo), então digitar parte de
+  // qualquer palavra já filtra.
+  const shouldShowProducts = categoryId !== "" || normalizedSearch !== "";
   const filteredProducts = useMemo(() => {
+    if (!shouldShowProducts) return [];
     return products.filter((product) => {
-      if (categoryId !== "all" && product.categoryId !== categoryId) return false;
+      if (categoryId !== "all" && categoryId !== "" && product.categoryId !== categoryId)
+        return false;
       if (!normalizedSearch) return true;
       return (
         product.name.toLowerCase().includes(normalizedSearch) ||
@@ -148,7 +163,7 @@ export function PdvSaleScreen({
         (product.barcode?.toLowerCase().includes(normalizedSearch) ?? false)
       );
     });
-  }, [products, categoryId, normalizedSearch]);
+  }, [products, categoryId, normalizedSearch, shouldShowProducts]);
 
   function addToCart(product: ProductOption, quantity = 1) {
     setCart((prev) => {
@@ -182,6 +197,21 @@ export function PdvSaleScreen({
 
   function removeLine(key: string) {
     setCart((prev) => prev.filter((line) => line.key !== key));
+  }
+
+  // "Cancelar venda" (CartPanel) — equivalente ao CANCELAR (F9) do PDV do
+  // VHSYS que a equipe já usa: limpa tudo que foi lançado até agora (itens
+  // da loja + consumo de mesa selecionado) numa ação só, em vez de remover
+  // item por item. Confirmação porque desfaz trabalho em andamento.
+  function requestClear() {
+    if (cart.length === 0 && !mesaSelection) return;
+    setClearConfirmOpen(true);
+  }
+
+  function confirmClear() {
+    setCart([]);
+    setMesaSelection(null);
+    setClearConfirmOpen(false);
   }
 
   // Leitor de código de barras USB/Bluetooth funciona como teclado: digita
@@ -289,7 +319,7 @@ export function PdvSaleScreen({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
         {/* Sempre visível aqui, independente de já ter algo no carrinho —
             no celular, o painel de carrinho (onde este botão também
             aparece) só surge depois do primeiro item adicionado; sem isto
@@ -355,10 +385,15 @@ export function PdvSaleScreen({
           })}
         </div>
 
-        {filteredProducts.length === 0 ? (
+        {!shouldShowProducts ? (
+          <EmptyState
+            icon={ShoppingBag}
+            title="Escolha uma categoria ou busque um produto para começar."
+          />
+        ) : filteredProducts.length === 0 ? (
           <EmptyState icon={ShoppingBag} title="Nenhum produto encontrado para esta busca." />
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 pb-24 sm:grid-cols-3 lg:grid-cols-3 lg:pb-0">
+          <div className="grid grid-cols-2 gap-2.5 overflow-y-auto pb-24 sm:grid-cols-3 lg:min-h-0 lg:flex-1 lg:grid-cols-3 lg:content-start lg:pb-2">
             {filteredProducts.map((product) => (
               <button
                 key={product.id}
@@ -397,6 +432,7 @@ export function PdvSaleScreen({
             onCheckout={openCheckout}
             onAddTable={() => setTablePickerOpen(true)}
             onRemoveTable={() => setMesaSelection(null)}
+            onRequestClear={requestClear}
           />
         </div>
       </div>
@@ -444,6 +480,7 @@ export function PdvSaleScreen({
               onCheckout={openCheckout}
               onAddTable={() => setTablePickerOpen(true)}
               onRemoveTable={() => setMesaSelection(null)}
+              onRequestClear={requestClear}
               bare
             />
           </div>
@@ -458,6 +495,18 @@ export function PdvSaleScreen({
           onClose={() => setTablePickerOpen(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        title="Cancelar venda em andamento?"
+        description="Remove todos os itens e o consumo de mesa adicionados até agora. Essa ação não pode ser desfeita."
+        onCancel={() => setClearConfirmOpen(false)}
+        confirmSlot={
+          <Button variant="danger" onClick={confirmClear}>
+            Cancelar venda
+          </Button>
+        }
+      />
 
       {checkoutOpen && (
         <div className="fixed inset-0 z-40 flex flex-col items-center justify-end bg-ink/40 p-0 sm:justify-center sm:p-4">
@@ -668,6 +717,7 @@ function CartPanel({
   onCheckout,
   onAddTable,
   onRemoveTable,
+  onRequestClear,
   bare = false,
 }: {
   cart: CartLine[];
@@ -679,6 +729,7 @@ function CartPanel({
   onCheckout: () => void;
   onAddTable: () => void;
   onRemoveTable: () => void;
+  onRequestClear: () => void;
   bare?: boolean;
 }) {
   const isEmpty = cart.length === 0 && !mesaSelection;
@@ -766,9 +817,16 @@ function CartPanel({
         </span>
       </div>
 
-      <Button onClick={onCheckout} disabled={isEmpty} className="w-full">
-        Receber
-      </Button>
+      <div className="flex gap-2">
+        {/* "Cancelar venda" — mesma ideia do CANCELAR (F9) do PDV do
+            VHSYS: limpa tudo de uma vez, em vez de item por item. */}
+        <Button variant="danger" onClick={onRequestClear} disabled={isEmpty} className="flex-1">
+          Cancelar venda
+        </Button>
+        <Button onClick={onCheckout} disabled={isEmpty} className="flex-[2]">
+          Receber
+        </Button>
+      </div>
     </div>
   );
 
