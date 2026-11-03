@@ -289,7 +289,7 @@ export function PdvSaleScreen({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-      <div className="flex flex-1 flex-col gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
         {/* Sempre visível aqui, independente de já ter algo no carrinho —
             no celular, o painel de carrinho (onde este botão também
             aparece) só surge depois do primeiro item adicionado; sem isto
@@ -386,7 +386,7 @@ export function PdvSaleScreen({
           folha deslizante no celular (CLAUDE.md seção 11: evitar modal
           longo, manter total sempre visível). */}
       <div className="hidden lg:block lg:w-[360px] lg:shrink-0">
-        <div className="lg:sticky lg:top-4">
+        <div className="lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)] lg:flex-col">
           <CartPanel
             cart={cart}
             mesaSelection={mesaSelection}
@@ -684,7 +684,7 @@ function CartPanel({
   const isEmpty = cart.length === 0 && !mesaSelection;
 
   const content = (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {!bare && (
         <div className="flex items-center justify-between">
           <h2 className="font-display text-base font-semibold text-ink">Venda</h2>
@@ -722,7 +722,7 @@ function CartPanel({
       {isEmpty ? (
         <EmptyState icon={ShoppingCart} title="Toque num produto para adicionar à venda." />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto lg:flex-1">
           {cart.map((line) => (
             <li
               key={line.key}
@@ -768,5 +768,9 @@ function CartPanel({
     </div>
   );
 
-  return bare ? content : <Card>{content}</Card>;
+  return bare ? (
+    content
+  ) : (
+    <Card className="flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">{content}</Card>
+  );
 }
