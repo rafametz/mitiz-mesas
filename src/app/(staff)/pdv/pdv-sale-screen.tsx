@@ -726,27 +726,31 @@ function CartPanel({
           {cart.map((line) => (
             <li
               key={line.key}
-              className="flex items-center gap-2 rounded-card border border-line p-2.5"
+              className="flex flex-col gap-2 rounded-card border border-line p-2.5"
             >
-              <div className="flex-1">
-                <div className="text-sm font-medium text-ink">{line.productName}</div>
-                <div className="tabular text-xs text-muted">
-                  {formatBRLNumber(line.unitPrice)} cada
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-ink">{line.productName}</div>
+                  <div className="tabular text-xs text-muted">
+                    {formatBRLNumber(line.unitPrice)} cada
+                  </div>
                 </div>
+                <IconButton
+                  label={`Remover ${line.productName}`}
+                  icon={Trash2}
+                  onClick={() => onRemove(line.key)}
+                />
               </div>
-              <QuantityStepper
-                value={String(line.quantity)}
-                onChange={(next) => onSetQuantity(line.key, next)}
-                ariaLabel={`Quantidade de ${line.productName}`}
-              />
-              <span className="tabular w-20 shrink-0 text-right text-sm font-semibold text-ink">
-                {formatBRLNumber(line.unitPrice * line.quantity)}
-              </span>
-              <IconButton
-                label={`Remover ${line.productName}`}
-                icon={Trash2}
-                onClick={() => onRemove(line.key)}
-              />
+              <div className="flex items-center justify-between gap-2">
+                <QuantityStepper
+                  value={String(line.quantity)}
+                  onChange={(next) => onSetQuantity(line.key, next)}
+                  ariaLabel={`Quantidade de ${line.productName}`}
+                />
+                <span className="tabular text-sm font-semibold text-ink">
+                  {formatBRLNumber(line.unitPrice * line.quantity)}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
