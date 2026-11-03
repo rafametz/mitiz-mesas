@@ -300,6 +300,7 @@ export function PdvSaleScreen({
           size="sm"
           onClick={() => setTablePickerOpen(true)}
           className="w-full justify-center lg:hidden"
+          data-testid="pdv-add-table-mobile"
         >
           <Table2 className="h-4 w-4" aria-hidden />
           {mesaSelection
@@ -472,7 +473,10 @@ export function PdvSaleScreen({
 
             <div className="flex items-baseline justify-between rounded-card bg-surface p-3.5">
               <span className="text-sm text-muted">Total da venda</span>
-              <span className="tabular font-display text-2xl font-semibold text-ink">
+              <span
+                data-testid="pdv-checkout-total"
+                className="tabular font-display text-2xl font-semibold text-ink"
+              >
                 {formatBRLNumber(grandTotal)}
               </span>
             </div>
@@ -684,11 +688,19 @@ function CartPanel({
       {!bare && (
         <div className="flex items-center justify-between">
           <h2 className="font-display text-base font-semibold text-ink">Venda</h2>
-          <span className="text-sm text-muted">{itemCount} item(ns)</span>
+          <span data-testid="pdv-cart-item-count" className="text-sm text-muted">
+            {itemCount} item(ns)
+          </span>
         </div>
       )}
 
-      <Button variant="outline" size="sm" onClick={onAddTable} className="w-full justify-center">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onAddTable}
+        className="w-full justify-center"
+        data-testid="pdv-add-table-desktop"
+      >
         <Table2 className="h-4 w-4" aria-hidden />
         {mesaSelection ? "Alterar consumo de mesa" : "+ Adicionar consumo de mesa"}
       </Button>
@@ -696,7 +708,9 @@ function CartPanel({
       {mesaSelection && (
         <div className="flex items-center justify-between gap-2 rounded-card border border-wine/30 bg-wine/5 p-2.5">
           <div>
-            <div className="text-sm font-medium text-ink">Mesa {mesaSelection.tableNumber}</div>
+            <div data-testid="pdv-cart-table-chip" className="text-sm font-medium text-ink">
+              Mesa {mesaSelection.tableNumber}
+            </div>
             <div className="tabular text-xs text-muted">
               {formatBRLNumber(mesaSelection.totalCents / 100)}
             </div>
@@ -740,7 +754,10 @@ function CartPanel({
 
       <div className="flex items-baseline justify-between border-t border-line pt-3">
         <span className="text-sm font-medium text-ink">Total</span>
-        <span className="tabular font-display text-xl font-semibold text-ink">
+        <span
+          data-testid="pdv-cart-total"
+          className="tabular font-display text-xl font-semibold text-ink"
+        >
           {formatBRLNumber(total)}
         </span>
       </div>
