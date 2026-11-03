@@ -406,6 +406,15 @@ dividida em 4 partes, 1 parte ainda aberta (R$ 20,00).
   um cenário combinado completo (mesa + loja discriminadas no mesmo
   recibo). `tsc --noEmit`, lint, build, 242 testes unitários e 96 de
   integração (13 arquivos) limpos.
-- 🔜 Passos 7-8 — testes de integração cobrindo o fluxo combinado a
-  partir da UI e validação com o usuário contra uma operação real — ver
+- ✅ **Passo 7 — testes de ponta a ponta cobrindo o fluxo combinado a
+  partir da UI** (`tests/e2e/pdv.spec.ts`): navegador real (Playwright)
+  reproduzindo o cenário completo da seção 15 — produto de mesa lançado
+  e enviado num pedido normal, depois "+ Adicionar consumo de mesa" no
+  PDV, "Pagar inteiro", produto de loja no mesmo carrinho, "Confirmar
+  venda" numa única confirmação — e conferindo ao final que a mesa
+  permanece `OPEN` com saldo R$ 0,00. `tsc --noEmit`, lint, build, 242
+  testes unitários e 96 de integração limpos; os dois testes e2e
+  (venda pura + combinada) confirmados estáveis em duas rodadas
+  completas consecutivas.
+- 🔜 Passo 8 — validação com o usuário contra uma operação real — ver
   seção 15.

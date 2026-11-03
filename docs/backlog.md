@@ -1442,8 +1442,21 @@ consumo de uma mesa aberta como parte do recebimento.
   Combinado com as duas origens) + 4 unitários de `formatSessionLabel`.
   `tsc --noEmit`, lint, build, 242 testes unitários e 96 de integração
   (13 arquivos) limpos.
-- 🔜 Passo 5 — testes de ponta a ponta e validação com o usuário contra
-  uma venda real de balcão e contra um Pagamento Combinado real.
+- ✅ **Passo 5 — testes de ponta a ponta** (`tests/e2e/pdv.spec.ts`):
+  dois fluxos cobertos via navegador real (Playwright) contra o usuário
+  de teste Administrador: venda de balcão pura (busca, carrinho, troco,
+  confirmação, carrinho volta vazio) e Pagamento Combinado (consumo de
+  mesa + produto de loja numa confirmação só, conferindo que a mesa
+  permanece aberta com saldo R$ 0,00 ao final). `data-testid` novos em
+  `PdvSaleScreen` para desambiguar elementos que coexistem no DOM nas
+  variantes mobile/desktop (toggle por classe Tailwind, não JSX
+  condicional). `scripts/cleanup-e2e-test-data.ts` estendido para
+  também limpar sessões do tipo PDV e `CombinedCheckout` gerados pelos
+  novos testes. `tsc --noEmit`, lint, build, 242 testes unitários e 96
+  de integração limpos; os dois testes e2e confirmados estáveis em duas
+  rodadas completas consecutivas.
+- 🔜 Passo 6 — validação com o usuário contra uma venda real de balcão e
+  contra um Pagamento Combinado real.
 
 ## Ordem de execução recomendada
 
