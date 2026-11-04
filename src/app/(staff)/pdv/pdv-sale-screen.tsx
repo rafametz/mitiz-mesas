@@ -319,7 +319,7 @@ export function PdvSaleScreen({
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-hidden">
         {/* Sempre visível aqui, independente de já ter algo no carrinho —
             no celular, o painel de carrinho (onde este botão também
             aparece) só surge depois do primeiro item adicionado; sem isto
@@ -351,7 +351,7 @@ export function PdvSaleScreen({
         <div
           role="tablist"
           aria-label="Filtrar produtos por categoria"
-          className="flex gap-2 overflow-x-auto pb-1"
+          className="flex flex-wrap gap-2 pb-1"
         >
           <button
             type="button"
@@ -420,7 +420,7 @@ export function PdvSaleScreen({
       {/* Carrinho — painel fixo à direita no desktop, barra flutuante +
           folha deslizante no celular (CLAUDE.md seção 11: evitar modal
           longo, manter total sempre visível). */}
-      <div className="hidden lg:block lg:w-[360px] lg:shrink-0">
+      <div className="hidden lg:block lg:w-[420px] lg:shrink-0">
         <div className="lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)] lg:flex-col">
           <CartPanel
             cart={cart}
