@@ -385,14 +385,109 @@ vale a pena terminar **antes** do Módulo 8 começar, porque fechamento de
 conta com saldo/desconto é exatamente o tipo de ação que vai precisar do
 mesmo padrão de confirmação.
 
-## O que este plano deliberadamente não inclui
+## O que este plano (Fases 1-6) deliberadamente não incluiu
 
-- Modo escuro / troca de tema — não pedido, e o `design-system.md`
-  desatualizado (Fase 6) já resolve a única inconsistência real (doc
-  vs. código), não uma funcionalidade nova.
-- Qualquer redesenho visual amplo — a base já é consistente com a marca;
-  este plano é sobre fechar lacunas e consolidar duplicação, não sobre
+- Modo escuro / troca de tema — não tinha sido pedido, e o
+  `design-system.md` desatualizado (Fase 6) já resolveu a única
+  inconsistência real (doc vs. código), não uma funcionalidade nova.
+- Qualquer redesenho visual amplo — a base já era consistente com a marca;
+  este plano era sobre fechar lacunas e consolidar duplicação, não sobre
   mudar a direção visual.
 - Telas/nav de módulos ainda não implementados (Pagamentos, Usuários,
   Auditoria) — ficam para quando o módulo de negócio correspondente for
   implementado, com o próprio módulo trazendo sua tela.
+
+Essa exclusão deixou de valer a partir da iniciativa abaixo — o
+redesenho visual amplo passou a ser pedido explicitamente.
+
+---
+
+## Fases 7+ — Enriquecimento visual (iniciativa de 2026-11-04)
+
+Pedido explícito do usuário: navegação completa pelo app em produção
+(login, Mesas, PDV, Retiradas, Produção, Histórico, todo o Admin) revelou
+que, apesar das Fases 1-6 acima terem fechado lacunas funcionais reais
+(loading/error, confirmação, Toast, Card/Button consolidados), o
+resultado visual ainda "parece simples demais" — falta hierarquia por
+ícone/cor, profundidade (sombra), e as listagens administrativas que
+ficaram de fora da Fase 5 (Categorias/Setores/Impressoras) continuam
+como tabela HTML crua. Auditoria completa feita seguindo
+`.claude/skills/frontend-modernization/SKILL.md`; direção visual
+escolhida pelo usuário: **híbrido** — mantém a área de trabalho clara
+(legibilidade do salão, decisão já documentada e correta), mas aprofunda
+navegação/cards/ícones/tabelas com mais presença visual.
+
+Numeração continua a partir da Fase 6 para não colidir com o plano
+anterior.
+
+### Fase 7 — Fundação (concluída 2026-11-04)
+- ✅ Ativada a sombra `shadow-card` (já definida em `tailwind.config.ts`,
+  nunca usada) no componente `Card` compartilhado — afeta as ~50 telas
+  que já usam `<Card>`, sem mudar estrutura/comportamento.
+- ✅ Avaliado token de motion: a escala padrão do Tailwind
+  (`duration-150`/`duration-200`) já cobre a faixa pedida pelo design
+  system (120–220ms) — mesma lógica já usada para espaçamento, não
+  precisava de token novo. Documentado em `tailwind.config.ts`.
+- ✅ `prefers-reduced-motion: reduce` tratado globalmente em
+  `globals.css` (não existia antes — lacuna real da skill
+  `frontend-design.md`, "Movimento"/"Acessibilidade").
+- **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build`.
+
+### Fase 8 — Navegação (planejada)
+- Bottom nav mobile: hoje rola horizontalmente com 7 itens (decisão
+  deliberada de 2026-09-30, ver `docs/backlog.md`) — avaliar agrupar os
+  menos frequentes (Reservas, Impressão, Histórico, Admin, Conta) num
+  item "Mais", mantendo Mesas/PDV/Produção/Retiradas sempre visíveis.
+  **Precisa de validação com o usuário antes de implementar**, porque
+  substitui uma decisão de navegação já tomada e testada em produção.
+- Corrigir indicador de aba ativa duplicado/inconsistente entre a tab
+  PDV (`mesa-tabs.tsx`/`pdv` usa `border-b-2` vermelho) e o bottom nav
+  (ainda marca "Mesas" como ativo ao navegar para `/pdv`).
+
+### Fase 9 — Componentes visuais
+- `TableStatusCard` dedicado (hoje cada listagem reimplementa, ver nota
+  em `design-system.md`): ícones de pessoas/tempo/garçom, chip colorido
+  por status.
+- Corrigir contraste do botão "Cancelar venda" no PDV (`pdv-sale-screen.tsx`
+  — variante atual usa rosa claro sobre fundo rosa claro).
+- `EmptyState` de Retiradas: remover CTA duplicado (header + centro).
+
+### Fase 10 — Concluir Fase 5 (tabelas admin responsivas)
+Continuação direta da Fase 5 do plano original, que ficou só em
+Produtos. Aplicar o mesmo padrão `Table`/`CardList` responsivo em
+Categorias, Setores e Impressoras — primeiro ajustando os seletores de
+`admin.spec.ts` para um padrão escopado (`page.locator("tr", {hasText})`),
+igual ao que já foi feito para Produtos, para não repetir o risco já
+documentado.
+- Badge de alerta (tom `wine`) para estoque negativo em Produtos, hoje
+  mostrado em texto cinza neutro igual a qualquer valor.
+- Booleanos (`Ativa`, `No pedido`) como `StatusBadge`, não texto
+  "Sim"/"Não" cru.
+
+### Fase 11 — Produção (fila de pedidos)
+- Investigar o volume alto de pedidos muito antigos na fila "Novos" de
+  `/producao` (pedidos com "há 2000+h") — **confirmar com o usuário se é
+  dado real parado (ação operacional: arquivar/fechar) ou lixo residual
+  antes de qualquer exclusão**; o script `cleanup:e2e-data` não encontrou
+  nada pelo padrão de nome esperado, então não é o mesmo problema já
+  documentado no Módulo 4/"Repaginação visual".
+- Badge de urgência por tempo de espera (pedido muito parado destaca em
+  vermelho, não cinza neutro).
+- Paginação ou agrupamento da fila para listas longas, evitando o
+  layout quebrar como observado no celular durante a auditoria.
+
+### Fase 12 — Admin: dashboard e relatórios
+- Cor semântica nos ícones dos cards de estatística de `/admin/mesas`
+  (hoje cinza neutro mesmo com `Ocupadas > 0`).
+- `DonutChart`/gráfico de barras de Relatórios: rótulos internos ou
+  tooltip.
+
+### Fase 13 — Polimento
+- Papel da fonte serifada (`font-display`, Fraunces): avaliar restringir
+  a marca/login, não títulos de tela operacional — mais tom "SaaS",
+  mantendo a identidade no lugar certo.
+- Revisão final de contraste em todas as telas tocadas pelas fases 7-12.
+
+Princípios das Fases 1-6 continuam valendo integralmente (nenhuma regra
+de negócio muda, commits pequenos por tela, suíte E2E completa a cada
+fase que toca HTML visível, sem dependência nova sem justificar).

@@ -20,7 +20,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-card border border-line bg-surface ${CARD_PADDING[padding]} ${className}`}
+      className={`rounded-card border border-line bg-surface shadow-card ${CARD_PADDING[padding]} ${className}`}
     >
       {children}
     </div>

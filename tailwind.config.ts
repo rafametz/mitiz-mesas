@@ -34,6 +34,13 @@ import type { Config } from "tailwindcss";
 // Espaçamento: a escala de `design-system.md` (4/8/12/16/20/24/32/40/48) é
 // exatamente o espaçamento padrão do Tailwind (1/2/3/4/5/6/8/10/12) — não
 // precisa de token extra, só usar a escala padrão.
+//
+// Movimento: a faixa pedida pelo design system (120–220ms, seção
+// "Movimento" de frontend-design.md) já está coberta pela escala padrão do
+// Tailwind (`duration-150`, `duration-200`) — mesma lógica do espaçamento
+// acima, não precisa de token novo. Usar sempre com
+// `motion-reduce:transition-none` (ou confiar no `prefers-reduced-motion`
+// já tratado globalmente) nas transições novas.
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
@@ -85,10 +92,11 @@ const config: Config = {
       },
       boxShadow: {
         // Sombras discretas — "priorizar contraste... evitar excesso de
-        // efeitos" (CLAUDE.md seção 11). Nenhum componente usa isso ainda
-        // nesta fase (Card/Button seguem sem sombra, como já é hoje);
-        // ficam disponíveis para painéis flutuantes futuros (diálogo de
-        // confirmação, drawer — Fase 2 do plano de modernização).
+        // efeitos" (CLAUDE.md seção 11). `card` está em uso no componente
+        // `Card` (src/components/ui/card.tsx) desde a iniciativa de
+        // enriquecimento visual de 2026-11-04 (ver
+        // docs/design/modernization-plan.md, fases 7+); `panel` já estava
+        // em uso em ConfirmDialog/Toast/Fab desde a Fase 2.
         card: "0 1px 2px 0 rgb(0 0 0 / 0.04)",
         panel: "0 4px 16px -4px rgb(0 0 0 / 0.16)",
       },

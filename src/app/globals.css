@@ -16,6 +16,21 @@
   ::selection {
     @apply bg-gold/30;
   }
+
+  /* Respeita redução de movimento (frontend-design.md, seção
+     "Acessibilidade"/"Movimento") — encurta qualquer transição/animação
+     para quase-instantânea em vez de desativar por completo (preserva o
+     feedback de estado, só remove o deslocamento/interpolação). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @layer components {
