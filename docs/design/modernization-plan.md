@@ -509,7 +509,7 @@ Categorias, Setores e Impressoras.
   livre, e `npm run cleanup:e2e-data -- --apply` depois (a suíte cria
   setor/categoria reais no banco único de dev/produção).
 
-### Fase 11 — Produção (fila de pedidos) (parcialmente concluída 2026-11-04)
+### Fase 11 — Produção (fila de pedidos) (concluída 2026-11-04)
 - ✅ Cor por tempo de espera em `producao/[sectorId]/page.tsx`: item
   parado há 15+ min fica dourado (`text-gold-dark`), 30+ min fica
   vermelho e em negrito (`text-wine font-semibold`), só nas colunas
@@ -521,16 +521,30 @@ Categorias, Setores e Impressoras.
   uma fila longa — mesma técnica já usada no carrinho do PDV
   (`pdv-sale-screen.tsx`, Módulo 17). Nenhum item é escondido/paginado,
   só deixa de quebrar o layout da página.
-- **Pendente — decisão do usuário**: a fila "Novos" tinha ~592 itens
-  durante a auditoria, incluindo pedidos com "há 2000+h" (80+ dias). O
-  script `cleanup:e2e-data` não encontra nada pelo padrão de nome
-  esperado (`E2E`/`PED`), então **não é** o mesmo lixo de teste já
-  documentado no Módulo 4 — parece dado real de operação nunca avançado
-  na esteira. Não apaguei nem arquivei nada: precisa de confirmação do
-  usuário sobre o que fazer (arquivar/fechar atendimentos antigos é uma
-  ação operacional, fora do escopo de uma mudança visual).
+- ✅ **Dado antigo investigado e corrigido (decisão do usuário,
+  2026-11-04).** A fila "Novos" tinha ~592 itens na auditoria (2459 no
+  total do restaurante, todos os setores). Investigação somente-leitura
+  (`prisma.orderItem`/`serviceSession`) mostrou que **não é lixo de
+  teste** — são 2459 `OrderItem` de 1861 pedidos, de **517 atendimentos
+  já `CLOSED` e 100% pagos** (R$ 45.199,70 no total, 07/08 a 03/11/2026):
+  venda e fechamento de caixa aconteceram normalmente, só o rastreio da
+  esteira (`SENT`/`IN_PREPARATION`/`READY`) nunca avançou porque a
+  cozinha não usa a tela de Produção. Reportado ao usuário antes de
+  qualquer escrita; ele confirmou que não usa esse módulo hoje e pediu
+  para mover tudo para "Entregue". Rodado via `updateMany` em lote (não
+  `$transaction` interativa por pedido — a connection string usa o
+  pooler do Supabase em modo "transaction"/pgbouncer, que não sustenta
+  uma transação longa com muitas idas e voltas; a primeira tentativa deu
+  `P2028`/rollback completo, sem efeito). Reaplicada a mesma lógica de
+  `deriveOrderProgressStatus` (`src/domain/order/states.ts`) para o
+  `Order.status`, excluindo pedidos já `CANCELLED`. Conferido depois:
+  zero itens restantes em `SENT`/`IN_PREPARATION`/`READY`. Nenhum valor
+  financeiro (`totalAmount`/`paidAmount`/`Payment`) foi tocado — só
+  status de rastreio de produção.
 - **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build` limpos.
-  Nenhum E2E cobre esta tela (`grep` confirmou).
+  Nenhum E2E cobre esta tela (`grep` confirmou). Correção de dado
+  verificada por consulta direta (contagem zerada), não por teste
+  automatizado — não é mudança de código.
 
 ### Fase 12 — Admin: dashboard e relatórios
 - Cor semântica nos ícones dos cards de estatística de `/admin/mesas`
