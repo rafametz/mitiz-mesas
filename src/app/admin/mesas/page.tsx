@@ -154,14 +154,14 @@ export default async function AdminMesasPage() {
                   <div className="text-xs text-muted">Pedidos avulsos, sem ocupar mesa</div>
                 </div>
               </div>
-              <span className="font-display text-xl font-semibold text-ink">
+              <span className="text-xl font-semibold text-ink">
                 {activePickupsCount}
               </span>
             </Card>
           </Link>
 
           <Card>
-            <h2 className="font-display text-sm font-semibold text-ink">Resumo do salão</h2>
+            <h2 className="text-sm font-semibold text-ink">Resumo do salão</h2>
             <div className="mt-3 flex items-center justify-center">
               <DonutChart
                 total={total}
@@ -188,7 +188,7 @@ export default async function AdminMesasPage() {
           </Card>
 
           <Card>
-            <h2 className="font-display text-sm font-semibold text-ink">Alertas</h2>
+            <h2 className="text-sm font-semibold text-ink">Alertas</h2>
             <ul className="mt-3 flex flex-col gap-3">
               {closingAlerts.map(({ id, number }) => (
                 <AlertRow
@@ -249,7 +249,7 @@ function StatCard({
           <Icon className={`h-4 w-4 ${toneClass}`} />
         </span>
       </div>
-      <span className={`font-display text-2xl font-semibold ${toneClass}`}>{value}</span>
+      <span className={`text-2xl font-semibold ${toneClass}`}>{value}</span>
       <span className="text-xs text-muted">{hint}</span>
     </Card>
   );

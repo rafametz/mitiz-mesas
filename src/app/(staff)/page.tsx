@@ -17,7 +17,7 @@ export default async function ContaPage() {
           <CircleUserRound className="h-9 w-9" strokeWidth={1.5} />
         </span>
         <div>
-          <h1 className="font-display text-xl font-semibold text-ink">{user.name}</h1>
+          <h1 className="text-xl font-semibold text-ink">{user.name}</h1>
           <p className="text-sm text-muted">{user.role.label}</p>
         </div>
       </div>

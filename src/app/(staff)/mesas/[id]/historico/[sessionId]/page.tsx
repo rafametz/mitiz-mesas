@@ -160,7 +160,7 @@ export default async function HistoricoDetalhePage({
             </ul>
             <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2 text-sm font-semibold text-ink">
               <span>Total</span>
-              <span className="tabular font-display text-base">
+              <span className="tabular text-base">
                 {formatBRL(consolidated.total)}
               </span>
             </div>

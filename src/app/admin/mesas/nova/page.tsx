@@ -10,7 +10,7 @@ export default function NovaMesaPage() {
       <Link href="/admin/mesas" className="flex items-center gap-1 text-sm font-medium text-muted hover:text-ink">
         <ArrowLeft className="h-4 w-4" /> Mesas
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Nova mesa</h1>
+      <h1 className="text-lg font-semibold text-ink">Nova mesa</h1>
       <form action={createTable} className="flex flex-col gap-4">
         <TextField
           label="Número ou nome"

@@ -53,7 +53,7 @@ export function TableCard({ table }: { table: TableCardData }) {
         </div>
 
         <div>
-          <span className="font-display text-2xl font-semibold text-ink">{table.number}</span>
+          <span className="text-2xl font-semibold text-ink">{table.number}</span>
           {table.capacity && (
             <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted">
               <Users className="h-3.5 w-3.5" />

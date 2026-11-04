@@ -28,7 +28,7 @@ export function RegenerateTokenForm({ printerId }: { printerId: string }) {
   return (
     <div className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
       <div>
-        <h2 className="font-display text-sm font-semibold text-ink">Token do agente local</h2>
+        <h2 className="text-sm font-semibold text-ink">Token do agente local</h2>
         <p className="mt-1 text-xs text-muted">
           O agente (rodando no computador ligado na impressora) usa esse token pra autenticar contra{" "}
           <code className="rounded bg-ink/5 px-1">/api/print-jobs</code>. Gerar um novo invalida

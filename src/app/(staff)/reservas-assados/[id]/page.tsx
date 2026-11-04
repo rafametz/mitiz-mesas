@@ -95,7 +95,7 @@ export default async function ReservaDetalhePage({
       </Card>
 
       <div className="flex flex-col gap-2">
-        <h2 className="font-display text-base font-semibold text-ink">Itens</h2>
+        <h2 className="text-base font-semibold text-ink">Itens</h2>
         <ul className="flex flex-col gap-2">
           {reservation.items.map((item) => (
             <li key={item.id}>

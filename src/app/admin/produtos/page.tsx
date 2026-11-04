@@ -167,7 +167,7 @@ export default async function ProdutosPage({
           return (
             <CardListRow key={product.id}>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-display font-semibold text-ink">{product.name}</span>
+                <span className="font-semibold text-ink">{product.name}</span>
                 <Link
                   href={`/admin/produtos/${product.id}/editar`}
                   className="text-xs font-medium text-wine underline"

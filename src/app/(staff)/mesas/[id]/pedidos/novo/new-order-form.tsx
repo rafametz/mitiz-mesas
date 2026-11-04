@@ -234,7 +234,7 @@ export function NewOrderForm({
   return (
     <div className="flex flex-col gap-6 py-4">
       <Card className="flex flex-col gap-4">
-        <h2 className="font-display text-base font-semibold text-ink">Adicionar item</h2>
+        <h2 className="text-base font-semibold text-ink">Adicionar item</h2>
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-ink">Categoria</span>
@@ -404,7 +404,7 @@ export function NewOrderForm({
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">
+        <h2 className="text-base font-semibold text-ink">
           Pedido ({cart.length} item(ns))
         </h2>
         {cart.length === 0 && (

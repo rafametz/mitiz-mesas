@@ -105,7 +105,7 @@ export default async function RetiradaComandaPage({ params }: { params: Promise<
           <span className="text-xs text-muted">Subtotal</span>
           <span className="flex items-center gap-2">
             <span
-              className="tabular font-display text-lg font-semibold text-ink"
+              className="tabular text-lg font-semibold text-ink"
               data-testid="resumo-subtotal"
             >
               {formatBRL(session.subtotalAmount)}
@@ -158,7 +158,7 @@ export default async function RetiradaComandaPage({ params }: { params: Promise<
             </ul>
             <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2 text-sm font-semibold text-ink">
               <span>Total</span>
-              <span className="tabular font-display text-base">
+              <span className="tabular text-base">
                 {formatBRL(consolidatedSummary.total)}
               </span>
             </div>
@@ -184,7 +184,7 @@ export default async function RetiradaComandaPage({ params }: { params: Promise<
             return (
               <Card key={order.id}>
                 <div className="mb-3 flex items-center justify-between gap-2 text-sm">
-                  <span className="font-display font-semibold text-ink">
+                  <span className="font-semibold text-ink">
                     #{order.sequenceNumber} · {formatTime(order.createdAt)}
                   </span>
                   <StatusBadge tone={ORDER_STATUS_TONE[order.status]}>

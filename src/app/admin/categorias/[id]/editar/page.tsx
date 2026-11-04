@@ -13,7 +13,7 @@ export default async function EditarCategoriaPage({ params }: { params: Promise<
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-lg font-semibold text-ink">Editar categoria</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar categoria</h1>
       <form action={updateCategoryWithId} className="flex max-w-sm flex-col gap-4">
         <TextField label="Nome" name="name" defaultValue={category.name} required maxLength={80} />
         <TextField

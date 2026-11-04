@@ -32,7 +32,7 @@ export function ResetPasswordForm({ userId }: { userId: string }) {
   return (
     <Card className="flex flex-col gap-4">
       <div>
-        <h2 className="font-display text-base font-semibold text-ink">Redefinir senha</h2>
+        <h2 className="text-base font-semibold text-ink">Redefinir senha</h2>
         <p className="text-sm text-muted">
           Define uma senha nova pra essa pessoa. Combine a senha com ela antes de entregar o
           acesso.

@@ -81,7 +81,7 @@ export function BiometricLockScreen({
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-shell px-6 text-center">
       <MitizMark className="h-12 w-12 text-gold" />
       <div>
-        <h1 className="font-display text-lg font-semibold text-bg">
+        <h1 className="text-lg font-semibold text-bg">
           <span className="font-brand">MITIZ Mesas</span> bloqueado
         </h1>
         <p className="mt-1 text-sm text-bg/60">

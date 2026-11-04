@@ -70,10 +70,12 @@ const config: Config = {
         },
       },
       fontFamily: {
-        display: ["var(--font-display)", "serif"],
         sans: ["var(--font-sans)", "sans-serif"],
         // Só para o nome do app por extenso ("MITIZ Mesas") — ver
-        // src/app/layout.tsx.
+        // src/app/layout.tsx. Fonte serifada de títulos/números em geral
+        // (Fraunces/"display") removida na Fase 13 do plano de
+        // modernização de 2026-11-04 — não sobrou nenhum uso fora da
+        // marca, então não faz sentido manter o token.
         brand: ["var(--font-brand)", "serif"],
       },
       borderRadius: {

@@ -463,7 +463,7 @@ export function PdvSaleScreen({
           />
           <div className="relative max-h-[85vh] overflow-y-auto rounded-t-panel bg-bg p-4 pb-6 shadow-panel">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-display text-base font-semibold text-ink">Venda</h2>
+              <h2 className="text-base font-semibold text-ink">Venda</h2>
               <IconButton
                 label="Fechar carrinho"
                 icon={X}
@@ -512,7 +512,7 @@ export function PdvSaleScreen({
         <div className="fixed inset-0 z-40 flex flex-col items-center justify-end bg-ink/40 p-0 sm:justify-center sm:p-4">
           <div className="flex max-h-[90vh] w-full flex-col gap-4 overflow-y-auto rounded-t-panel bg-bg p-5 shadow-panel sm:max-w-md sm:rounded-panel">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg font-semibold text-ink">Receber</h2>
+              <h2 className="text-lg font-semibold text-ink">Receber</h2>
               <IconButton
                 label="Fechar recebimento"
                 icon={X}
@@ -524,7 +524,7 @@ export function PdvSaleScreen({
               <span className="text-sm text-muted">Total da venda</span>
               <span
                 data-testid="pdv-checkout-total"
-                className="tabular font-display text-2xl font-semibold text-ink"
+                className="tabular text-2xl font-semibold text-ink"
               >
                 {formatBRLNumber(grandTotal)}
               </span>
@@ -738,7 +738,7 @@ function CartPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {!bare && (
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-base font-semibold text-ink">Venda</h2>
+          <h2 className="text-base font-semibold text-ink">Venda</h2>
           <span data-testid="pdv-cart-item-count" className="text-sm text-muted">
             {itemCount} item(ns)
           </span>
@@ -811,7 +811,7 @@ function CartPanel({
         <span className="text-sm font-medium text-ink">Total</span>
         <span
           data-testid="pdv-cart-total"
-          className="tabular font-display text-xl font-semibold text-ink"
+          className="tabular text-xl font-semibold text-ink"
         >
           {formatBRLNumber(total)}
         </span>

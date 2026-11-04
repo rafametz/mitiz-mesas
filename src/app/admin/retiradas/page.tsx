@@ -75,7 +75,7 @@ export default async function AdminRetiradasPage() {
 
       {longOpenAlerts.length > 0 && (
         <Card>
-          <h2 className="font-display text-sm font-semibold text-ink">Alertas</h2>
+          <h2 className="text-sm font-semibold text-ink">Alertas</h2>
           <ul className="mt-3 flex flex-col gap-3">
             {longOpenAlerts.map(({ pickup, minutes }) => (
               <li key={pickup.id} className="flex gap-2 text-xs">
@@ -134,7 +134,7 @@ function StatCard({
           <Icon className={`h-4 w-4 ${toneClass}`} />
         </span>
       </div>
-      <span className={`font-display text-2xl font-semibold ${toneClass}`}>{value}</span>
+      <span className={`text-2xl font-semibold ${toneClass}`}>{value}</span>
     </Card>
   );
 }

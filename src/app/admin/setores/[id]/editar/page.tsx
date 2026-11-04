@@ -13,7 +13,7 @@ export default async function EditarSetorPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-lg font-semibold text-ink">Editar setor</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar setor</h1>
       <form action={updateSectorWithId} className="flex max-w-sm flex-col gap-4">
         <TextField label="Nome" name="name" defaultValue={sector.name} required maxLength={80} />
         <TextField

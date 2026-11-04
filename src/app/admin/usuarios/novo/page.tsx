@@ -14,7 +14,7 @@ export default async function NovoUsuarioPage() {
       >
         <ArrowLeft className="h-4 w-4" /> Usuários
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Novo usuário</h1>
+      <h1 className="text-lg font-semibold text-ink">Novo usuário</h1>
 
       <NewUserForm roles={roles.map((role) => ({ id: role.id, label: role.label }))} />
     </div>

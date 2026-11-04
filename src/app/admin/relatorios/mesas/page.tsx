@@ -105,7 +105,7 @@ export default async function RelatorioTempoDeMesasPage({
                         {formatDateTime(line.openedAt)} até {formatDateTime(line.closedAt)}
                       </div>
                     </div>
-                    <span className="tabular shrink-0 font-display text-sm font-semibold text-ink">
+                    <span className="tabular shrink-0 text-sm font-semibold text-ink">
                       {formatDuration(line.durationMinutes)}
                     </span>
                   </li>

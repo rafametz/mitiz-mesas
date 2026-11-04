@@ -71,7 +71,7 @@ export default async function SetoresPage() {
         {sectors.map((sector) => (
           <CardListRow key={sector.id}>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-display font-semibold text-ink">{sector.name}</span>
+              <span className="font-semibold text-ink">{sector.name}</span>
               <Link
                 href={`/admin/setores/${sector.id}/editar`}
                 className="text-xs font-medium text-wine underline"
@@ -98,7 +98,7 @@ export default async function SetoresPage() {
       </CardList>
 
       <div className="border-t border-line pt-6">
-        <h2 className="mb-3 font-display text-base font-semibold text-ink">Novo setor</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Novo setor</h2>
         <form action={createSector} className="flex max-w-sm flex-col gap-4">
           <TextField label="Nome" name="name" required maxLength={80} />
           <TextField label="Ordem de exibição" name="sortOrder" type="number" defaultValue={0} />

@@ -68,7 +68,7 @@ export default async function CategoriasPage() {
         {categories.map((category) => (
           <CardListRow key={category.id}>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-display font-semibold text-ink">{category.name}</span>
+              <span className="font-semibold text-ink">{category.name}</span>
               <Link
                 href={`/admin/categorias/${category.id}/editar`}
                 className="text-xs font-medium text-wine underline"
@@ -95,7 +95,7 @@ export default async function CategoriasPage() {
       </CardList>
 
       <div className="border-t border-line pt-6">
-        <h2 className="mb-3 font-display text-base font-semibold text-ink">Nova categoria</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Nova categoria</h2>
         <form action={createCategory} className="flex max-w-sm flex-col gap-4">
           <TextField label="Nome" name="name" required maxLength={80} />
           <TextField label="Ordem de exibição" name="sortOrder" type="number" defaultValue={0} />

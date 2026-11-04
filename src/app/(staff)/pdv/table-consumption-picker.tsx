@@ -92,7 +92,7 @@ export function TableConsumptionPicker({
                 onClick={() => setSelectedSessionId(null)}
               />
             )}
-            <h2 className="font-display text-lg font-semibold text-ink">
+            <h2 className="text-lg font-semibold text-ink">
               {selectedTable ? `Mesa ${selectedTable.tableNumber}` : "Adicionar consumo de mesa"}
             </h2>
           </div>
@@ -143,7 +143,7 @@ export function TableConsumptionPicker({
 
             <div className="flex items-center justify-between rounded-card bg-surface p-3.5">
               <span className="text-sm font-medium text-ink">Selecionado</span>
-              <span className="tabular font-display text-lg font-semibold text-ink">
+              <span className="tabular text-lg font-semibold text-ink">
                 {formatCentsBRL(totalCents)}
               </span>
             </div>

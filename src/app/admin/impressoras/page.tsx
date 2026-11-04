@@ -73,7 +73,7 @@ export default async function ImpressorasPage() {
         {printers.map((printer) => (
           <CardListRow key={printer.id}>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-display font-semibold text-ink">{printer.name}</span>
+              <span className="font-semibold text-ink">{printer.name}</span>
               <Link
                 href={`/admin/impressoras/${printer.id}/editar`}
                 className="text-xs font-medium text-wine underline"
@@ -102,7 +102,7 @@ export default async function ImpressorasPage() {
       </CardList>
 
       <div className="border-t border-line pt-6">
-        <h2 className="mb-3 font-display text-base font-semibold text-ink">Nova impressora</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Nova impressora</h2>
         <form action={createPrinter} className="flex max-w-sm flex-col gap-4">
           <TextField label="Nome" name="name" required maxLength={80} placeholder="Balcão" />
           <TextField

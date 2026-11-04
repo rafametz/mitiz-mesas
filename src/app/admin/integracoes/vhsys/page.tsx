@@ -97,7 +97,7 @@ export default async function VhsysIntegrationPage({
 
       <div>
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="font-display text-base font-semibold text-ink">Produtos do MITIZ Mesas</h2>
+          <h2 className="text-base font-semibold text-ink">Produtos do MITIZ Mesas</h2>
           <Link href={hrefWithParams({ semVinculo: onlyUnlinked ? undefined : "1" })} className="text-sm font-medium text-wine underline">
             {onlyUnlinked ? "Ver todos" : "Somente sem vínculo"}
           </Link>
@@ -176,7 +176,7 @@ export default async function VhsysIntegrationPage({
             return (
               <CardListRow key={product.id}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-display font-semibold text-ink">{product.name}</span>
+                  <span className="font-semibold text-ink">{product.name}</span>
                   {product.vhsysProductId ? (
                     <StatusBadge tone="free">id_produto {product.vhsysProductId}</StatusBadge>
                   ) : (

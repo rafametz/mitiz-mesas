@@ -66,7 +66,7 @@ export default async function UsuariosPage() {
             {users.map((user) => (
               <CardListRow key={user.id}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-display font-semibold text-ink">{user.name}</span>
+                  <span className="font-semibold text-ink">{user.name}</span>
                   <Link
                     href={`/admin/usuarios/${user.id}/editar`}
                     className="text-xs font-medium text-wine underline"

@@ -120,7 +120,7 @@ export default async function ReservasAssadosPage({
       ) : (
         <>
           <div className="flex flex-col gap-2">
-            <h2 className="font-display text-base font-semibold text-ink">Disponibilidade</h2>
+            <h2 className="text-base font-semibold text-ink">Disponibilidade</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {productionDay.productions.map((production) => {
                 const available = availableQuantity(
@@ -149,7 +149,7 @@ export default async function ReservasAssadosPage({
           </div>
 
           <div className="flex flex-col gap-3">
-            <h2 className="font-display text-base font-semibold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Reservas ({productionDay.reservations.length})
             </h2>
             <nav aria-label="Filtrar reservas por situação" className="flex gap-2">

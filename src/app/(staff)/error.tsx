@@ -23,7 +23,7 @@ export default function StaffError({
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 p-8 text-center">
       <AlertTriangle className="h-10 w-10 text-wine" strokeWidth={1.5} />
-      <h1 className="font-display text-xl font-semibold text-ink">
+      <h1 className="text-xl font-semibold text-ink">
         Não foi possível carregar esta página
       </h1>
       <p className="max-w-xs text-sm text-muted">

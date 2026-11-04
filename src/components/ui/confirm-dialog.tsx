@@ -67,7 +67,7 @@ export function ConfirmDialog({
       className="fixed left-1/2 top-1/2 z-50 m-0 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-panel border border-line bg-surface p-0 shadow-panel backdrop:bg-ink/40"
     >
       <div className="flex flex-col gap-3 p-5">
-        <h2 id={titleId} className="font-display text-lg font-semibold text-ink">
+        <h2 id={titleId} className="text-lg font-semibold text-ink">
           {title}
         </h2>
         <p id={descriptionId} className="text-sm text-muted">

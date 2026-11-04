@@ -21,7 +21,7 @@ export default async function NovoProdutoPage() {
       >
         <ArrowLeft className="h-4 w-4" /> Produtos
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Novo produto</h1>
+      <h1 className="text-lg font-semibold text-ink">Novo produto</h1>
 
       {!hasPrerequisites ? (
         <p className="text-sm text-muted">

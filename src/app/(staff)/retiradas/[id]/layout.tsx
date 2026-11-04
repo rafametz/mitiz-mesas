@@ -42,7 +42,7 @@ export default async function RetiradaLayout({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <PickupBackButton pickupId={id} />
-            <h1 className="font-display text-xl font-semibold text-ink">
+            <h1 className="text-xl font-semibold text-ink">
               Retirada #{session.pickupNumber}
             </h1>
             <StatusBadge tone={SERVICE_SESSION_STATUS_TONE[session.status]}>

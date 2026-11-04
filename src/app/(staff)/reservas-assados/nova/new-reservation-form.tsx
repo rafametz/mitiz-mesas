@@ -76,7 +76,7 @@ export function NewReservationForm({
       />
 
       <Card className="flex flex-col gap-3">
-        <h2 className="font-display text-sm font-semibold text-ink">Itens</h2>
+        <h2 className="text-sm font-semibold text-ink">Itens</h2>
         {products.map((product) => {
           const sold = product.available <= 0;
           return (

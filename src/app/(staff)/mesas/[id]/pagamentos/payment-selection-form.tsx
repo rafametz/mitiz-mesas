@@ -95,7 +95,7 @@ export function PaymentSelectionForm({
     <div className="flex flex-col gap-6 pb-4">
       <div className="flex flex-col gap-4">
         {lines.length > 0 && (
-          <h2 className="font-display text-base font-semibold text-ink">Itens em aberto</h2>
+          <h2 className="text-base font-semibold text-ink">Itens em aberto</h2>
         )}
         <ItemSelectionCards
           redirectPath={redirectPath}
@@ -109,7 +109,7 @@ export function PaymentSelectionForm({
       </div>
 
       <Card className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">
+        <h2 className="text-base font-semibold text-ink">
           Pagamento atual ({cart.length} item(ns))
         </h2>
         {cart.length === 0 ? (
@@ -145,7 +145,7 @@ export function PaymentSelectionForm({
 
       {cart.length > 0 && (
         <Card className="flex flex-col gap-3">
-          <h2 className="font-display text-base font-semibold text-ink">Recebimento</h2>
+          <h2 className="text-base font-semibold text-ink">Recebimento</h2>
           <form action={formAction} className="flex flex-col gap-3">
             <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
             <input

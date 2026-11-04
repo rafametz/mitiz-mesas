@@ -32,7 +32,7 @@ export function PickupCard({ pickup }: { pickup: PickupCardData }) {
         </div>
 
         <div>
-          <span className="font-display text-2xl font-semibold text-ink">
+          <span className="text-2xl font-semibold text-ink">
             #{pickup.pickupNumber}
           </span>
           <span className="ml-2 text-sm text-muted">{pickup.customerName}</span>

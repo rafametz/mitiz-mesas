@@ -86,7 +86,7 @@ export function EditReservationForm({
       />
 
       <Card className="flex flex-col gap-3">
-        <h2 className="font-display text-sm font-semibold text-ink">Itens</h2>
+        <h2 className="text-sm font-semibold text-ink">Itens</h2>
         {products.map((product) => {
           // Disponível já soma de volta o que esta reserva ocupava antes
           // da edição (ver page.tsx) — sold só se realmente não sobrar nada.

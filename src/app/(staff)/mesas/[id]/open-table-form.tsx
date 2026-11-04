@@ -24,7 +24,7 @@ export function OpenTableForm({
 
   return (
     <form action={formAction} className="flex max-w-sm flex-col gap-4 pb-4">
-      <h2 className="font-display text-lg font-semibold text-ink">Abrir mesa</h2>
+      <h2 className="text-lg font-semibold text-ink">Abrir mesa</h2>
 
       <TextField
         label="Quantidade de pessoas"

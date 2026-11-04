@@ -96,7 +96,7 @@ export default async function MesasPage() {
 
               <div className="pointer-events-none flex flex-1 flex-col gap-2 p-3.5">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-display text-xl font-semibold text-ink">
+                  <span className="text-xl font-semibold text-ink">
                     {table.number}
                   </span>
                   <div className="flex items-center gap-1.5">
@@ -139,7 +139,7 @@ export default async function MesasPage() {
 
                     <div className="mt-auto flex items-end justify-between gap-2 border-t border-line pt-2">
                       <span className="truncate text-[11px] text-muted">{session.waiter.name}</span>
-                      <span className="tabular shrink-0 font-display text-sm font-semibold text-ink">
+                      <span className="tabular shrink-0 text-sm font-semibold text-ink">
                         {formatBRL(session.totalAmount)}
                       </span>
                     </div>

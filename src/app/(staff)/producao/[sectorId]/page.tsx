@@ -143,7 +143,7 @@ export default async function ProducaoSectorPage({
           return (
             <div key={column.status} className="flex w-72 shrink-0 flex-col gap-2">
               <div className="flex items-center justify-between px-1">
-                <h2 className="font-display text-sm font-semibold text-ink">{column.title}</h2>
+                <h2 className="text-sm font-semibold text-ink">{column.title}</h2>
                 <span className="text-xs text-muted">{items.length}</span>
               </div>
 
@@ -151,7 +151,7 @@ export default async function ProducaoSectorPage({
                 {items.map((item) => (
                   <Card key={item.id} padding="sm" className="text-sm">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-display font-semibold text-ink">
+                      <span className="font-semibold text-ink">
                         {formatSessionLabel(
                           item.order.serviceSession,
                           item.order.serviceSession.table?.number,

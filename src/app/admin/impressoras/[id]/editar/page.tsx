@@ -14,7 +14,7 @@ export default async function EditarImpressoraPage({ params }: { params: Promise
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-display text-lg font-semibold text-ink">Editar impressora</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar impressora</h1>
       <form action={updatePrinterWithId} className="flex max-w-sm flex-col gap-4">
         <TextField label="Nome" name="name" defaultValue={printer.name} required maxLength={80} />
         <TextField

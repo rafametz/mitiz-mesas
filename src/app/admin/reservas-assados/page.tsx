@@ -65,7 +65,7 @@ export default async function ReservasAssadosProdutosPage() {
       </Table>
 
       <div className="border-t border-line pt-6">
-        <h2 className="mb-3 font-display text-base font-semibold text-ink">Novo produto</h2>
+        <h2 className="mb-3 text-base font-semibold text-ink">Novo produto</h2>
         <form action={createRoastProduct} className="flex max-w-sm flex-col gap-4">
           <TextField label="Nome" name="name" required maxLength={80} placeholder="Côstela de boi" />
           <TextField label="Unidade" name="unit" required maxLength={20} placeholder="kg" />

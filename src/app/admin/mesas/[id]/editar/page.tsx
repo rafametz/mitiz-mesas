@@ -15,7 +15,7 @@ export default async function EditarMesaPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-lg font-semibold text-ink">Editar mesa</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar mesa</h1>
       <form action={updateTableWithId} className="flex max-w-sm flex-col gap-4">
         <TextField
           label="Número ou nome"

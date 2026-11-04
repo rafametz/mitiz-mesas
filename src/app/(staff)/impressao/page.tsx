@@ -144,7 +144,7 @@ export default async function ImpressaoPage({
           return (
             <Card key={printer.id} padding="sm" className="flex items-center justify-between text-sm">
               <div>
-                <span className="font-display font-semibold text-ink">{printer.name}</span>
+                <span className="font-semibold text-ink">{printer.name}</span>
                 <span className="ml-2 text-xs text-muted">
                   {printer.lastSeenAt
                     ? `última consulta ${formatElapsedSince(printer.lastSeenAt)}`
@@ -172,7 +172,7 @@ export default async function ImpressaoPage({
             <Card key={job.id} padding="sm" className="text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-display font-semibold text-ink">
+                  <span className="font-semibold text-ink">
                     {job.roastReservation
                       ? `Reserva: ${job.roastReservation.customerName}`
                       : session

@@ -66,7 +66,7 @@ export default async function RetiradasPage() {
               <div className={`h-1.5 w-full ${STATUS_TONE_STRIP_CLASS[tone]}`} aria-hidden />
               <div className="flex flex-1 flex-col gap-2 p-3.5">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="font-display text-lg font-semibold text-ink">
+                  <span className="text-lg font-semibold text-ink">
                     Retirada #{session.pickupNumber}
                   </span>
                   <StatusBadge tone={tone}>
@@ -90,7 +90,7 @@ export default async function RetiradasPage() {
 
                 <div className="mt-auto flex items-end justify-between gap-2 border-t border-line pt-2">
                   <span className="text-[11px] text-muted">Toque para abrir</span>
-                  <span className="tabular shrink-0 font-display text-sm font-semibold text-ink">
+                  <span className="tabular shrink-0 text-sm font-semibold text-ink">
                     {formatBRL(session.totalAmount)}
                   </span>
                 </div>

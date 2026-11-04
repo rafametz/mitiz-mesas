@@ -17,7 +17,7 @@ export default async function NovoGrupoPage({ params }: { params: Promise<{ id: 
       >
         <ArrowLeft className="h-4 w-4" /> {product.name}
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Novo grupo de adicionais</h1>
+      <h1 className="text-lg font-semibold text-ink">Novo grupo de adicionais</h1>
       <NewGroupForm productId={product.id} />
     </div>
   );

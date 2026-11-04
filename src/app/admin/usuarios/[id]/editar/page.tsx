@@ -25,7 +25,7 @@ export default async function EditarUsuarioPage({
       >
         <ArrowLeft className="h-4 w-4" /> Usuários
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Editar usuário</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar usuário</h1>
 
       <EditUserForm
         user={{ id: user.id, name: user.name, email: user.email, roleId: user.roleId, active: user.active }}

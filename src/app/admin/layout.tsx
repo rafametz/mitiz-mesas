@@ -28,7 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MitizMark className="h-7 w-7 text-gold" />
-            <span className="font-display text-base font-semibold text-bg">Administração</span>
+            <span className="text-base font-semibold text-bg">Administração</span>
           </div>
           <Link
             href="/"

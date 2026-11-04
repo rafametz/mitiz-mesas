@@ -95,7 +95,7 @@ export function ProductFormFields({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">Dados gerais</h2>
+        <h2 className="text-base font-semibold text-ink">Dados gerais</h2>
         <Card className="flex flex-col gap-4">
           <TextField label="Nome" name="name" defaultValue={defaults.name} required maxLength={120} />
           <TextAreaField
@@ -173,7 +173,7 @@ export function ProductFormFields({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">Preços</h2>
+        <h2 className="text-base font-semibold text-ink">Preços</h2>
         <Card className="flex flex-col gap-4">
           <MoneyField label="Preço de venda" name="price" defaultValue={defaults.price} />
           <MoneyField label="Custo (opcional)" name="costPrice" defaultValue={defaults.costPrice} />
@@ -181,7 +181,7 @@ export function ProductFormFields({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">Estoque</h2>
+        <h2 className="text-base font-semibold text-ink">Estoque</h2>
         <Card className="flex flex-col gap-4">
           <TextField
             label="Estoque atual (opcional)"
@@ -215,7 +215,7 @@ export function ProductFormFields({
 
       <div className="flex flex-col gap-3">
         <div>
-          <h2 className="font-display text-base font-semibold text-ink">Dados fiscais</h2>
+          <h2 className="text-base font-semibold text-ink">Dados fiscais</h2>
           <p className="text-xs text-muted">
             Preparação para uma futura emissão de NFC-e/NF-e — nenhum destes campos é usado em
             nenhum fluxo do sistema hoje.
@@ -282,7 +282,7 @@ export function ProductFormFields({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">Fornecedor</h2>
+        <h2 className="text-base font-semibold text-ink">Fornecedor</h2>
         <Card className="flex flex-col gap-4">
           <TextField
             label="Nome do fornecedor (opcional)"
@@ -300,7 +300,7 @@ export function ProductFormFields({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold text-ink">Informações adicionais</h2>
+        <h2 className="text-base font-semibold text-ink">Informações adicionais</h2>
         <Card className="flex flex-col gap-4">
           <TextAreaField
             label="Observações (opcional)"

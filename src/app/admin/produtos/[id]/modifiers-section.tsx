@@ -20,7 +20,7 @@ export async function ModifiersSection({ productId }: { productId: string }) {
   return (
     <div className="flex flex-col gap-6 border-t border-line pt-6">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="font-display text-base font-semibold text-ink">
+        <h2 className="text-base font-semibold text-ink">
           Adicionais / modificadores
         </h2>
         <Button href={`/admin/produtos/${productId}/grupos/novo`} size="sm">

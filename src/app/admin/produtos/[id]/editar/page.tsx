@@ -30,7 +30,7 @@ export default async function EditarProdutoPage({ params }: { params: Promise<{ 
       >
         <ArrowLeft className="h-4 w-4" /> Produtos
       </Link>
-      <h1 className="font-display text-lg font-semibold text-ink">Editar produto</h1>
+      <h1 className="text-lg font-semibold text-ink">Editar produto</h1>
 
       <EditProductForm
         productId={product.id}

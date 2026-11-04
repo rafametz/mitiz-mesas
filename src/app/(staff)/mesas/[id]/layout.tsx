@@ -46,7 +46,7 @@ export default async function MesaLayout({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <MesaBackButton tableId={id} />
-            <h1 className="font-display text-xl font-semibold text-ink">
+            <h1 className="text-xl font-semibold text-ink">
               {formatTableLabel(table.number)}
             </h1>
             <StatusBadge

@@ -20,7 +20,7 @@ export function SummaryField({
     >
       <div className="text-xs text-muted">{label}</div>
       <div
-        className={`tabular font-display text-sm font-semibold ${emphasis ? "text-wine" : "text-ink"}`}
+        className={`tabular text-sm font-semibold ${emphasis ? "text-wine" : "text-ink"}`}
         data-testid={testId}
       >
         {value}

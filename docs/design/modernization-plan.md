@@ -567,12 +567,42 @@ Categorias, Setores e Impressoras.
     visível na sessão de auditoria) escondeu os tons não-neutros e os
     rótulos dos gráficos, levando à leitura errada na primeira passada.
 
-### Fase 13 — Polimento
-- Papel da fonte serifada (`font-display`, Fraunces): avaliar restringir
-  a marca/login, não títulos de tela operacional — mais tom "SaaS",
-  mantendo a identidade no lugar certo.
-- Revisão final de contraste em todas as telas tocadas pelas fases 7-12.
+### Fase 13 — Polimento (concluída 2026-11-04)
+- ✅ **Fonte serifada restrita à marca (decisão do usuário).** Pergunta
+  direta sobre o escopo ("só marca/login" vs. "só nos títulos de página"
+  vs. "pular"); o usuário escolheu restringir de vez. `font-display`
+  (Fraunces) tinha 86 usos em 57 arquivos — todo título de página (via
+  `PageHeader`/`card.tsx`), título de seção dentro de card (`<h2>`) e
+  valor monetário/estatístico de destaque. Removida a classe de todos
+  eles (script único de substituição, revisado por diff arquivo a
+  arquivo); como não sobrou nenhum uso fora da marca, a fonte Fraunces
+  em si foi removida de `src/app/layout.tsx` (`next/font/google`) e o
+  token `display` saiu de `fontFamily` em `tailwind.config.ts` — evita
+  carregar uma web font morta. `font-brand` (Aleo, "MITIZ Mesas" por
+  extenso) **não foi tocado**: continua exatamente nos 3 lugares de
+  sempre (cabeçalho do app do salão, tela de login, tela de bloqueio
+  biométrico). O resultado está alinhado com a regra já escrita em
+  `frontend-design.md` ("usar fonte sem serifa moderna e legível"), que
+  a Fraunces nos títulos vinha descumprindo desde o MVP original.
+- **Revisão de contraste**: as fases 7-12 só reutilizaram tokens de cor
+  já existentes e vetados no design system (`text-wine`, `text-gold-dark`,
+  `text-free-dark`, tons do `StatusBadge`), sem introduzir nenhuma cor
+  ad hoc — não há contraste novo para revisar além do que o design
+  system já garante. Checagem visual autenticada (telas atrás de login)
+  não foi possível nesta sessão (usuário optou por pular o login local
+  depois de a senha de teste do `.env` estar inválida); a tela de login,
+  pública, foi conferida por screenshot e manteve a marca intacta.
+- **Testes**: `tsc --noEmit`, `npm run lint` e `npm run build` limpos
+  (37 rotas geradas sem erro). Suíte E2E não executada (mesmo bloqueio
+  de porta 3000/senha de teste já registrado nas fases anteriores);
+  mudança é só de classe CSS, sem lógica, então o risco de regressão
+  funcional é baixo.
 
 Princípios das Fases 1-6 continuam valendo integralmente (nenhuma regra
 de negócio muda, commits pequenos por tela, suíte E2E completa a cada
 fase que toca HTML visível, sem dependência nova sem justificar).
+
+**Status da iniciativa de 2026-11-04 (Fases 7-13): concluída**, exceto a
+Fase 8 (navegação), que ficou propositalmente em aberto — reverte uma
+decisão deliberada de 2026-09-30 e precisa de validação explícita do
+usuário antes de implementar (ver detalhes na própria Fase 8 acima).
