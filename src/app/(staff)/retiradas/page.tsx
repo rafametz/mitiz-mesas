@@ -108,9 +108,6 @@ export default async function RetiradasPage() {
             icon={ShoppingBag}
             title="Nenhuma retirada em andamento."
             className="col-span-full"
-            action={
-              canCreate ? <Button href="/retiradas/nova">Criar nova retirada</Button> : undefined
-            }
           />
         )}
       </div>

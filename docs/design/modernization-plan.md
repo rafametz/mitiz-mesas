@@ -444,13 +444,36 @@ anterior.
   PDV (`mesa-tabs.tsx`/`pdv` usa `border-b-2` vermelho) e o bottom nav
   (ainda marca "Mesas" como ativo ao navegar para `/pdv`).
 
-### Fase 9 — Componentes visuais
-- `TableStatusCard` dedicado (hoje cada listagem reimplementa, ver nota
-  em `design-system.md`): ícones de pessoas/tempo/garçom, chip colorido
-  por status.
-- Corrigir contraste do botão "Cancelar venda" no PDV (`pdv-sale-screen.tsx`
-  — variante atual usa rosa claro sobre fundo rosa claro).
-- `EmptyState` de Retiradas: remover CTA duplicado (header + centro).
+### Fase 9 — Componentes visuais (concluída 2026-11-04, com correções)
+
+Os dois itens de card/contraste abaixo partiam de uma leitura da
+auditoria feita com o restaurante de demonstração sem nenhuma mesa
+ocupada — investigando o código-fonte (não só a tela), os dois achados
+originais não se confirmaram:
+
+- **`TableStatusCard`: não criado.** `(staff)/mesas/page.tsx` e
+  `admin/mesas/table-card.tsx` **já têm** ícones de pessoas (`Users`),
+  tempo (`Clock`/`ElapsedClock`), garçom, valor e alerta de pedido
+  pronto (`Bell`) — só não aparecem com todas as mesas livres, que era o
+  estado do restaurante de demonstração durante a navegação. As duas
+  versões são deliberadamente diferentes (documentado em
+  `docs/backlog.md`, "Painel Mesas do administrador": públicos
+  diferentes), então forçar um componente único divergiria de uma
+  decisão de produto já tomada. Sem ação necessária.
+- **Contraste do botão "Cancelar venda": não é um problema real.**
+  Medido via `getComputedStyle` no navegador: variante `danger` habilitada
+  usa `#AF2B1E` sobre `#F2ECE6` (`bg`), contraste 5.6:1 — passa WCAG AA
+  (4.5:1) com folga. O visual "apagado" da auditoria original era o
+  estado **desabilitado** (`disabled:opacity-50`, carrinho vazio), que a
+  WCAG não exige que atinja contraste — comportamento correto, não bug.
+  Sem ação necessária.
+- ✅ `EmptyState` de Retiradas (`(staff)/retiradas/page.tsx`): removido o
+  CTA duplicado ("Criar nova retirada" dentro do estado vazio, repetindo
+  o "+ Nova retirada" já fixo no cabeçalho) — alinhado ao padrão já usado
+  em `reservas-assados/page.tsx`, onde o `EmptyState` não repete a ação
+  do cabeçalho.
+- **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build` limpos.
+  Nenhum E2E cobre o texto removido (`grep` confirmou).
 
 ### Fase 10 — Concluir Fase 5 (tabelas admin responsivas)
 Continuação direta da Fase 5 do plano original, que ficou só em
