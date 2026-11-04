@@ -57,6 +57,18 @@ const COLUMNS: {
   { status: "DELIVERED", title: "Entregues" },
 ];
 
+// Limiares de tela (não é regra de negócio, mesmo padrão já usado no
+// painel "Alertas" de admin/mesas: "mesa aberta há mais de 2h") — chama
+// atenção para item parado na esteira sem avançar, em vez de mostrar o
+// tempo decorrido sempre no mesmo cinza neutro (achado da auditoria
+// visual de 2026-11-04, Fase 11).
+function elapsedClassName(since: Date, now: Date): string {
+  const minutes = Math.floor((now.getTime() - since.getTime()) / 60000);
+  if (minutes >= 30) return "font-semibold text-wine";
+  if (minutes >= 15) return "font-medium text-gold-dark";
+  return "text-muted";
+}
+
 export default async function ProducaoSectorPage({
   params,
 }: {
@@ -88,6 +100,8 @@ export default async function ProducaoSectorPage({
   ]);
 
   if (!sector) notFound();
+
+  const now = new Date();
 
   const itemsByStatus: Record<OrderItemStatus, ProductionItem[]> = {
     DRAFT: [],
@@ -133,7 +147,7 @@ export default async function ProducaoSectorPage({
                 <span className="text-xs text-muted">{items.length}</span>
               </div>
 
-              <div className="flex flex-col gap-2">
+              <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto pr-0.5">
                 {items.map((item) => (
                   <Card key={item.id} padding="sm" className="text-sm">
                     <div className="flex items-center justify-between gap-2">
@@ -143,7 +157,15 @@ export default async function ProducaoSectorPage({
                           item.order.serviceSession.table?.number,
                         )}
                       </span>
-                      <span className="text-xs text-muted">há {formatElapsed(item.createdAt)}</span>
+                      <span
+                        className={`text-xs ${
+                          column.nextStatus
+                            ? elapsedClassName(item.createdAt, now)
+                            : "text-muted"
+                        }`}
+                      >
+                        há {formatElapsed(item.createdAt, now)}
+                      </span>
                     </div>
                     <div className="mt-1 text-ink">
                       {item.quantity}x {item.productNameAtOrder}

@@ -509,17 +509,28 @@ Categorias, Setores e Impressoras.
   livre, e `npm run cleanup:e2e-data -- --apply` depois (a suíte cria
   setor/categoria reais no banco único de dev/produção).
 
-### Fase 11 — Produção (fila de pedidos)
-- Investigar o volume alto de pedidos muito antigos na fila "Novos" de
-  `/producao` (pedidos com "há 2000+h") — **confirmar com o usuário se é
-  dado real parado (ação operacional: arquivar/fechar) ou lixo residual
-  antes de qualquer exclusão**; o script `cleanup:e2e-data` não encontrou
-  nada pelo padrão de nome esperado, então não é o mesmo problema já
-  documentado no Módulo 4/"Repaginação visual".
-- Badge de urgência por tempo de espera (pedido muito parado destaca em
-  vermelho, não cinza neutro).
-- Paginação ou agrupamento da fila para listas longas, evitando o
-  layout quebrar como observado no celular durante a auditoria.
+### Fase 11 — Produção (fila de pedidos) (parcialmente concluída 2026-11-04)
+- ✅ Cor por tempo de espera em `producao/[sectorId]/page.tsx`: item
+  parado há 15+ min fica dourado (`text-gold-dark`), 30+ min fica
+  vermelho e em negrito (`text-wine font-semibold`), só nas colunas
+  ativas (Novos/Em preparo/Prontos — "Entregues" é histórico, não faz
+  sentido marcar como "atrasado"). Limiar de tela, não regra de negócio
+  — mesmo padrão já usado no painel "Alertas" de `admin/mesas`.
+- ✅ Cada coluna da esteira agora tem `max-h-[70vh] overflow-y-auto`
+  (próprio scroll), em vez de a página inteira crescer sem limite com
+  uma fila longa — mesma técnica já usada no carrinho do PDV
+  (`pdv-sale-screen.tsx`, Módulo 17). Nenhum item é escondido/paginado,
+  só deixa de quebrar o layout da página.
+- **Pendente — decisão do usuário**: a fila "Novos" tinha ~592 itens
+  durante a auditoria, incluindo pedidos com "há 2000+h" (80+ dias). O
+  script `cleanup:e2e-data` não encontra nada pelo padrão de nome
+  esperado (`E2E`/`PED`), então **não é** o mesmo lixo de teste já
+  documentado no Módulo 4 — parece dado real de operação nunca avançado
+  na esteira. Não apaguei nem arquivei nada: precisa de confirmação do
+  usuário sobre o que fazer (arquivar/fechar atendimentos antigos é uma
+  ação operacional, fora do escopo de uma mudança visual).
+- **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build` limpos.
+  Nenhum E2E cobre esta tela (`grep` confirmou).
 
 ### Fase 12 — Admin: dashboard e relatórios
 - Cor semântica nos ícones dos cards de estatística de `/admin/mesas`
