@@ -4,7 +4,8 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { CheckboxField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { PageHeader } from "@/components/ui/card";
-import { Table, Td, Th, Tr } from "@/components/ui/table";
+import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { createCategory } from "./actions";
 
 export default async function CategoriasPage() {
@@ -33,8 +34,16 @@ export default async function CategoriasPage() {
             <Tr key={category.id}>
               <Td>{category.name}</Td>
               <Td>{category.sortOrder}</Td>
-              <Td>{category.active ? "Sim" : "Não"}</Td>
-              <Td>{category.visibleInOrders ? "Sim" : "Não"}</Td>
+              <Td>
+                <StatusBadge tone={category.active ? "free" : "muted"}>
+                  {category.active ? "Ativa" : "Inativa"}
+                </StatusBadge>
+              </Td>
+              <Td>
+                <StatusBadge tone={category.visibleInOrders ? "free" : "muted"}>
+                  {category.visibleInOrders ? "Sim" : "Não"}
+                </StatusBadge>
+              </Td>
               <Td>
                 <Link
                   href={`/admin/categorias/${category.id}/editar`}
@@ -54,6 +63,36 @@ export default async function CategoriasPage() {
           )}
         </tbody>
       </Table>
+
+      <CardList>
+        {categories.map((category) => (
+          <CardListRow key={category.id}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display font-semibold text-ink">{category.name}</span>
+              <Link
+                href={`/admin/categorias/${category.id}/editar`}
+                className="text-xs font-medium text-wine underline"
+              >
+                Editar
+              </Link>
+            </div>
+            <CardListField label="Ordem">{category.sortOrder}</CardListField>
+            <CardListField label="Ativa">
+              <StatusBadge tone={category.active ? "free" : "muted"}>
+                {category.active ? "Ativa" : "Inativa"}
+              </StatusBadge>
+            </CardListField>
+            <CardListField label="No pedido">
+              <StatusBadge tone={category.visibleInOrders ? "free" : "muted"}>
+                {category.visibleInOrders ? "Sim" : "Não"}
+              </StatusBadge>
+            </CardListField>
+          </CardListRow>
+        ))}
+        {categories.length === 0 && (
+          <p className="text-sm text-muted">Nenhuma categoria cadastrada ainda.</p>
+        )}
+      </CardList>
 
       <div className="border-t border-line pt-6">
         <h2 className="mb-3 font-display text-base font-semibold text-ink">Nova categoria</h2>

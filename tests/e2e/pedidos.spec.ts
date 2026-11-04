@@ -36,12 +36,19 @@ test.describe("Módulo 4 — pedidos", () => {
     await page.goto("/admin/setores");
     await page.getByLabel("Nome").fill(sectorName);
     await page.getByRole("button", { name: "Criar setor" }).click();
-    await expect(page.getByText(sectorName)).toBeVisible({ timeout: NAV_TIMEOUT });
+    // Escopado por <tr>: /admin/setores e /admin/categorias têm um
+    // CardList escondido (md:hidden) com o mesmo texto desde a Fase 10 do
+    // plano de modernização — getByText sem escopo bate nos dois.
+    await expect(page.locator("tr", { hasText: sectorName })).toBeVisible({
+      timeout: NAV_TIMEOUT,
+    });
 
     await page.goto("/admin/categorias");
     await page.getByLabel("Nome").fill(categoryName);
     await page.getByRole("button", { name: "Criar categoria" }).click();
-    await expect(page.getByText(categoryName)).toBeVisible({ timeout: NAV_TIMEOUT });
+    await expect(page.locator("tr", { hasText: categoryName })).toBeVisible({
+      timeout: NAV_TIMEOUT,
+    });
 
     await page.goto("/admin/produtos");
     await page.getByLabel("Nome").fill(productName);

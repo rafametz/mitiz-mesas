@@ -29,7 +29,11 @@ test.describe("Módulo 2 — cadastros básicos", () => {
     await page.goto("/admin/setores");
     await page.getByLabel("Nome").fill(name);
     await page.getByRole("button", { name: "Criar setor" }).click();
-    await expect(page.getByText(name)).toBeVisible();
+    // Escopado por <tr>: a partir da Fase 10 do plano de modernização,
+    // /admin/setores também tem um CardList escondido (md:hidden) com o
+    // mesmo texto — getByText sem escopo bate nos dois e quebra por match
+    // múltiplo (ver src/components/ui/table.tsx).
+    await expect(page.locator("tr", { hasText: name })).toBeVisible();
   });
 
   test("cria categoria e ela aparece na listagem", async ({ page }) => {
@@ -37,7 +41,7 @@ test.describe("Módulo 2 — cadastros básicos", () => {
     await page.goto("/admin/categorias");
     await page.getByLabel("Nome").fill(name);
     await page.getByRole("button", { name: "Criar categoria" }).click();
-    await expect(page.getByText(name)).toBeVisible();
+    await expect(page.locator("tr", { hasText: name })).toBeVisible();
   });
 
   test("cria mesa e ela aparece na listagem", async ({ page }) => {
@@ -58,12 +62,12 @@ test.describe("Módulo 2 — cadastros básicos", () => {
     await page.goto("/admin/setores");
     await page.getByLabel("Nome").fill(sectorName);
     await page.getByRole("button", { name: "Criar setor" }).click();
-    await expect(page.getByText(sectorName)).toBeVisible();
+    await expect(page.locator("tr", { hasText: sectorName })).toBeVisible();
 
     await page.goto("/admin/categorias");
     await page.getByLabel("Nome").fill(categoryName);
     await page.getByRole("button", { name: "Criar categoria" }).click();
-    await expect(page.getByText(categoryName)).toBeVisible();
+    await expect(page.locator("tr", { hasText: categoryName })).toBeVisible();
 
     await page.goto("/admin/produtos");
     await page.getByLabel("Nome").fill(productName);

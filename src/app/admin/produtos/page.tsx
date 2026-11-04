@@ -6,6 +6,7 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/card";
 import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { inputBaseClass } from "@/components/ui/input";
 import { formatBRL } from "@/lib/money";
 import { toggleAvailability } from "./actions";
@@ -13,6 +14,21 @@ import { toggleAvailability } from "./actions";
 // Em branco quando não há valor opcional — distingue claramente de "0"
 // (um estoque de verdade zerado é um dado, "sem controle" é outro).
 const EMPTY = "—";
+
+// Estoque negativo é sinal de inconsistência (venda sem baixa correta,
+// contagem desatualizada) — precisa chamar atenção, não aparecer igual a
+// qualquer outro valor (achado da auditoria visual de 2026-11-04, Fase 10).
+function StockQuantity({ quantity, unit }: { quantity: Prisma.Decimal; unit: string }) {
+  const text = `${quantity.toString()} ${unit}`;
+  if (quantity.lessThan(0)) {
+    return (
+      <StatusBadge tone="wine">
+        <span className="tabular">{text}</span>
+      </StatusBadge>
+    );
+  }
+  return <span className="tabular">{text}</span>;
+}
 
 export default async function ProdutosPage({
   searchParams,
@@ -101,9 +117,11 @@ export default async function ProdutosPage({
                 <Td>{product.defaultSector.name}</Td>
                 <Td className="tabular">{formatBRL(product.price)}</Td>
                 <Td className="tabular text-muted">
-                  {product.stockQuantity === null
-                    ? EMPTY
-                    : `${product.stockQuantity.toString()} ${product.unit}`}
+                  {product.stockQuantity === null ? (
+                    EMPTY
+                  ) : (
+                    <StockQuantity quantity={product.stockQuantity} unit={product.unit} />
+                  )}
                 </Td>
                 <Td>
                   <form action={toggle}>
@@ -165,9 +183,7 @@ export default async function ProdutosPage({
               </CardListField>
               {product.stockQuantity !== null && (
                 <CardListField label="Estoque">
-                  <span className="tabular">
-                    {product.stockQuantity.toString()} {product.unit}
-                  </span>
+                  <StockQuantity quantity={product.stockQuantity} unit={product.unit} />
                 </CardListField>
               )}
               <CardListField label="Disponível">

@@ -4,7 +4,8 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { CheckboxField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { PageHeader } from "@/components/ui/card";
-import { Table, Td, Th, Tr } from "@/components/ui/table";
+import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { createSector } from "./actions";
 
 export default async function SetoresPage() {
@@ -35,9 +36,17 @@ export default async function SetoresPage() {
           {sectors.map((sector) => (
             <Tr key={sector.id}>
               <Td>{sector.name}</Td>
-              <Td>{sector.hasPrinting ? "Sim" : "Não"}</Td>
+              <Td>
+                <StatusBadge tone={sector.hasPrinting ? "free" : "muted"}>
+                  {sector.hasPrinting ? "Sim" : "Não"}
+                </StatusBadge>
+              </Td>
               <Td>{sector.sortOrder}</Td>
-              <Td>{sector.active ? "Sim" : "Não"}</Td>
+              <Td>
+                <StatusBadge tone={sector.active ? "free" : "muted"}>
+                  {sector.active ? "Ativo" : "Inativo"}
+                </StatusBadge>
+              </Td>
               <Td>
                 <Link
                   href={`/admin/setores/${sector.id}/editar`}
@@ -57,6 +66,36 @@ export default async function SetoresPage() {
           )}
         </tbody>
       </Table>
+
+      <CardList>
+        {sectors.map((sector) => (
+          <CardListRow key={sector.id}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display font-semibold text-ink">{sector.name}</span>
+              <Link
+                href={`/admin/setores/${sector.id}/editar`}
+                className="text-xs font-medium text-wine underline"
+              >
+                Editar
+              </Link>
+            </div>
+            <CardListField label="Imprime?">
+              <StatusBadge tone={sector.hasPrinting ? "free" : "muted"}>
+                {sector.hasPrinting ? "Sim" : "Não"}
+              </StatusBadge>
+            </CardListField>
+            <CardListField label="Ordem">{sector.sortOrder}</CardListField>
+            <CardListField label="Ativo">
+              <StatusBadge tone={sector.active ? "free" : "muted"}>
+                {sector.active ? "Ativo" : "Inativo"}
+              </StatusBadge>
+            </CardListField>
+          </CardListRow>
+        ))}
+        {sectors.length === 0 && (
+          <p className="text-sm text-muted">Nenhum setor cadastrado ainda.</p>
+        )}
+      </CardList>
 
       <div className="border-t border-line pt-6">
         <h2 className="mb-3 font-display text-base font-semibold text-ink">Novo setor</h2>

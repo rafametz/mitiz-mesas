@@ -475,17 +475,39 @@ originais não se confirmaram:
 - **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build` limpos.
   Nenhum E2E cobre o texto removido (`grep` confirmou).
 
-### Fase 10 — Concluir Fase 5 (tabelas admin responsivas)
+### Fase 10 — Concluir Fase 5 (tabelas admin responsivas) (concluída 2026-11-04)
 Continuação direta da Fase 5 do plano original, que ficou só em
-Produtos. Aplicar o mesmo padrão `Table`/`CardList` responsivo em
-Categorias, Setores e Impressoras — primeiro ajustando os seletores de
-`admin.spec.ts` para um padrão escopado (`page.locator("tr", {hasText})`),
-igual ao que já foi feito para Produtos, para não repetir o risco já
-documentado.
-- Badge de alerta (tom `wine`) para estoque negativo em Produtos, hoje
-  mostrado em texto cinza neutro igual a qualquer valor.
-- Booleanos (`Ativa`, `No pedido`) como `StatusBadge`, não texto
-  "Sim"/"Não" cru.
+Produtos. Aplicado o mesmo padrão `Table`/`CardList` responsivo em
+Categorias, Setores e Impressoras.
+
+- ✅ `CardList`/`CardListRow`/`CardListField` adicionados em
+  `admin/categorias/page.tsx`, `admin/setores/page.tsx` e
+  `admin/impressoras/page.tsx`, espelhando exatamente o padrão já
+  validado em `admin/produtos/page.tsx`.
+- ✅ Booleanos (`Ativa`/`Inativa`, `Ativo`/`Inativo`, `Imprime?`) viraram
+  `StatusBadge` (tom `free`/`muted`) nas três telas, em vez de texto
+  "Sim"/"Não" cru — mesma convenção já usada em `admin/usuarios/page.tsx`.
+  O toggle "Disponível" de Produtos (já era um botão funcional, não texto
+  estático) foi mantido como estava — virar badge quebraria a interação.
+- ✅ Estoque negativo em Produtos agora usa `StatusBadge tone="wine"` (só
+  quando `stockQuantity < 0`) em vez de texto cinza neutro igual a
+  qualquer outro valor — componente `StockQuantity` local em
+  `admin/produtos/page.tsx`.
+- ✅ Seletores escopados (`page.locator("tr", {hasText})`) em
+  `tests/e2e/admin.spec.ts`, `pedidos.spec.ts` e `pdv.spec.ts` — todo
+  teste que criava setor/categoria e conferia o nome com `page.getByText`
+  sem escopo foi corrigido antes de adicionar o `CardList` correspondente,
+  evitando o risco de match múltiplo já documentado.
+- **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build` limpos.
+  **Suíte E2E não executada nesta sessão** — porta 3000 (usada pelo
+  `webServer` do `playwright.config.ts`) já estava ocupada por outro
+  processo `node` (provavelmente outra sessão/worktree ativa no mesmo
+  computador), respondendo com erro 500 e travando o healthcheck do
+  Playwright. Verificação ficou limitada a build + revisão de código
+  (marcação idêntica ao padrão já comprovado de Produtos). Recomendado
+  rodar `npm run test:e2e` manualmente assim que a porta 3000 estiver
+  livre, e `npm run cleanup:e2e-data -- --apply` depois (a suíte cria
+  setor/categoria reais no banco único de dev/produção).
 
 ### Fase 11 — Produção (fila de pedidos)
 - Investigar o volume alto de pedidos muito antigos na fila "Novos" de

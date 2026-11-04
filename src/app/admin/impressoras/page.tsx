@@ -4,7 +4,8 @@ import { getCurrentRestaurant } from "@/application/restaurant/get-current-resta
 import { CheckboxField, TextField } from "@/components/form/field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { PageHeader } from "@/components/ui/card";
-import { Table, Td, Th, Tr } from "@/components/ui/table";
+import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { createPrinter } from "./actions";
 
 export default async function ImpressorasPage() {
@@ -43,7 +44,11 @@ export default async function ImpressorasPage() {
                   <span className="text-gold-dark">Sem token: agente não consegue puxar a fila</span>
                 )}
               </Td>
-              <Td>{printer.active ? "Sim" : "Não"}</Td>
+              <Td>
+                <StatusBadge tone={printer.active ? "free" : "muted"}>
+                  {printer.active ? "Ativa" : "Inativa"}
+                </StatusBadge>
+              </Td>
               <Td>
                 <Link
                   href={`/admin/impressoras/${printer.id}/editar`}
@@ -63,6 +68,38 @@ export default async function ImpressorasPage() {
           )}
         </tbody>
       </Table>
+
+      <CardList>
+        {printers.map((printer) => (
+          <CardListRow key={printer.id}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display font-semibold text-ink">{printer.name}</span>
+              <Link
+                href={`/admin/impressoras/${printer.id}/editar`}
+                className="text-xs font-medium text-wine underline"
+              >
+                Editar
+              </Link>
+            </div>
+            <CardListField label="Conexão">{printer.connectionInfo ?? "-"}</CardListField>
+            <CardListField label="Token do agente">
+              {printer.agentTokenHash ? (
+                <span className="text-ink">Configurado</span>
+              ) : (
+                <span className="text-gold-dark">Sem token</span>
+              )}
+            </CardListField>
+            <CardListField label="Ativa">
+              <StatusBadge tone={printer.active ? "free" : "muted"}>
+                {printer.active ? "Ativa" : "Inativa"}
+              </StatusBadge>
+            </CardListField>
+          </CardListRow>
+        ))}
+        {printers.length === 0 && (
+          <p className="text-sm text-muted">Nenhuma impressora cadastrada ainda.</p>
+        )}
+      </CardList>
 
       <div className="border-t border-line pt-6">
         <h2 className="mb-3 font-display text-base font-semibold text-ink">Nova impressora</h2>
