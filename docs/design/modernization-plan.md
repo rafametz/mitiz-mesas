@@ -546,11 +546,26 @@ Categorias, Setores e Impressoras.
   verificada por consulta direta (contagem zerada), não por teste
   automatizado — não é mudança de código.
 
-### Fase 12 — Admin: dashboard e relatórios
-- Cor semântica nos ícones dos cards de estatística de `/admin/mesas`
-  (hoje cinza neutro mesmo com `Ocupadas > 0`).
-- `DonutChart`/gráfico de barras de Relatórios: rótulos internos ou
-  tooltip.
+### Fase 12 — Admin: dashboard e relatórios (verificada 2026-11-04, sem alteração de código)
+- ❌ **Falso positivo, igual aos já documentados na Fase 9.** Os dois
+  achados abaixo vieram da auditoria visual inicial (navegação pela
+  Vercel) e não se confirmaram ao ler o código:
+  - `StatCard` em `admin/mesas/page.tsx` **já** recebe `tone` por card
+    (`free`/`wine`/`gold`/`neutral`), com ícone e valor coloridos de
+    acordo (`Ocupadas` → `text-wine`/`bg-wine/10`, `Livres` →
+    `text-free-dark`, `Fechando` → `text-gold-dark`; só "Total de mesas"
+    é `neutral`, corretamente, por não ter semântica de status). Esse
+    padrão já existia desde o MVP inicial (`d7f6e5b`) e o refactor
+    `822aaf0`, antes desta iniciativa de modernização.
+  - `DonutChart` (`components/ui/donut-chart.tsx`) já expõe um `<title>`
+    nativo por segmento (`"{label}: {value}"`, tooltip de hover do
+    navegador). `BarRow` (`components/ui/bar-row.tsx`), usado nas três
+    telas de Relatórios (`periodo`, `produtos`, `horarios-pico`), já tem
+    `valueLabel` sempre visível ao lado da barra **e** `title` com o
+    valor completo sem abreviar.
+  - Provavelmente a demo (mesas todas livres, sem histórico de venda
+    visível na sessão de auditoria) escondeu os tons não-neutros e os
+    rótulos dos gráficos, levando à leitura errada na primeira passada.
 
 ### Fase 13 — Polimento
 - Papel da fonte serifada (`font-display`, Fraunces): avaliar restringir
