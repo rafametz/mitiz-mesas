@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 const ITEMS = [
-  { href: "/mesas", label: "Mesas", icon: UtensilsCrossed, show: "tables" as const },
+  { href: "/mesas", label: "Atendimento", icon: UtensilsCrossed, show: "tables" as const },
   { href: "/reservas-assados", label: "Reservas", icon: Drumstick, show: "roasts" as const },
   { href: "/producao", label: "Produção", icon: ChefHat, show: "production" as const },
   { href: "/impressao", label: "Impressão", icon: Printer, show: "print" as const },
@@ -77,9 +77,13 @@ export function BottomNav({
     >
       <div className="no-scrollbar justify-[safe_center] mx-auto flex max-w-3xl overflow-x-auto">
         {items.map((item) => {
-          // "Mesas" também fica ativo em /retiradas e /pdv — são abas
-          // irmãs da mesma seção (AtendimentoTabs), módulo Retiradas
-          // 2026-08-14 / Módulo 17 (PDV) 2026-10-20.
+          // "Atendimento" também fica ativo em /retiradas e /pdv — são
+          // abas irmãs da mesma seção (AtendimentoTabs), módulo Retiradas
+          // 2026-08-14 / Módulo 17 (PDV) 2026-10-20. Rótulo "Atendimento"
+          // (não "Mesas", como era antes) de propósito: evita o item
+          // parecer aceso na aba errada quando a aba ativa lá em cima é
+          // "PDV"/"Retiradas", não "Mesas" (Fase 8 do plano de
+          // modernização, 2026-11-04).
           const isActive =
             item.href === "/"
               ? pathname === "/"

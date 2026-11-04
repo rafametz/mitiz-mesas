@@ -433,16 +433,36 @@ anterior.
   `frontend-design.md`, "Movimento"/"Acessibilidade").
 - **Testes**: `tsc --noEmit`, `npm run lint`, `npm run build`.
 
-### Fase 8 — Navegação (planejada)
-- Bottom nav mobile: hoje rola horizontalmente com 7 itens (decisão
-  deliberada de 2026-09-30, ver `docs/backlog.md`) — avaliar agrupar os
-  menos frequentes (Reservas, Impressão, Histórico, Admin, Conta) num
-  item "Mais", mantendo Mesas/PDV/Produção/Retiradas sempre visíveis.
-  **Precisa de validação com o usuário antes de implementar**, porque
-  substitui uma decisão de navegação já tomada e testada em produção.
-- Corrigir indicador de aba ativa duplicado/inconsistente entre a tab
-  PDV (`mesa-tabs.tsx`/`pdv` usa `border-b-2` vermelho) e o bottom nav
-  (ainda marca "Mesas" como ativo ao navegar para `/pdv`).
+### Fase 8 — Navegação (concluída 2026-11-04, com decisão do usuário)
+- ❌ **Agrupar sob "Mais": não implementado (decisão do usuário).**
+  Avaliação antes de mexer revelou que a premissa do item original
+  estava imprecisa: PDV e Retiradas **não são ícones próprios** na barra
+  inferior hoje, são abas dentro da seção "Mesas"
+  (`AtendimentoTabs`, decisão já tomada nos módulos Retiradas/PDV) — a
+  barra real tem só 7 itens (Mesas, Reservas, Produção, Impressão,
+  Histórico, Admin, Conta), filtrados por permissão por papel (garçom,
+  caixa, cozinha, admin veem conjuntos bem diferentes). Perguntado
+  diretamente: o usuário optou por manter como está — a rolagem
+  horizontal já resolve o aperto de itens e foi testada em produção em
+  2026-09-30; agrupar herdaria o risco de esconder algo que uma cozinha
+  ou um caixa usa o tempo todo atrás de um toque extra em "Mais", sem
+  ganho claro pra quem só vê 2-3 itens (a maioria dos papéis).
+- ✅ **Indicador de aba ativa "duplicado" corrigido.** O ícone da barra
+  inferior que leva a `/mesas` chamava-se "Mesas" e continuava aceso
+  (dourado) em `/pdv`/`/retiradas`, mesmo a aba "Mesas" lá em cima
+  (`AtendimentoTabs`) não sendo a selecionada nesses casos — parecia uma
+  inconsistência, embora fosse intencional (o ícone representa o grupo
+  Mesas+PDV+Retiradas, não só a tela Mesas). Perguntado ao usuário: a
+  opção escolhida foi renomear o item para "Atendimento" (continua
+  levando para `/mesas`, mesmo ícone, mesma lógica de ativo) em vez de
+  deixar como estava — `src/app/(staff)/bottom-nav.tsx`. Nenhuma rota
+  mudou; grep na suíte E2E confirmou que nenhum teste procura o item
+  antigo pelo texto "Mesas" na barra (só um teste de login que confere
+  o `<h1>` da própria tela de Mesas, via `PageHeader`, não afetado).
+- **Testes**: `tsc --noEmit`, `npm run lint` e `npm run build` limpos.
+  Mudança de rótulo só de texto/UI, sem lógica nova; suíte E2E não
+  executada (mesmo bloqueio de porta 3000 já registrado nas fases
+  anteriores).
 
 ### Fase 9 — Componentes visuais (concluída 2026-11-04, com correções)
 
@@ -602,7 +622,7 @@ Princípios das Fases 1-6 continuam valendo integralmente (nenhuma regra
 de negócio muda, commits pequenos por tela, suíte E2E completa a cada
 fase que toca HTML visível, sem dependência nova sem justificar).
 
-**Status da iniciativa de 2026-11-04 (Fases 7-13): concluída**, exceto a
-Fase 8 (navegação), que ficou propositalmente em aberto — reverte uma
-decisão deliberada de 2026-09-30 e precisa de validação explícita do
-usuário antes de implementar (ver detalhes na própria Fase 8 acima).
+**Status da iniciativa de 2026-11-04 (Fases 7-13): concluída.** A Fase 8
+(navegação) foi a última a fechar, depois de validação explícita do
+usuário sobre os dois pontos em aberto (ver detalhes na própria Fase 8
+acima).
