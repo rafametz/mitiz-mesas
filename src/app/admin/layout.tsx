@@ -13,6 +13,15 @@ import { SidebarNav } from "./sidebar-nav";
 // linha de Linear/Notion/Stripe. Em telas estreitas vira barra horizontal
 // no topo em vez de gaveta — a área de admin não precisa da mesma economia
 // de espaço do app do garçom.
+//
+// `md:sticky md:h-screen md:overflow-y-auto` no <aside> (relato do
+// usuário, 2026-11-05): sem isso, o <aside> é só mais um item de
+// `md:flex` com altura automática — ele esticava junto com o <main> em
+// páginas longas (ex. admin/produtos), empurrando "Voltar ao app"
+// (`mt-auto`) pra baixo do rodapé real da tela, só visível rolando a
+// página inteira. Com altura própria presa à viewport, o link fica
+// sempre visível; se a navegação algum dia ficar mais alta que a tela,
+// ela rola dentro do próprio <aside>, não a página toda.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requirePermission(PERMISSIONS.ADMIN_MANAGE);
 
@@ -24,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       >
         Pular para o conteúdo
       </a>
-      <aside className="flex flex-col gap-6 border-b border-shell-line bg-shell p-4 md:min-h-screen md:w-64 md:shrink-0 md:border-b-0 md:border-r md:p-5">
+      <aside className="flex flex-col gap-6 border-b border-shell-line bg-shell p-4 md:sticky md:top-0 md:h-screen md:w-64 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r md:p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MitizMark className="h-7 w-7 text-gold" />
