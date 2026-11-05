@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { CheckboxField, SelectField, TextAreaField, TextField } from "@/components/form/field";
 import { MoneyField } from "@/components/form/money-field";
 import { Card } from "@/components/ui/card";
@@ -78,11 +79,52 @@ export const EMPTY_PRODUCT_DEFAULTS: ProductFormDefaults = {
   importNotes: "",
 };
 
-// Seções conforme ADR 0009, seção 5 — compartilhado entre o formulário de
-// criação e o de edição, pra não duplicar ~150 linhas de JSX entre os dois
-// (mesmo racional de ReservationCard/DeliverButton reaproveitados). Cada
-// `<input>` carrega seu próprio `name`; quem envolve este componente só
-// precisa de um `<form action=...>` e botão de envio por fora.
+// <details>/<summary> nativo em vez de um Accordion com estado em React —
+// não precisa de JS pra funcionar, não tem risco de hydration mismatch, e
+// dá foco/teclado de graça. `open` só na carga inicial (decide com base no
+// que já está preenchido); depois disso quem controla é a própria pessoa
+// clicando, igual qualquer <details> nativo.
+function CollapsibleSection({
+  title,
+  hint,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group rounded-card border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <div>
+          <span className="text-sm font-semibold text-ink">{title}</span>
+          {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
+        </div>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="flex flex-col gap-4 border-t border-line p-4">{children}</div>
+    </details>
+  );
+}
+
+// Repaginação 2026-11-05 (pedido do usuário, com prints do VHSys de
+// referência): antes era uma pilha vertical de 6 seções sempre abertas,
+// cada uma com seu próprio <Card> — pra editar o preço era preciso rolar
+// a tela inteira até o fim pra achar o botão Salvar. Agora só os campos
+// que a própria pessoa descreveu como "o que eu geralmente preencho"
+// (nome, código, código de barras, marca, unidade, categoria, setor,
+// preço, custo) ficam sempre visíveis, num quadrante só, em grade —
+// Estoque/Fiscais/Fornecedor/Observações viram seções recolhidas
+// (abertas de saída só se já tiverem algum dado, pra nunca esconder o
+// que a pessoa já preencheu sem avisar). NCM e os demais campos fiscais
+// continuam dentro de "Dados fiscais" (não promovidos pro quadrante
+// principal como no VHSys) porque, nesta aplicação, nenhum deles é usado
+// em fluxo nenhum ainda (mesma nota que já existia antes desta
+// repaginação) — diferente do VHSys, aqui eles não são "o que se
+// preenche sempre". "Formador de Preço" do VHSys não existe aqui (sem
+// motor de precificação no domínio hoje), não foi reproduzido.
 export function ProductFormFields({
   defaults,
   categories,
@@ -92,51 +134,57 @@ export function ProductFormFields({
   categories: Option[];
   sectors: Option[];
 }) {
+  const hasStockData = Boolean(
+    defaults.stockQuantity || defaults.stockMinimum || defaults.weight || defaults.netWeight,
+  );
+  const hasFiscalData = Boolean(
+    defaults.ncm ||
+      defaults.cest ||
+      defaults.origin ||
+      defaults.icmsRate ||
+      defaults.ipiRate ||
+      defaults.pisRate ||
+      defaults.cofinsRate ||
+      defaults.taxableUnit ||
+      defaults.fiscalBenefitCode ||
+      defaults.fiscalClassType,
+  );
+  const hasSupplierData = Boolean(defaults.supplierName || defaults.supplierCode);
+  const hasNotesData = Boolean(defaults.importNotes);
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">Dados gerais</h2>
-        <Card className="flex flex-col gap-4">
-          <TextField label="Nome" name="name" defaultValue={defaults.name} required maxLength={120} />
-          <TextAreaField
-            label="Descrição (opcional)"
-            name="description"
-            defaultValue={defaults.description}
-            maxLength={500}
+    <div className="flex flex-col gap-4">
+      <Card className="flex flex-col gap-4">
+        <TextField label="Nome" name="name" defaultValue={defaults.name} required maxLength={120} />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField
+            label="Código (opcional)"
+            name="sku"
+            defaultValue={defaults.sku}
+            maxLength={60}
+            hint="Código interno — nunca inventado, só o que já existir"
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField
-              label="Código (opcional)"
-              name="sku"
-              defaultValue={defaults.sku}
-              maxLength={60}
-              hint="Código interno — nunca inventado, só o que já existir"
-            />
-            <TextField
-              label="Código de barras (opcional)"
-              name="barcode"
-              defaultValue={defaults.barcode}
-              maxLength={14}
-              inputMode="numeric"
-              hint="GTIN-8, 12, 13 ou 14"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField label="Marca (opcional)" name="brand" defaultValue={defaults.brand} maxLength={25} />
-            <SelectField label="Unidade" name="unit" defaultValue={defaults.unit} required>
-              {UNIT_OPTIONS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-          <SelectField
-            label="Categoria"
-            name="categoryId"
-            defaultValue={defaults.categoryId}
-            required
-          >
+          <TextField
+            label="Código de barras (opcional)"
+            name="barcode"
+            defaultValue={defaults.barcode}
+            maxLength={14}
+            inputMode="numeric"
+            hint="GTIN-8, 12, 13 ou 14"
+          />
+          <TextField label="Marca (opcional)" name="brand" defaultValue={defaults.brand} maxLength={25} />
+          <SelectField label="Unidade" name="unit" defaultValue={defaults.unit} required>
+            {UNIT_OPTIONS.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <SelectField label="Categoria" name="categoryId" defaultValue={defaults.categoryId} required>
             {!defaults.categoryId && (
               <option value="" disabled>
                 Selecione
@@ -165,24 +213,28 @@ export function ProductFormFields({
               </option>
             ))}
           </SelectField>
-          <div className="flex flex-col gap-2">
-            <CheckboxField label="Disponível" name="available" defaultChecked={defaults.available} />
-            <CheckboxField label="Ativo" name="active" defaultChecked={defaults.active} />
-          </div>
-        </Card>
-      </div>
+        </div>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">Preços</h2>
-        <Card className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <MoneyField label="Preço de venda" name="price" defaultValue={defaults.price} />
           <MoneyField label="Custo (opcional)" name="costPrice" defaultValue={defaults.costPrice} />
-        </Card>
-      </div>
+        </div>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">Estoque</h2>
-        <Card className="flex flex-col gap-4">
+        <TextAreaField
+          label="Descrição (opcional)"
+          name="description"
+          defaultValue={defaults.description}
+          maxLength={500}
+        />
+
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <CheckboxField label="Disponível" name="available" defaultChecked={defaults.available} />
+          <CheckboxField label="Ativo" name="active" defaultChecked={defaults.active} />
+        </div>
+      </Card>
+
+      <CollapsibleSection title="Estoque" hint="Opcional" defaultOpen={hasStockData}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Estoque atual (opcional)"
             name="stockQuantity"
@@ -196,76 +248,71 @@ export function ProductFormFields({
             defaultValue={defaults.stockMinimum}
             inputMode="decimal"
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField
-              label="Peso (kg, opcional)"
-              name="weight"
-              defaultValue={defaults.weight}
-              inputMode="decimal"
-            />
-            <TextField
-              label="Peso líquido (kg, opcional)"
-              name="netWeight"
-              defaultValue={defaults.netWeight}
-              inputMode="decimal"
-            />
-          </div>
-        </Card>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-ink">Dados fiscais</h2>
-          <p className="text-xs text-muted">
-            Preparação para uma futura emissão de NFC-e/NF-e — nenhum destes campos é usado em
-            nenhum fluxo do sistema hoje.
-          </p>
+          <TextField
+            label="Peso (kg, opcional)"
+            name="weight"
+            defaultValue={defaults.weight}
+            inputMode="decimal"
+          />
+          <TextField
+            label="Peso líquido (kg, opcional)"
+            name="netWeight"
+            defaultValue={defaults.netWeight}
+            inputMode="decimal"
+          />
         </div>
-        <Card className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField label="NCM (opcional)" name="ncm" defaultValue={defaults.ncm} maxLength={8} />
-            <TextField label="CEST (opcional)" name="cest" defaultValue={defaults.cest} maxLength={10} />
-          </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Dados fiscais"
+        hint="Preparação para uma futura emissão de NFC-e/NF-e — nenhum destes campos é usado em nenhum fluxo do sistema hoje."
+        defaultOpen={hasFiscalData}
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField label="NCM (opcional)" name="ncm" defaultValue={defaults.ncm} maxLength={8} />
+          <TextField label="CEST (opcional)" name="cest" defaultValue={defaults.cest} maxLength={10} />
           <TextField
             label="Origem (opcional)"
             name="origin"
             defaultValue={defaults.origin}
             inputMode="numeric"
             maxLength={1}
-            hint="0 a 8 — tabela de origem da mercadoria"
+            hint="0 a 8"
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <TextField
-              label="ICMS % (opcional)"
-              name="icmsRate"
-              defaultValue={defaults.icmsRate}
-              inputMode="decimal"
-            />
-            <TextField
-              label="IPI % (opcional)"
-              name="ipiRate"
-              defaultValue={defaults.ipiRate}
-              inputMode="decimal"
-            />
-            <TextField
-              label="PIS % (opcional)"
-              name="pisRate"
-              defaultValue={defaults.pisRate}
-              inputMode="decimal"
-            />
-            <TextField
-              label="COFINS % (opcional)"
-              name="cofinsRate"
-              defaultValue={defaults.cofinsRate}
-              inputMode="decimal"
-            />
-          </div>
           <TextField
             label="Unidade tributável (opcional)"
             name="taxableUnit"
             defaultValue={defaults.taxableUnit}
             maxLength={10}
           />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <TextField
+            label="ICMS % (opcional)"
+            name="icmsRate"
+            defaultValue={defaults.icmsRate}
+            inputMode="decimal"
+          />
+          <TextField
+            label="IPI % (opcional)"
+            name="ipiRate"
+            defaultValue={defaults.ipiRate}
+            inputMode="decimal"
+          />
+          <TextField
+            label="PIS % (opcional)"
+            name="pisRate"
+            defaultValue={defaults.pisRate}
+            inputMode="decimal"
+          />
+          <TextField
+            label="COFINS % (opcional)"
+            name="cofinsRate"
+            defaultValue={defaults.cofinsRate}
+            inputMode="decimal"
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Código de benefício fiscal (opcional)"
             name="fiscalBenefitCode"
@@ -278,12 +325,11 @@ export function ProductFormFields({
             defaultValue={defaults.fiscalClassType}
             maxLength={20}
           />
-        </Card>
-      </div>
+        </div>
+      </CollapsibleSection>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">Fornecedor</h2>
-        <Card className="flex flex-col gap-4">
+      <CollapsibleSection title="Fornecedor" hint="Opcional" defaultOpen={hasSupplierData}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TextField
             label="Nome do fornecedor (opcional)"
             name="supplierName"
@@ -296,20 +342,17 @@ export function ProductFormFields({
             defaultValue={defaults.supplierCode}
             maxLength={60}
           />
-        </Card>
-      </div>
+        </div>
+      </CollapsibleSection>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-ink">Informações adicionais</h2>
-        <Card className="flex flex-col gap-4">
-          <TextAreaField
-            label="Observações (opcional)"
-            name="importNotes"
-            defaultValue={defaults.importNotes}
-            maxLength={500}
-          />
-        </Card>
-      </div>
+      <CollapsibleSection title="Informações adicionais" hint="Opcional" defaultOpen={hasNotesData}>
+        <TextAreaField
+          label="Observações (opcional)"
+          name="importNotes"
+          defaultValue={defaults.importNotes}
+          maxLength={500}
+        />
+      </CollapsibleSection>
     </div>
   );
 }

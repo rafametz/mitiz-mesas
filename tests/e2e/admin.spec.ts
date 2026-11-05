@@ -70,8 +70,12 @@ test.describe("Módulo 2 — cadastros básicos", () => {
     await expect(page.locator("tr", { hasText: categoryName })).toBeVisible();
 
     await page.goto("/admin/produtos");
-    await page.getByLabel("Nome").fill(productName);
-    await page.getByLabel("Preço (R$)").fill("12.90");
+    // exact: true — o formulário ampliado (ADR 0009) também tem "Nome do
+    // fornecedor (opcional)", que combina com "Nome" por substring (fica
+    // no DOM mesmo com a seção "Fornecedor" recolhida por padrão desde a
+    // repaginação de 2026-11-05 — ver product-form-fields.tsx).
+    await page.getByLabel("Nome", { exact: true }).fill(productName);
+    await page.getByLabel("Preço de venda").fill("12.90");
     await page.getByLabel("Categoria").selectOption({ label: categoryName });
     await page.getByLabel("Setor de destino").selectOption({ label: sectorName });
     await page.getByRole("button", { name: "Criar produto" }).click();

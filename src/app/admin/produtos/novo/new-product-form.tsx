@@ -36,7 +36,7 @@ export function NewProductForm({
   }, [isPending, state.success]);
 
   return (
-    <form action={formAction} className="flex max-w-2xl flex-col gap-4">
+    <form action={formAction} className="flex flex-col gap-4">
       <ProductFormFields defaults={EMPTY_PRODUCT_DEFAULTS} categories={categories} sectors={sectors} />
       {state.error && (
         <p role="alert" className="text-sm text-wine">

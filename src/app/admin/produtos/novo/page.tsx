@@ -14,7 +14,7 @@ export default async function NovoProdutoPage() {
   const hasPrerequisites = categories.length > 0 && sectors.length > 0;
 
   return (
-    <div className="flex max-w-sm flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <Link
         href="/admin/produtos"
         className="flex items-center gap-1 text-sm font-medium text-muted hover:text-ink"
@@ -24,7 +24,7 @@ export default async function NovoProdutoPage() {
       <h1 className="text-lg font-semibold text-ink">Novo produto</h1>
 
       {!hasPrerequisites ? (
-        <p className="text-sm text-muted">
+        <p className="max-w-sm text-sm text-muted">
           Cadastre pelo menos uma{" "}
           <Link href="/admin/categorias" className="font-medium text-wine underline">
             categoria
