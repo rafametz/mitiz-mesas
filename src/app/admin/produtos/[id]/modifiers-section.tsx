@@ -1,8 +1,6 @@
-import { Layers } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { CreateModifierForm } from "./create-modifier-form";
 import { UpdateGroupForm } from "./update-group-form";
 import { UpdateModifierForm } from "./update-modifier-form";
@@ -28,6 +26,10 @@ export async function ModifiersSection({ productId }: { productId: string }) {
         </Button>
       </div>
 
+      {/* Sem estado vazio aqui de propósito (relato do usuário,
+          2026-11-05): o cabeçalho já tem "+ Novo grupo" — um EmptyState
+          com CTA própria embaixo duplicava a mesma ação, mesmo padrão já
+          corrigido antes em (staff)/retiradas/page.tsx. */}
       {groups.map((group) => (
         <Card key={group.id}>
           <UpdateGroupForm groupId={group.id} group={group} />
@@ -74,14 +76,6 @@ export async function ModifiersSection({ productId }: { productId: string }) {
           <CreateModifierForm groupId={group.id} />
         </Card>
       ))}
-
-      {groups.length === 0 && (
-        <EmptyState
-          icon={Layers}
-          title="Nenhum grupo de adicionais ainda."
-          action={<Button href={`/admin/produtos/${productId}/grupos/novo`}>Criar o primeiro</Button>}
-        />
-      )}
     </div>
   );
 }
