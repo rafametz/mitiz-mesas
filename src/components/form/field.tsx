@@ -19,10 +19,25 @@ type FieldProps = {
   hint?: string;
 };
 
+// Asterisco vermelho no lugar de escrever "(opcional)" em todo campo que
+// não exige — pedido do usuário, 2026-11-05: só o obrigatório carrega
+// marcação, o resto fica limpo. `aria-hidden` porque o `required` do
+// próprio input (sempre repassado junto) já é o sinal acessível de
+// verdade pra leitor de tela; o asterisco aqui é só pra quem enxerga.
+function RequiredMark() {
+  return (
+    <span className="text-wine" aria-hidden="true">
+      {" "}
+      *
+    </span>
+  );
+}
+
 export function TextField({
   label,
   hint,
   className,
+  required,
   ...props
 }: FieldProps & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
@@ -30,8 +45,14 @@ export function TextField({
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className={labelClass}>
         {label}
+        {required && <RequiredMark />}
       </label>
-      <input id={id} className={`${inputClass} ${className ?? ""}`} {...props} />
+      <input
+        id={id}
+        required={required}
+        className={`${inputClass} ${className ?? ""}`}
+        {...props}
+      />
       {hint && <p className="text-xs text-muted">{hint}</p>}
     </div>
   );
@@ -41,6 +62,7 @@ export function TextAreaField({
   label,
   hint,
   className,
+  required,
   ...props
 }: FieldProps & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const id = useId();
@@ -48,9 +70,11 @@ export function TextAreaField({
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className={labelClass}>
         {label}
+        {required && <RequiredMark />}
       </label>
       <textarea
         id={id}
+        required={required}
         className={`${inputClass} h-auto py-2 ${className ?? ""}`}
         rows={3}
         {...props}
@@ -65,6 +89,7 @@ export function SelectField({
   hint,
   children,
   className,
+  required,
   ...props
 }: FieldProps & SelectHTMLAttributes<HTMLSelectElement>) {
   const id = useId();
@@ -72,8 +97,9 @@ export function SelectField({
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className={labelClass}>
         {label}
+        {required && <RequiredMark />}
       </label>
-      <select id={id} className={`${inputClass} ${className ?? ""}`} {...props}>
+      <select id={id} required={required} className={`${inputClass} ${className ?? ""}`} {...props}>
         {children}
       </select>
       {hint && <p className="text-xs text-muted">{hint}</p>}
