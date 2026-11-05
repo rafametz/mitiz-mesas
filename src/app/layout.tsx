@@ -13,7 +13,7 @@ const manrope = Manrope({
   variable: "--font-sans",
 });
 
-// Aleo: só para o nome do app ("MITIZ Mesas"), onde aparece por extenso —
+// Aleo: só para o nome do app ("Mitiz Gestão"), onde aparece por extenso —
 // cabeçalho do app do salão, tela de login, tela de bloqueio biométrico
 // (pedido do usuário, 2026-08-11). Fonte da marca em si (className
 // font-brand); o resto da interface usa a Manrope (font-sans) mesmo em
@@ -26,7 +26,7 @@ const aleo = Aleo({
 });
 
 export const metadata: Metadata = {
-  title: "MITIZ Mesas",
+  title: "Mitiz Gestão",
   description: "Gerenciamento de mesas, comandas e produção da MITIZ Boutique de Carnes.",
   // manifest.webmanifest é gerado sozinho a partir de src/app/manifest.ts
   // (convenção do App Router) — o Next já injeta o <link rel="manifest">.
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "MITIZ Mesas",
+    title: "Mitiz Gestão",
   },
 };
 

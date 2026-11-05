@@ -111,7 +111,7 @@ export async function registerBiometric(user: {
       signal: controller.signal,
       publicKey: {
         challenge,
-        rp: { name: "MITIZ Mesas" },
+        rp: { name: "Mitiz Gestão" },
         user: { id: userIdBytes, name: user.email, displayName: user.name },
         pubKeyCredParams: [
           { type: "public-key", alg: -7 }, // ES256

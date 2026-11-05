@@ -28,7 +28,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         </a>
         <header className="flex items-center gap-2 bg-shell px-4 py-2.5">
           <MitizMark className="h-5 w-5 text-gold" />
-          <span className="font-brand text-sm font-semibold italic text-bg">MITIZ Mesas</span>
+          <span className="font-brand text-sm font-semibold italic text-bg">Mitiz Gestão</span>
         </header>
         <main id="conteudo" className="flex-1">
           {children}

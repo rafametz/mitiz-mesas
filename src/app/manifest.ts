@@ -7,8 +7,8 @@ import type { MetadataRoute } from "next";
 // combinação já usada no cabeçalho do app).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MITIZ Mesas",
-    short_name: "MITIZ Mesas",
+    name: "Mitiz Gestão",
+    short_name: "Mitiz Gestão",
     description: "Gerenciamento de mesas, comandas e produção da MITIZ Boutique de Carnes.",
     start_url: "/",
     display: "standalone",

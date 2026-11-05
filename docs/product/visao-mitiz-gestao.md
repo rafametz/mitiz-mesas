@@ -5,6 +5,14 @@
   8 códigos de barras duplicados (seção 3) ficam para correção manual do
   usuário, sem bloquear nada. Fase 2 (PDV) é a próxima; aguardando as
   decisões da seção 16 antes de qualquer código novo.
+- **Nome "Mitiz Gestão" já em uso na interface (2026-11-05)**: deixou de
+  ser só o "nome futuro possível" da linha abaixo — pedido explícito do
+  usuário (repaginação da tela de login). Troca feita em todo lugar
+  visível ao usuário: tela de login, cabeçalho do app do garçom, tela de
+  bloqueio biométrico e nome do PWA instalado no celular
+  (`src/app/manifest.ts`). Documentação interna (este arquivo, CLAUDE.md,
+  demais docs) mantém "MITIZ Mesas" como registro histórico do nome
+  anterior, sem reescrever retroativamente.
 - **Data**: 2026-10-15
 - **Pedido original**: planejamento de evolução do MITIZ Mesas para um sistema de
   gestão completo (nome futuro possível: "MITIZ Gestão"), reduzindo

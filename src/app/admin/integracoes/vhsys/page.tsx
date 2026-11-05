@@ -97,7 +97,7 @@ export default async function VhsysIntegrationPage({
 
       <div>
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-ink">Produtos do MITIZ Mesas</h2>
+          <h2 className="text-base font-semibold text-ink">Produtos do Mitiz Gestão</h2>
           <Link href={hrefWithParams({ semVinculo: onlyUnlinked ? undefined : "1" })} className="text-sm font-medium text-wine underline">
             {onlyUnlinked ? "Ver todos" : "Somente sem vínculo"}
           </Link>

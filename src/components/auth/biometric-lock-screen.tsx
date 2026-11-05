@@ -82,7 +82,7 @@ export function BiometricLockScreen({
       <MitizMark className="h-12 w-12 text-gold" />
       <div>
         <h1 className="text-lg font-semibold text-bg">
-          <span className="font-brand">MITIZ Mesas</span> bloqueado
+          <span className="font-brand">Mitiz Gestão</span> bloqueado
         </h1>
         <p className="mt-1 text-sm text-bg/60">
           {verifying
