@@ -103,7 +103,7 @@ export default async function ProdutosPage({
             <Th>Preço</Th>
             <Th>Estoque</Th>
             <Th>Disponível</Th>
-            <Th />
+            <Th className="sticky right-0 bg-surface" />
           </Tr>
         </thead>
         <tbody>
@@ -130,7 +130,7 @@ export default async function ProdutosPage({
                     </button>
                   </form>
                 </Td>
-                <Td>
+                <Td className="sticky right-0 border-l border-line bg-surface">
                   <Link
                     href={`/admin/produtos/${product.id}/editar`}
                     className="font-medium text-wine underline"

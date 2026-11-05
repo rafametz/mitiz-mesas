@@ -4,6 +4,14 @@
 // largas", relevante porque o Caixa usa tablet, CLAUDE.md §3). As duas
 // marcações existem ao mesmo tempo no DOM, alternadas só por CSS (sem JS
 // de detecção de viewport, sem risco de "flash" do formato errado).
+// Em tabela com muitas colunas (relato do usuário, 2026-11-05:
+// admin/produtos com 8 colunas desde o catálogo ampliado de 14/10
+// escondia "Editar" rolando pra fora da tela, sem indício de que dava
+// pra rolar), prender a última coluna (`<Th className="sticky right-0
+// bg-surface">`/`<Td className="sticky right-0 bg-surface border-l
+// border-line">`) mantém a ação sempre visível enquanto o resto rola por
+// baixo. `bg-surface` é obrigatório nela — sem isso o conteúdo de trás
+// aparece por transparência ao rolar.
 export function Table({ children }: { children: React.ReactNode }) {
   return (
     <div className="hidden overflow-x-auto rounded-card border border-line bg-surface md:block">
@@ -42,9 +50,17 @@ export function CardListField({ label, children }: { label: string; children: Re
   );
 }
 
-export function Th({ children }: { children?: React.ReactNode }) {
+export function Th({
+  children,
+  className = "",
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <th className="border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+    <th
+      className={`border-b border-line px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted ${className}`}
+    >
       {children}
     </th>
   );
