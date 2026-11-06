@@ -52,6 +52,7 @@ describe("sellPdv", () => {
   });
 
   afterAll(async () => {
+    await prisma.discount.deleteMany({ where: { serviceSessionId: { in: createdSessionIds } } });
     await prisma.paymentItemAllocation.deleteMany({
       where: { payment: { serviceSessionId: { in: createdSessionIds } } },
     });
@@ -118,6 +119,67 @@ describe("sellPdv", () => {
       where: { serviceSessionId: session.id },
     });
     expect(paymentsAfterRetry).toBe(2);
+  });
+
+  it("aplica desconto fixo antes de cobrar — saldo fecha com subtotal menos desconto (pedido do usuário, 2026-11-06)", async () => {
+    const orderIdempotencyKey = `pdv-desconto-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      items: [{ productId: picanhaId, quantity: 1 }], // 110
+      discount: { value: 10, reason: "Cliente fidelizado, arredondar conta" },
+      payments: [
+        { paymentMethodId: pixMethodId, amount: 100, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const session = await prisma.serviceSession.findUniqueOrThrow({
+      where: { id: order.serviceSessionId },
+    });
+    expect(session.status).toBe("CLOSED");
+    expect(session.subtotalAmount.toString()).toBe("110");
+    expect(session.discountAmount.toString()).toBe("10");
+    expect(session.totalAmount.toString()).toBe("100");
+    expect(session.balanceAmount.toString()).toBe("0");
+
+    const discount = await prisma.discount.findFirstOrThrow({
+      where: { serviceSessionId: order.serviceSessionId },
+    });
+    expect(discount.type).toBe("FIXED_AMOUNT");
+    expect(discount.amountApplied.toString()).toBe("10");
+    expect(discount.reason).toBe("Cliente fidelizado, arredondar conta");
+    expect(discount.appliedById).toBe(userId);
+  });
+
+  it("desconto quase total ainda fecha certo — amountApplied nunca passa do subtotal", async () => {
+    // Desconto maior que o subtotal zeraria o total e nenhum pagamento
+    // seria aceito (registerPaymentInTx rejeita valor acima do saldo,
+    // e `payments` exige ao menos uma linha positiva) — um desconto bem
+    // alto, mas abaixo do subtotal, já prova o clamp na prática
+    // (clampDecimal, mesma função usada pelo desconto de mesa em
+    // apply-discount.ts) sem depender de um cenário de venda grátis que
+    // o PDV não precisa suportar.
+    const orderIdempotencyKey = `pdv-desconto-alto-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      items: [{ productId: picanhaId, quantity: 1 }], // 110
+      discount: { value: 109.5, reason: "Desconto quase total, teste de clamp" },
+      payments: [
+        { paymentMethodId: pixMethodId, amount: 0.5, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const session = await prisma.serviceSession.findUniqueOrThrow({
+      where: { id: order.serviceSessionId },
+    });
+    expect(session.discountAmount.toString()).toBe("109.5");
+    expect(session.totalAmount.toString()).toBe("0.5");
+    expect(session.balanceAmount.toString()).toBe("0");
   });
 
   it("rejeita quando o pagamento não cobre o valor total da venda", async () => {

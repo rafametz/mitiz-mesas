@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { inputBaseClass } from "@/components/ui/input";
+import { digitsFromValue, formatDigits } from "@/lib/money-mask";
 
 // Campo de valor em Real — pedido do usuário: digitar preenche da direita
 // pra esquerda, tipo calculadora/PDV ("12" -> "0,12", mais um dígito -> "1,23"),
@@ -11,35 +12,13 @@ import { inputBaseClass } from "@/components/ui/input";
 // componente só formata o que aparece na tela, o valor de verdade enviado
 // no <input type="hidden"> é sempre uma string decimal com ponto
 // ("12.34"), no mesmo formato que os schemas zod já validavam antes.
+// Algoritmo de máscara em src/lib/money-mask.ts (compartilhado com
+// MaskedMoneyInput, a variante controlada em centavos usada no PDV).
 //
 // Decimal(10,2) no banco — 8 dígitos inteiros + 2 decimais, daí o teto de
 // dígitos abaixo (não é regra de negócio, só evita um número absurdo de
 // dígitos digitados por engano).
 const MAX_DIGITS = 10;
-
-function digitsFromValue(value?: string): string {
-  if (!value) return "";
-  const cleaned = value.trim().replace("-", "").replace(",", ".");
-  if (!cleaned || cleaned === "0") return "";
-  const [intPart = "0", decPart = ""] = cleaned.split(".");
-  const cents = `${intPart}${decPart.padEnd(2, "0").slice(0, 2)}`;
-  return cents.replace(/^0+(?=\d)/, "");
-}
-
-// A partir dos dígitos "correndo" (sem separador, sem sinal), monta tanto o
-// texto exibido (formato brasileiro, com milhar) quanto o valor cru que vai
-// no campo escondido (formato universal, com ponto — o que os schemas zod
-// dos formulários existentes já esperam).
-function formatDigits(digits: string): { display: string; raw: string } {
-  const padded = digits.padStart(3, "0");
-  const cents = padded.slice(-2);
-  const reaisDigits = padded.slice(0, -2);
-  const reaisNumber = Number(reaisDigits || "0");
-  return {
-    display: `${reaisNumber.toLocaleString("pt-BR")},${cents}`,
-    raw: `${reaisNumber}.${cents}`,
-  };
-}
 
 export function MoneyField({
   label,

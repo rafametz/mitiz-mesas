@@ -41,6 +41,20 @@ export const registerCombinedCheckoutSchema = z.object({
     // Cada linha paga o valor cheio da venda (sempre amount — nunca
     // allocations, que não existe para produto de loja).
     payments: z.array(registerSchema).min(1),
+    // Desconto da perna da loja (pedido do usuário, 2026-11-06) — mesmo
+    // formato de pdvSaleSchema (sell-pdv.ts), repassado direto pra
+    // sellPdvInTx abaixo. Nunca se aplica à perna da mesa/retirada, que
+    // já tem seu próprio mecanismo de desconto na tela de fechamento.
+    discount: z
+      .object({
+        value: z.coerce.number().positive("Informe um valor de desconto maior que zero."),
+        reason: z
+          .string()
+          .trim()
+          .min(3, "Informe o motivo do desconto (mínimo 3 caracteres).")
+          .max(300),
+      })
+      .optional(),
   }),
 });
 
@@ -103,6 +117,7 @@ export async function registerCombinedCheckoutInTx(
       orderIdempotencyKey: data.pdv.orderIdempotencyKey,
       items: data.pdv.items,
       payments: data.pdv.payments,
+      discount: data.pdv.discount,
     },
     { combinedCheckoutId: combinedCheckout.id },
   );

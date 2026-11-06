@@ -3,7 +3,8 @@
 import { useActionState, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, ShoppingBag, ShoppingCart, Table2, Trash2, X } from "lucide-react";
-import { SelectField } from "@/components/form/field";
+import { SelectField, TextField } from "@/components/form/field";
+import { MaskedMoneyInput } from "@/components/form/masked-money-input";
 import { QuantityStepper } from "@/components/form/quantity-stepper";
 import { SearchField } from "@/components/form/search-field";
 import { SubmitButton } from "@/components/form/submit-button";
@@ -37,12 +38,17 @@ type CartLine = {
   unitPrice: number;
   quantity: number;
 };
+// Um único campo "Valor recebido" por forma de pagamento (pedido do
+// usuário, 2026-11-06 — antes eram dois campos, "Valor" e "Recebido em
+// dinheiro", mesmo em cartão/PIX onde o segundo nunca fazia sentido).
+// Em centavos (inteiro) — mesma unidade de ConsumptionSelection.totalCents
+// — evita todo o round2/parseBRLInput que o modelo anterior precisava só
+// pra contornar imprecisão de ponto flutuante.
 type PaymentLine = {
   key: string;
   idempotencyKey: string;
   paymentMethodId: string;
-  amountInput: string;
-  cashReceivedInput: string;
+  receivedCents: number;
 };
 
 const initialState: FormState = { error: null };
@@ -51,28 +57,44 @@ function formatBRLNumber(value: number): string {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function formatCents(cents: number): string {
+  return formatBRLNumber(cents / 100);
+}
+
 function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-// Entrada em formato brasileiro ("12,34" ou "12.34") → número. Usado só na
-// tela de recebimento (forma de pagamento + valor), que precisa ler o
-// valor em JS pra calcular "falta"/"confere" ao vivo — MoneyField (usada
-// no resto do app) não expõe isso, só escreve num input escondido.
-function parseBRLInput(value: string): number {
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function newPaymentLine(paymentMethodId: string, amount: number): PaymentLine {
+function newPaymentLine(paymentMethodId: string, receivedCents: number): PaymentLine {
   return {
     key: crypto.randomUUID(),
     idempotencyKey: crypto.randomUUID(),
     paymentMethodId,
-    amountInput: amount > 0 ? amount.toFixed(2).replace(".", ",") : "",
-    cashReceivedInput: "",
+    receivedCents,
   };
+}
+
+// Quanto cada linha realmente abate do total (nunca mais que o que ainda
+// falta na hora dela, processando em ordem) e quanto sobra de troco —
+// só dinheiro pode gerar troco (pedido do usuário: cartão/PIX sempre
+// cobra exatamente o valor digitado, sem "sobra"). Cartão/PIX que
+// digitar a mais que o necessário conta inteiro mesmo assim — vira
+// "soma maior que o total" lá na validação, não troco.
+function computePaymentCredits(
+  lines: PaymentLine[],
+  targetCents: number,
+  isCash: (paymentMethodId: string) => boolean,
+): { creditedCents: number; changeCents: number }[] {
+  let remaining = targetCents;
+  return lines.map((line) => {
+    if (isCash(line.paymentMethodId)) {
+      const credited = Math.min(line.receivedCents, Math.max(remaining, 0));
+      remaining -= credited;
+      return { creditedCents: credited, changeCents: Math.max(0, line.receivedCents - credited) };
+    }
+    remaining -= line.receivedCents;
+    return { creditedCents: line.receivedCents, changeCents: 0 };
+  });
 }
 
 export function PdvSaleScreen({
@@ -121,6 +143,12 @@ export function PdvSaleScreen({
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Desconto da perna da loja (pedido do usuário, 2026-11-06) — sempre
+  // valor fixo em R$, nunca percentual. Motivo só aparece/é exigido
+  // quando tem desconto de verdade (regra 14 do CLAUDE.md), mesma
+  // exigência que já vale pro desconto de mesa.
+  const [discountCents, setDiscountCents] = useState(0);
+  const [discountReason, setDiscountReason] = useState("");
 
   const wasPending = useRef(false);
   useEffect(() => {
@@ -133,6 +161,8 @@ export function PdvSaleScreen({
       setOrderIdempotencyKey(crypto.randomUUID());
       setCombinedIdempotencyKey(crypto.randomUUID());
       setTablePaymentIdempotencyKey(crypto.randomUUID());
+      setDiscountCents(0);
+      setDiscountReason("");
       router.refresh();
     }
     wasPending.current = isPending;
@@ -214,6 +244,8 @@ export function PdvSaleScreen({
   function confirmClear() {
     setCart([]);
     setConsumptionSelection(null);
+    setDiscountCents(0);
+    setDiscountReason("");
     setClearConfirmOpen(false);
   }
 
@@ -236,20 +268,59 @@ export function PdvSaleScreen({
     }
   }
 
-  const lojaTotal = round2(cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
+  const lojaTotalCents = Math.round(
+    cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0) * 100,
+  );
   const tableTotal = round2((consumptionSelection?.totalCents ?? 0) / 100);
-  const grandTotal = round2(lojaTotal + tableTotal);
+  // Nunca passa do subtotal da loja (mesmo clamp do servidor,
+  // sell-pdv.ts) — evita mostrar "desconto maior que a venda" na tela
+  // mesmo que a pessoa digite um valor absurdo.
+  const discountCentsClamped = Math.min(discountCents, lojaTotalCents);
+  const lojaTargetCents = Math.max(0, lojaTotalCents - discountCentsClamped);
+  const grandTotal = round2(lojaTargetCents / 100 + tableTotal);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
-  const paymentsTotal = round2(
-    paymentLines.reduce((sum, line) => sum + parseBRLInput(line.amountInput), 0),
-  );
-  const remaining = round2(lojaTotal - paymentsTotal);
+  function isCashMethod(paymentMethodId: string): boolean {
+    const method = paymentMethods.find((m) => m.id === paymentMethodId);
+    return (method?.name ?? "").toLowerCase().includes("dinheiro");
+  }
+
+  // Quanto ainda falta pra fechar a perna da loja, sem contar a própria
+  // linha `excludeKey` — usado tanto pra pré-preencher uma linha nova
+  // quanto pra reajustar quando a forma de pagamento de uma linha já
+  // existente muda (cartão/PIX/débito "já preenche com o valor total da
+  // conta", pedido do usuário).
+  function remainingCentsExcluding(excludeKey: string | null): number {
+    const relevant = paymentLines.filter((l) => l.key !== excludeKey);
+    const credited = computePaymentCredits(relevant, lojaTargetCents, isCashMethod).reduce(
+      (sum, c) => sum + c.creditedCents,
+      0,
+    );
+    return Math.max(0, lojaTargetCents - credited);
+  }
+
+  const paymentCredits = computePaymentCredits(paymentLines, lojaTargetCents, isCashMethod);
+  const totalCreditedCents = paymentCredits.reduce((sum, c) => sum + c.creditedCents, 0);
+  const remainingCents = lojaTargetCents - totalCreditedCents;
   const tableLegReady = !consumptionSelection || Boolean(tablePaymentMethodId);
+  // Desconto cobrindo a venda inteira (caso raro — o campo é pra
+  // "tirar os centavos" ou um desconto pontual, não pra zerar a venda):
+  // não dá pra fechar sem nenhuma forma de pagamento, e o servidor
+  // sempre exige ao menos uma. Mensagem clara em vez de deixar tentar e
+  // falhar no fim.
+  const fullyDiscounted = lojaTotalCents > 0 && lojaTargetCents === 0;
+  const discountReasonReady = discountCentsClamped === 0 || discountReason.trim().length >= 3;
 
   function openCheckout() {
     if (cart.length === 0 && !consumptionSelection) return;
-    setPaymentLines(lojaTotal > 0 ? [newPaymentLine(paymentMethods[0]?.id ?? "", lojaTotal)] : []);
+    const methodId = paymentMethods[0]?.id ?? "";
+    setPaymentLines(
+      lojaTotalCents > 0
+        ? [newPaymentLine(methodId, isCashMethod(methodId) ? 0 : lojaTotalCents)]
+        : [],
+    );
+    setDiscountCents(0);
+    setDiscountReason("");
     setTablePaymentMethodId(paymentMethods[0]?.id ?? "");
     setPaymentError(null);
     setCheckoutOpen(true);
@@ -257,10 +328,9 @@ export function PdvSaleScreen({
   }
 
   function addPaymentLine() {
-    setPaymentLines((prev) => [
-      ...prev,
-      newPaymentLine(paymentMethods[0]?.id ?? "", Math.max(remaining, 0)),
-    ]);
+    const methodId = paymentMethods[0]?.id ?? "";
+    const prefill = isCashMethod(methodId) ? 0 : remainingCentsExcluding(null);
+    setPaymentLines((prev) => [...prev, newPaymentLine(methodId, prefill)]);
   }
 
   function removePaymentLine(key: string) {
@@ -273,31 +343,38 @@ export function PdvSaleScreen({
     );
   }
 
-  function isCashMethod(paymentMethodId: string): boolean {
-    const method = paymentMethods.find((m) => m.id === paymentMethodId);
-    return (method?.name ?? "").toLowerCase().includes("dinheiro");
+  // Trocar a forma de pagamento de uma linha já existente também
+  // repreenche o valor — cartão/PIX/débito pro que falta, dinheiro
+  // volta em branco pra pessoa digitar (pedido do usuário).
+  function changePaymentMethod(key: string, paymentMethodId: string) {
+    const prefill = isCashMethod(paymentMethodId) ? 0 : remainingCentsExcluding(key);
+    updatePaymentLine(key, { paymentMethodId, receivedCents: prefill });
   }
 
-  const paymentsPayload = paymentLines.map((line) => {
-    const cashReceived = isCashMethod(line.paymentMethodId)
-      ? parseBRLInput(line.cashReceivedInput)
-      : 0;
-    return {
-      paymentMethodId: line.paymentMethodId,
-      amount: parseBRLInput(line.amountInput),
-      idempotencyKey: line.idempotencyKey,
-      // Só para o recibo (troco impresso) — nunca usado pra validar nem
-      // gravar o pagamento em si (decisão do usuário, visão da Fase 2).
-      ...(cashReceived > 0 ? { cashReceived } : {}),
-    };
-  });
+  const paymentsPayload = paymentLines
+    .map((line, index) => {
+      const { creditedCents } = paymentCredits[index] ?? { creditedCents: 0, changeCents: 0 };
+      const isCash = isCashMethod(line.paymentMethodId);
+      return {
+        paymentMethodId: line.paymentMethodId,
+        amount: round2(creditedCents / 100),
+        idempotencyKey: line.idempotencyKey,
+        // Só para o recibo (troco impresso) — nunca usado pra validar
+        // nem gravar o pagamento em si (decisão do usuário, visão da
+        // Fase 2). O valor recebido de verdade, não o que foi
+        // creditado — createPdvSaleReceiptPrintJob calcula o troco como
+        // recebido menos cobrado.
+        ...(isCash && line.receivedCents > 0 ? { cashReceived: round2(line.receivedCents / 100) } : {}),
+      };
+    })
+    .filter((p) => p.amount > 0);
   const cartPayload = cart.map((line) => ({ productId: line.productId, quantity: line.quantity }));
   const tableAllocationsPayload = consumptionSelection?.entries.map((entry) => entry.payload) ?? [];
 
   const lojaLegReady =
-    lojaTotal === 0
+    lojaTotalCents === 0
       ? paymentsPayload.length === 0
-      : Math.abs(remaining) < 0.005 && paymentsPayload.every((p) => p.amount > 0);
+      : !fullyDiscounted && remainingCents === 0 && discountReasonReady;
   const canConfirm = lojaLegReady && tableLegReady && (cart.length > 0 || Boolean(consumptionSelection));
 
   function handleSubmit(formData: FormData) {
@@ -305,9 +382,13 @@ export function PdvSaleScreen({
       setPaymentError(
         !tableLegReady
           ? "Selecione a forma de pagamento do consumo selecionado."
-          : remaining > 0
-            ? `Ainda falta receber ${formatBRLNumber(remaining)} da loja.`
-            : "A soma das formas de pagamento da loja não pode passar do total.",
+          : fullyDiscounted
+            ? "O desconto cobre a venda inteira. Reduza o valor pra confirmar."
+            : !discountReasonReady
+              ? "Informe o motivo do desconto (mínimo 3 caracteres)."
+              : remainingCents > 0
+                ? `Ainda falta receber ${formatCents(remainingCents)} da loja.`
+                : "A soma das formas de pagamento da loja não pode passar do total.",
       );
       return;
     }
@@ -563,39 +644,71 @@ export function PdvSaleScreen({
               </div>
             )}
 
-            {lojaTotal > 0 && (
+            {lojaTotalCents > 0 && (
               <div className="flex flex-col gap-3">
                 {consumptionSelection && (
                   <h3 className="text-sm font-semibold text-ink">
-                    Loja · {formatBRLNumber(lojaTotal)}
+                    Loja · {formatCents(lojaTotalCents)}
                   </h3>
                 )}
+
+                {/* Desconto (pedido do usuário, 2026-11-06) — sempre valor
+                    fixo em R$, nunca percentual. Só se aplica à perna da
+                    loja, nunca ao consumo de mesa/retirada (que já tem seu
+                    próprio desconto na tela de fechamento da mesa). */}
+                <div className="flex flex-col gap-2 rounded-card border border-dashed border-line p-3">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-ink">Desconto</span>
+                    <MaskedMoneyInput
+                      valueCents={discountCentsClamped}
+                      onChangeCents={(cents) => setDiscountCents(Math.min(cents, lojaTotalCents))}
+                      ariaLabel="Desconto"
+                    />
+                  </label>
+                  {discountCentsClamped > 0 && (
+                    <>
+                      <TextField
+                        label="Motivo do desconto"
+                        name="discountReasonInput"
+                        value={discountReason}
+                        onChange={(e) => setDiscountReason(e.target.value)}
+                        maxLength={300}
+                        required
+                        hint="Mínimo 3 caracteres. Vai pra auditoria, igual ao desconto de mesa."
+                      />
+                      <p className="tabular text-xs text-muted">
+                        Subtotal {formatCents(lojaTotalCents)} − desconto{" "}
+                        {formatCents(discountCentsClamped)} = total a receber da loja{" "}
+                        <span className="font-semibold text-ink">{formatCents(lojaTargetCents)}</span>
+                      </p>
+                    </>
+                  )}
+                </div>
+
                 {paymentLines.map((line, index) => {
                   const cash = isCashMethod(line.paymentMethodId);
-                  const received = parseBRLInput(line.cashReceivedInput);
-                  const owed = parseBRLInput(line.amountInput);
-                  const change = cash && received > owed ? round2(received - owed) : 0;
+                  const { changeCents } = paymentCredits[index] ?? { creditedCents: 0, changeCents: 0 };
                   return (
                     <div
                       key={line.key}
                       className="flex flex-col gap-2 rounded-card border border-line p-3"
                     >
                       <div className="flex items-end gap-2">
-                        <SelectField
-                          label={`Forma de pagamento ${paymentLines.length > 1 ? index + 1 : ""}`}
-                          name={`method-${line.key}`}
-                          value={line.paymentMethodId}
-                          onChange={(e) =>
-                            updatePaymentLine(line.key, { paymentMethodId: e.target.value })
-                          }
-                          className="flex-1"
-                        >
-                          {paymentMethods.map((method) => (
-                            <option key={method.id} value={method.id}>
-                              {method.name}
-                            </option>
-                          ))}
-                        </SelectField>
+                        <div className="min-w-0 flex-1">
+                          <SelectField
+                            label={`Forma de pagamento ${paymentLines.length > 1 ? index + 1 : ""}`}
+                            name={`method-${line.key}`}
+                            value={line.paymentMethodId}
+                            onChange={(e) => changePaymentMethod(line.key, e.target.value)}
+                            className="w-full"
+                          >
+                            {paymentMethods.map((method) => (
+                              <option key={method.id} value={method.id}>
+                                {method.name}
+                              </option>
+                            ))}
+                          </SelectField>
+                        </div>
                         {paymentLines.length > 1 && (
                           <IconButton
                             label="Remover forma de pagamento"
@@ -607,48 +720,20 @@ export function PdvSaleScreen({
                       </div>
 
                       <label className="flex flex-col gap-1.5">
-                        <span className="text-sm font-medium text-ink">Valor</span>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
-                            R$
-                          </span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={line.amountInput}
-                            onChange={(e) =>
-                              updatePaymentLine(line.key, { amountInput: e.target.value })
-                            }
-                            className="tabular h-11 w-full rounded-control-sm border border-line bg-surface pl-10 text-right text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
-                          />
-                        </div>
+                        <span className="text-sm font-medium text-ink">Valor recebido</span>
+                        <MaskedMoneyInput
+                          valueCents={line.receivedCents}
+                          onChangeCents={(cents) =>
+                            updatePaymentLine(line.key, { receivedCents: cents })
+                          }
+                          ariaLabel={`Valor recebido ${paymentLines.length > 1 ? index + 1 : ""}`}
+                        />
                       </label>
 
-                      {cash && (
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium text-ink">
-                            Recebido em dinheiro (opcional, só para calcular o troco)
-                          </span>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
-                              R$
-                            </span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={line.cashReceivedInput}
-                              onChange={(e) =>
-                                updatePaymentLine(line.key, { cashReceivedInput: e.target.value })
-                              }
-                              className="tabular h-11 w-full rounded-control-sm border border-line bg-surface pl-10 text-right text-base text-ink focus:border-wine focus:outline-none focus:ring-2 focus:ring-wine/20"
-                            />
-                          </div>
-                          {change > 0 && (
-                            <p className="tabular text-sm font-semibold text-free-dark">
-                              Troco: {formatBRLNumber(change)}
-                            </p>
-                          )}
-                        </label>
+                      {cash && changeCents > 0 && (
+                        <p className="tabular text-sm font-semibold text-free-dark">
+                          Troco: {formatCents(changeCents)}
+                        </p>
                       )}
                     </div>
                   );
@@ -667,17 +752,31 @@ export function PdvSaleScreen({
             >
               {!tableLegReady
                 ? "Selecione a forma de pagamento do consumo selecionado."
-                : canConfirm
-                  ? "Valor confere com o total da venda."
-                  : remaining > 0
-                    ? `Falta receber ${formatBRLNumber(remaining)} da loja.`
-                    : `Soma da loja maior que o total. Ajuste os valores.`}
+                : fullyDiscounted
+                  ? "O desconto cobre a venda inteira. Reduza o valor pra confirmar."
+                  : !discountReasonReady
+                    ? "Informe o motivo do desconto."
+                    : canConfirm
+                      ? "Valor confere com o total da venda."
+                      : remainingCents > 0
+                        ? `Falta receber ${formatCents(remainingCents)} da loja.`
+                        : `Soma da loja maior que o total. Ajuste os valores.`}
             </div>
 
             <form action={(formData) => handleSubmit(formData)} className="flex flex-col gap-2">
               <input type="hidden" name="orderIdempotencyKey" value={orderIdempotencyKey} />
               <input type="hidden" name="cartJson" value={JSON.stringify(cartPayload)} />
               <input type="hidden" name="paymentsJson" value={JSON.stringify(paymentsPayload)} />
+              {discountCentsClamped > 0 && (
+                <>
+                  <input
+                    type="hidden"
+                    name="discountValue"
+                    value={(discountCentsClamped / 100).toFixed(2)}
+                  />
+                  <input type="hidden" name="discountReason" value={discountReason} />
+                </>
+              )}
               {consumptionSelection && (
                 <>
                   <input

@@ -14,7 +14,7 @@ const NAV_TIMEOUT = 45000;
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(email!);
-  await page.getByLabel("Senha").fill(password!);
+  await page.getByLabel("Senha", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Entrar" }).click();
   // Usuário de teste é Administrador — cai direto em /admin/mesas
   // (getPostLoginPath), não mais em "/".
@@ -109,12 +109,15 @@ test.describe("Módulo 17 — PDV e Pagamento Combinado (ADR 0010)", () => {
     });
     await expect(page.getByTestId("pdv-checkout-total")).toHaveText("R$ 25,00");
 
-    // Troco: "recebido em dinheiro" é só informação de impressão (decisão
-    // do usuário) — digitar 30 pra um total de 25 não deve travar a
-    // confirmação nem alterar o valor que de fato é registrado (o
-    // recibo, não testado aqui via UI, é quem mostra o troco — ver
-    // tests/integration/print-jobs.test.ts).
-    await page.getByLabel("Recebido em dinheiro (opcional, só para calcular o troco)").fill("30");
+    // Troco: campo único "Valor recebido" (2026-11-06) — em dinheiro, o
+    // valor digitado é só informação de impressão quando passa do total
+    // (decisão do usuário), nunca trava a confirmação nem altera o valor
+    // de fato registrado (o recibo, não testado aqui via UI, é quem
+    // mostra o troco — ver tests/integration/print-jobs.test.ts).
+    // Seleciona "Dinheiro" explicitamente — cartão/PIX nunca geram troco
+    // no modelo novo, só dinheiro.
+    await page.getByLabel("Forma de pagamento").selectOption({ label: "Dinheiro" });
+    await page.getByLabel("Valor recebido").fill("30");
     await expect(page.getByText("Troco: R$ 5,00")).toBeVisible();
     await expect(page.getByText("Valor confere com o total da venda.")).toBeVisible();
 
@@ -222,6 +225,11 @@ test.describe("Módulo 17 — PDV e Pagamento Combinado (ADR 0010)", () => {
     // do usuário: divisão por origem é manual, nunca automática).
     await expect(page.getByLabel("Forma de pagamento da mesa")).toBeVisible();
     await expect(page.getByText(`Loja · R$ 15,00`)).toBeVisible();
+    // "Dinheiro" é a forma padrão (sortOrder 0 no seed) e começa em
+    // branco de propósito (pedido do usuário, 2026-11-06: só dinheiro
+    // fica em branco pra pessoa digitar — cartão/PIX já viriam
+    // preenchidos sozinhos com o valor que falta).
+    await page.getByLabel("Valor recebido").fill("15");
     await expect(page.getByText("Valor confere com o total da venda.")).toBeVisible();
 
     await page.getByRole("button", { name: "Confirmar venda" }).click();

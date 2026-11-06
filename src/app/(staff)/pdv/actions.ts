@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/application/auth/get-current-user";
-import { PERMISSIONS } from "@/domain/auth/permissions";
+import { hasPermission, PERMISSIONS } from "@/domain/auth/permissions";
 import { sellPdv, SellPdvError } from "@/application/service-session/sell-pdv";
 import {
   registerCombinedCheckout,
@@ -58,6 +58,19 @@ async function schedulePdvSaleReceipt(pdvSessionId: string, cashReceived: Record
   });
 }
 
+type DiscountInput = { value: number; reason: string } | undefined;
+
+// Lido de dois campos simples (não JSON — só dois valores, sem array
+// aninhado) enviados pelo checkout do PDV (pdv-sale-screen.tsx), igual ao
+// resto dos campos desta tela. Ausente/zero = sem desconto (caminho
+// normal, continua igual a antes de 2026-11-06).
+function parseDiscount(formData: FormData): DiscountInput {
+  const rawValue = String(formData.get("discountValue") ?? "");
+  const value = Number(rawValue);
+  if (!rawValue || !Number.isFinite(value) || value <= 0) return undefined;
+  return { value, reason: String(formData.get("discountReason") ?? "").trim() };
+}
+
 // Carrinho e formas de pagamento montados no cliente (nada gravado até
 // aqui) e enviados como JSON em campos escondidos — mesmo padrão já usado
 // em mesas/[id]/pedidos (cartJson) e mesas/[id]/pagamentos (allocationsJson),
@@ -86,6 +99,14 @@ export async function sellPdvAction(
   if (items.length === 0) return { error: "Adicione ao menos um produto à venda." };
   if (payments.length === 0) return { error: "Informe ao menos uma forma de pagamento." };
 
+  const discount = parseDiscount(formData);
+  // Mesma permissão que já trava o desconto de mesa (DISCOUNTS_APPLY) —
+  // só checada quando tem desconto de verdade, pra não exigir nada a
+  // mais de quem nunca usa este campo.
+  if (discount && !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)) {
+    return { error: "Você não tem permissão para aplicar desconto." };
+  }
+
   let order;
   try {
     order = await sellPdv(user.id, {
@@ -94,6 +115,7 @@ export async function sellPdvAction(
       orderIdempotencyKey,
       items,
       payments,
+      discount,
     });
   } catch (error) {
     if (error instanceof SellPdvError) return { error: error.message };
@@ -162,6 +184,11 @@ export async function registerCombinedCheckoutAction(
     return { error: "Selecione ao menos um item do consumo selecionado." };
   }
 
+  const discount = parseDiscount(formData);
+  if (discount && !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)) {
+    return { error: "Você não tem permissão para aplicar desconto." };
+  }
+
   try {
     await registerCombinedCheckout({
       idempotencyKey: combinedIdempotencyKey,
@@ -182,6 +209,7 @@ export async function registerCombinedCheckoutAction(
         orderIdempotencyKey,
         items,
         payments,
+        discount,
       },
     });
   } catch (error) {

@@ -10,9 +10,12 @@ import {
 import { registerPaymentInTx, registerSchema, RegisterPaymentError } from "./register-payment";
 import { requestClosingInTx, RequestClosingError } from "./request-closing";
 import { closeTableInTx, CloseTableError } from "./close-table";
-import { canCloseTable } from "@/domain/service-session/closing";
+import { recalculateSessionTotals } from "./recalculate-totals";
+import { canCloseTable, canModifyClosingCharges } from "@/domain/service-session/closing";
 import { isValidPdvPaymentLine } from "@/domain/service-session/combined-checkout";
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
+import { writeAuditLog } from "@/application/audit/write-audit-log";
+import { clampDecimal, toDecimal, ZERO } from "@/lib/money";
 import { publishChange } from "@/lib/realtime/publish";
 import { sectorChannel } from "@/lib/realtime/channels";
 import { sessionRealtimeChannels } from "./session-realtime";
@@ -36,6 +39,22 @@ export const pdvSaleSchema = z.object({
   // allocations, que não existe para produto de loja). Mais de uma linha =
   // mais de uma forma de pagamento (regra 13 do CLAUDE.md).
   payments: z.array(registerSchema).min(1),
+  // Desconto da venda de balcão (pedido do usuário, 2026-11-06: "tira os
+  // centavos" ou cliente que comprou bastante) — sempre valor fixo em R$,
+  // nunca percentual (diferente do desconto de mesa/fechamento, que tem
+  // os dois tipos; aqui só existe o caso que o usuário descreveu). Motivo
+  // obrigatório, mesma regra 14 do CLAUDE.md que já vale pro desconto de
+  // mesa.
+  discount: z
+    .object({
+      value: z.coerce.number().positive("Informe um valor de desconto maior que zero."),
+      reason: z
+        .string()
+        .trim()
+        .min(3, "Informe o motivo do desconto (mínimo 3 caracteres).")
+        .max(300),
+    })
+    .optional(),
 });
 
 export type SellPdvInput = z.input<typeof pdvSaleSchema>;
@@ -98,6 +117,60 @@ export async function sellPdvInTx(
   }
 
   await requestClosingInTx(tx, pdvSessionOpen.id, actorUserId);
+
+  if (data.discount) {
+    // Mesmo racional de apply-discount.ts (desconto de mesa), inline na
+    // mesma transação em vez de uma chamada separada — aqui a sessão do
+    // PDV nasce e fecha na mesma operação, não tem um "depois" em que o
+    // operador voltaria pra aplicar desconto numa tela própria.
+    // canModifyClosingCharges exige CLOSING (já é o status aqui, acabou
+    // de passar por requestClosingInTx acima) — mesma trava de sempre,
+    // só confirmada de propósito pra não divergir se a ordem das
+    // chamadas mudar no futuro.
+    const sessionForDiscount = await tx.serviceSession.findUniqueOrThrow({
+      where: { id: pdvSessionOpen.id },
+    });
+    if (!canModifyClosingCharges(sessionForDiscount.status)) {
+      throw new SellPdvError("Não foi possível aplicar o desconto nesta venda.");
+    }
+    const subtotal = toDecimal(sessionForDiscount.subtotalAmount);
+    const rawValue = toDecimal(data.discount.value);
+    // Nunca deixa o desconto passar do subtotal, mesmo digitado errado
+    // (regra 20/21 — nunca gerar saldo negativo por causa disso).
+    const amountApplied = clampDecimal(rawValue, ZERO, subtotal);
+
+    const discount = await tx.discount.create({
+      data: {
+        serviceSessionId: pdvSessionOpen.id,
+        type: "FIXED_AMOUNT",
+        value: rawValue,
+        amountApplied,
+        reason: data.discount.reason,
+        appliedById: actorUserId,
+      },
+    });
+
+    await writeAuditLog(tx, {
+      restaurantId: data.restaurantId,
+      userId: actorUserId,
+      tableId: null,
+      action: "discount.applied",
+      entityType: "Discount",
+      entityId: discount.id,
+      metadata: {
+        type: "FIXED_AMOUNT",
+        value: rawValue.toString(),
+        amountApplied: amountApplied.toString(),
+        reason: data.discount.reason,
+      },
+    });
+
+    await recalculateSessionTotals(tx, pdvSessionOpen.id, {
+      discountAmount: amountApplied,
+      serviceChargeAmount: sessionForDiscount.serviceChargeAmount,
+      paidAmount: sessionForDiscount.paidAmount,
+    });
+  }
 
   for (const line of data.payments) {
     await registerPaymentInTx(tx, pdvSessionOpen.id, actorUserId, line, {
