@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { openTable } from "@/application/service-session/open-table";
+import { createPickup } from "@/application/service-session/create-pickup";
 import { createOrder } from "@/application/order/create-order";
 import { voidPayment } from "@/application/service-session/register-payment";
 import {
@@ -12,7 +13,10 @@ import {
 // o exemplo completo do pedido original (mesa com consumo selecionado +
 // produto de loja, formas de pagamento manuais por origem, numa
 // confirmação só), idempotência do conjunto e estorno independente por
-// origem.
+// origem. Ampliado em 2026-11-06 (pedido do usuário) para cobrir
+// retirada no lugar da mesa — registerCombinedCheckout nunca validou
+// `type: "TABLE"`, só precisa de um ServiceSession em aberto qualquer;
+// este teste prova isso na prática, não só por leitura do código.
 describe("registerCombinedCheckout (ADR 0010)", () => {
   let restaurantId: string;
   let userId: string;
@@ -22,6 +26,7 @@ describe("registerCombinedCheckout (ADR 0010)", () => {
   let pixMethodId: string;
   let dinheiroMethodId: string;
   const createdTableIds: string[] = [];
+  const createdPickupSessionIds: string[] = [];
   const createdPdvSessionIds: string[] = [];
   const createdCombinedCheckoutIds: string[] = [];
   let categoryId: string;
@@ -87,6 +92,7 @@ describe("registerCombinedCheckout (ADR 0010)", () => {
   afterAll(async () => {
     const allSessionIds = [
       ...createdPdvSessionIds,
+      ...createdPickupSessionIds,
       ...(
         await prisma.serviceSession.findMany({
           where: { tableId: { in: createdTableIds } },
@@ -124,6 +130,23 @@ describe("registerCombinedCheckout (ADR 0010)", () => {
       serviceSessionId: session.id,
       waiterId: userId,
       idempotencyKey: `comb-${session.id}`,
+      items,
+    });
+    return { session, order };
+  }
+
+  async function openPickupWithItems(items: { productId: string; quantity: number }[]) {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const session = await createPickup({
+      restaurantId,
+      waiterId: userId,
+      customerName: `Cliente combinado ${suffix}`,
+    });
+    createdPickupSessionIds.push(session.id);
+    const order = await createOrder({
+      serviceSessionId: session.id,
+      waiterId: userId,
+      idempotencyKey: `comb-pickup-${session.id}`,
       items,
     });
     return { session, order };
@@ -254,6 +277,63 @@ describe("registerCombinedCheckout (ADR 0010)", () => {
       where: { id: mesaPaymentReloaded.id },
     });
     expect(mesaReloaded.voidedAt).toBeNull();
+  });
+
+  it("cobre retirada (seleção de consumo) + loja (picanha) numa confirmação só — pedido do usuário, 2026-11-06", async () => {
+    const { session, order } = await openPickupWithItems([{ productId: hamburguerId, quantity: 1 }]);
+    const hamburguerItem = order.items.find((i) => i.productId === hamburguerId)!;
+
+    const combinedCheckout = await registerCombinedCheckout({
+      idempotencyKey: `combinado-pickup-${session.id}`,
+      registeredById: userId,
+      table: {
+        serviceSessionId: session.id,
+        payments: [
+          {
+            paymentMethodId: pixMethodId,
+            idempotencyKey: `combinado-pickup-pagto-${session.id}`,
+            allocations: [{ type: "AMOUNT", orderItemIds: [hamburguerItem.id], mode: "FULL" }],
+          },
+        ],
+      },
+      pdv: {
+        restaurantId,
+        waiterId: userId,
+        orderIdempotencyKey: `combinado-pickup-pdv-pedido-${session.id}`,
+        items: [{ productId: picanhaId, quantity: 1 }],
+        payments: [
+          {
+            paymentMethodId: dinheiroMethodId,
+            amount: 110,
+            idempotencyKey: `combinado-pickup-pdv-dinheiro-${session.id}`,
+          },
+        ],
+      },
+    });
+    createdCombinedCheckoutIds.push(combinedCheckout.id);
+
+    const payments = await prisma.payment.findMany({
+      where: { combinedCheckoutId: combinedCheckout.id },
+    });
+    // Retirada: 35. Loja: 110. Dois Payment, cada um na sua própria
+    // sessão — mesma garantia da seção 7 da ADR, agora com retirada no
+    // lugar da mesa.
+    expect(payments).toHaveLength(2);
+    expect(payments.map((p) => p.amount.toString()).sort()).toEqual(["110", "35"]);
+    createdPdvSessionIds.push(
+      ...new Set(
+        payments.filter((p) => p.serviceSessionId !== session.id).map((p) => p.serviceSessionId),
+      ),
+    );
+
+    // Retirada continua OPEN e PICKUP, saldo zerado — nunca fecha por
+    // conta do checkout combinado, igual já valia pra mesa.
+    const pickupSession = await prisma.serviceSession.findUniqueOrThrow({
+      where: { id: session.id },
+    });
+    expect(pickupSession.type).toBe("PICKUP");
+    expect(pickupSession.status).toBe("OPEN");
+    expect(pickupSession.balanceAmount.toString()).toBe("0");
   });
 
   it("rejeita pagamento da mesa sem seleção de itens (allocations) dentro do checkout combinado", async () => {

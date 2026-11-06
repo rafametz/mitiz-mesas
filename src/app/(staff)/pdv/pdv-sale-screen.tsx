@@ -15,9 +15,9 @@ import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
 import { registerCombinedCheckoutAction, sellPdvAction, type FormState } from "./actions";
 import {
-  TableConsumptionPicker,
-  type TableOption,
-  type TableSelection,
+  ConsumptionPicker,
+  type ConsumptionOption,
+  type ConsumptionSelection,
 } from "./table-consumption-picker";
 
 type ProductOption = {
@@ -79,21 +79,23 @@ export function PdvSaleScreen({
   restaurantId,
   products,
   paymentMethods,
-  tables,
+  consumptionOptions,
 }: {
   restaurantId: string;
   products: ProductOption[];
   paymentMethods: PaymentMethodOption[];
-  tables: TableOption[];
+  consumptionOptions: ConsumptionOption[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  // Pagamento Combinado (ADR 0010): com consumo de mesa selecionado, a
-  // confirmação final vira registerCombinedCheckoutAction em vez de
-  // sellPdvAction — mesmo carrinho de loja, só muda o que acontece ao
-  // confirmar.
-  const [mesaSelection, setMesaSelection] = useState<TableSelection | null>(null);
-  const action = mesaSelection
+  // Pagamento Combinado (ADR 0010; ampliado pra retirada em 2026-11-06):
+  // com consumo de mesa OU retirada selecionado, a confirmação final
+  // vira registerCombinedCheckoutAction em vez de sellPdvAction — mesmo
+  // carrinho de loja, só muda o que acontece ao confirmar.
+  const [consumptionSelection, setConsumptionSelection] = useState<ConsumptionSelection | null>(
+    null,
+  );
+  const action = consumptionSelection
     ? registerCombinedCheckoutAction.bind(null, restaurantId)
     : sellPdvAction.bind(null, restaurantId);
   const [state, formAction, isPending] = useActionState(action, initialState);
@@ -125,7 +127,7 @@ export function PdvSaleScreen({
     if (wasPending.current && !isPending && state.success) {
       showToast("Venda registrada.");
       setCart([]);
-      setMesaSelection(null);
+      setConsumptionSelection(null);
       setCheckoutOpen(false);
       setCartSheetOpen(false);
       setOrderIdempotencyKey(crypto.randomUUID());
@@ -201,16 +203,17 @@ export function PdvSaleScreen({
 
   // "Cancelar venda" (CartPanel) — equivalente ao CANCELAR (F9) do PDV do
   // VHSYS que a equipe já usa: limpa tudo que foi lançado até agora (itens
-  // da loja + consumo de mesa selecionado) numa ação só, em vez de remover
-  // item por item. Confirmação porque desfaz trabalho em andamento.
+  // da loja + consumo de mesa ou retirada selecionado) numa ação só, em
+  // vez de remover item por item. Confirmação porque desfaz trabalho em
+  // andamento.
   function requestClear() {
-    if (cart.length === 0 && !mesaSelection) return;
+    if (cart.length === 0 && !consumptionSelection) return;
     setClearConfirmOpen(true);
   }
 
   function confirmClear() {
     setCart([]);
-    setMesaSelection(null);
+    setConsumptionSelection(null);
     setClearConfirmOpen(false);
   }
 
@@ -234,7 +237,7 @@ export function PdvSaleScreen({
   }
 
   const lojaTotal = round2(cart.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0));
-  const tableTotal = round2((mesaSelection?.totalCents ?? 0) / 100);
+  const tableTotal = round2((consumptionSelection?.totalCents ?? 0) / 100);
   const grandTotal = round2(lojaTotal + tableTotal);
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0);
 
@@ -242,10 +245,10 @@ export function PdvSaleScreen({
     paymentLines.reduce((sum, line) => sum + parseBRLInput(line.amountInput), 0),
   );
   const remaining = round2(lojaTotal - paymentsTotal);
-  const tableLegReady = !mesaSelection || Boolean(tablePaymentMethodId);
+  const tableLegReady = !consumptionSelection || Boolean(tablePaymentMethodId);
 
   function openCheckout() {
-    if (cart.length === 0 && !mesaSelection) return;
+    if (cart.length === 0 && !consumptionSelection) return;
     setPaymentLines(lojaTotal > 0 ? [newPaymentLine(paymentMethods[0]?.id ?? "", lojaTotal)] : []);
     setTablePaymentMethodId(paymentMethods[0]?.id ?? "");
     setPaymentError(null);
@@ -289,19 +292,19 @@ export function PdvSaleScreen({
     };
   });
   const cartPayload = cart.map((line) => ({ productId: line.productId, quantity: line.quantity }));
-  const tableAllocationsPayload = mesaSelection?.entries.map((entry) => entry.payload) ?? [];
+  const tableAllocationsPayload = consumptionSelection?.entries.map((entry) => entry.payload) ?? [];
 
   const lojaLegReady =
     lojaTotal === 0
       ? paymentsPayload.length === 0
       : Math.abs(remaining) < 0.005 && paymentsPayload.every((p) => p.amount > 0);
-  const canConfirm = lojaLegReady && tableLegReady && (cart.length > 0 || Boolean(mesaSelection));
+  const canConfirm = lojaLegReady && tableLegReady && (cart.length > 0 || Boolean(consumptionSelection));
 
   function handleSubmit(formData: FormData) {
     if (!canConfirm) {
       setPaymentError(
         !tableLegReady
-          ? "Selecione a forma de pagamento da mesa."
+          ? "Selecione a forma de pagamento do consumo selecionado."
           : remaining > 0
             ? `Ainda falta receber ${formatBRLNumber(remaining)} da loja.`
             : "A soma das formas de pagamento da loja não pode passar do total.",
@@ -312,8 +315,8 @@ export function PdvSaleScreen({
     formAction(formData);
   }
 
-  function handleTableConfirm(selection: TableSelection | null) {
-    setMesaSelection(selection);
+  function handleConsumptionConfirm(selection: ConsumptionSelection | null) {
+    setConsumptionSelection(selection);
     setTablePickerOpen(false);
   }
 
@@ -333,9 +336,9 @@ export function PdvSaleScreen({
           data-testid="pdv-add-table-mobile"
         >
           <Table2 className="h-4 w-4" aria-hidden />
-          {mesaSelection
-            ? `Alterar consumo de mesa — Mesa ${mesaSelection.tableNumber}`
-            : "+ Adicionar consumo de mesa"}
+          {consumptionSelection
+            ? `Alterar consumo — ${consumptionSelection.label}`
+            : "+ Adicionar consumo de mesa ou retirada"}
         </Button>
 
         <SearchField
@@ -424,20 +427,20 @@ export function PdvSaleScreen({
         <div className="lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)] lg:flex-col">
           <CartPanel
             cart={cart}
-            mesaSelection={mesaSelection}
+            consumptionSelection={consumptionSelection}
             total={grandTotal}
             itemCount={itemCount}
             onSetQuantity={setLineQuantity}
             onRemove={removeLine}
             onCheckout={openCheckout}
             onAddTable={() => setTablePickerOpen(true)}
-            onRemoveTable={() => setMesaSelection(null)}
+            onRemoveTable={() => setConsumptionSelection(null)}
             onRequestClear={requestClear}
           />
         </div>
       </div>
 
-      {(cart.length > 0 || mesaSelection) && !cartSheetOpen && !checkoutOpen && (
+      {(cart.length > 0 || consumptionSelection) && !cartSheetOpen && !checkoutOpen && (
         <button
           type="button"
           onClick={() => setCartSheetOpen(true)}
@@ -445,7 +448,7 @@ export function PdvSaleScreen({
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <ShoppingCart className="h-4 w-4" aria-hidden />
-            {itemCount} item(ns){mesaSelection ? ` + Mesa ${mesaSelection.tableNumber}` : ""}
+            {itemCount} item(ns){consumptionSelection ? ` + ${consumptionSelection.label}` : ""}
           </span>
           <span className="tabular text-sm font-semibold">
             Ver carrinho · {formatBRLNumber(grandTotal)}
@@ -472,14 +475,14 @@ export function PdvSaleScreen({
             </div>
             <CartPanel
               cart={cart}
-              mesaSelection={mesaSelection}
+              consumptionSelection={consumptionSelection}
               total={grandTotal}
               itemCount={itemCount}
               onSetQuantity={setLineQuantity}
               onRemove={removeLine}
               onCheckout={openCheckout}
               onAddTable={() => setTablePickerOpen(true)}
-              onRemoveTable={() => setMesaSelection(null)}
+              onRemoveTable={() => setConsumptionSelection(null)}
               onRequestClear={requestClear}
               bare
             />
@@ -488,10 +491,10 @@ export function PdvSaleScreen({
       )}
 
       {tablePickerOpen && (
-        <TableConsumptionPicker
-          tables={tables}
-          initialSelection={mesaSelection}
-          onConfirm={handleTableConfirm}
+        <ConsumptionPicker
+          options={consumptionOptions}
+          initialSelection={consumptionSelection}
+          onConfirm={handleConsumptionConfirm}
           onClose={() => setTablePickerOpen(false)}
         />
       )}
@@ -499,7 +502,7 @@ export function PdvSaleScreen({
       <ConfirmDialog
         open={clearConfirmOpen}
         title="Cancelar venda em andamento?"
-        description="Remove todos os itens e o consumo de mesa adicionados até agora. Essa ação não pode ser desfeita."
+        description="Remove todos os itens e o consumo de mesa ou retirada adicionados até agora. Essa ação não pode ser desfeita."
         onCancel={() => setClearConfirmOpen(false)}
         confirmSlot={
           <Button variant="danger" onClick={confirmClear}>
@@ -530,18 +533,23 @@ export function PdvSaleScreen({
               </span>
             </div>
 
-            {mesaSelection && (
+            {consumptionSelection && (
               <div className="flex flex-col gap-2 rounded-card border border-line p-3">
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-semibold text-ink">
-                    Mesa {mesaSelection.tableNumber}
+                    {consumptionSelection.label}
                   </span>
                   <span className="tabular text-sm font-semibold text-ink">
                     {formatBRLNumber(tableTotal)}
                   </span>
                 </div>
                 <SelectField
-                  label="Forma de pagamento da mesa"
+                  // Distinto do "Forma de pagamento" da perna da loja
+                  // (evita rótulo repetido quando só há uma forma de
+                  // pagamento lá, sem índice) — mantém exatamente "...da
+                  // mesa" pra sessão de mesa (texto já coberto por teste
+                  // e2e), acrescenta "...da retirada" pro novo caso.
+                  label={`Forma de pagamento da ${consumptionSelection.kind === "table" ? "mesa" : "retirada"}`}
                   name="tablePaymentMethodId"
                   value={tablePaymentMethodId}
                   onChange={(e) => setTablePaymentMethodId(e.target.value)}
@@ -557,7 +565,7 @@ export function PdvSaleScreen({
 
             {lojaTotal > 0 && (
               <div className="flex flex-col gap-3">
-                {mesaSelection && (
+                {consumptionSelection && (
                   <h3 className="text-sm font-semibold text-ink">
                     Loja · {formatBRLNumber(lojaTotal)}
                   </h3>
@@ -658,7 +666,7 @@ export function PdvSaleScreen({
               }`}
             >
               {!tableLegReady
-                ? "Selecione a forma de pagamento da mesa."
+                ? "Selecione a forma de pagamento do consumo selecionado."
                 : canConfirm
                   ? "Valor confere com o total da venda."
                   : remaining > 0
@@ -670,14 +678,22 @@ export function PdvSaleScreen({
               <input type="hidden" name="orderIdempotencyKey" value={orderIdempotencyKey} />
               <input type="hidden" name="cartJson" value={JSON.stringify(cartPayload)} />
               <input type="hidden" name="paymentsJson" value={JSON.stringify(paymentsPayload)} />
-              {mesaSelection && (
+              {consumptionSelection && (
                 <>
                   <input
                     type="hidden"
                     name="combinedIdempotencyKey"
                     value={combinedIdempotencyKey}
                   />
-                  <input type="hidden" name="tableSessionId" value={mesaSelection.sessionId} />
+                  {/* Nomes "table*" mantidos de propósito (ADR 0010) mesmo
+                      cobrindo retirada agora — registerCombinedCheckout
+                      (aplicação) e registerCombinedCheckoutAction (server
+                      action) já tratam isto como "qualquer ServiceSession
+                      em aberto", nunca validaram contra type: "TABLE".
+                      redirectPath é a rota certa pra revalidar depois
+                      (mesa ou retirada, actions.ts decide com base nela). */}
+                  <input type="hidden" name="tableSessionId" value={consumptionSelection.sessionId} />
+                  <input type="hidden" name="redirectPath" value={consumptionSelection.redirectPath} />
                   <input type="hidden" name="tablePaymentMethodId" value={tablePaymentMethodId} />
                   <input
                     type="hidden"
@@ -709,7 +725,7 @@ export function PdvSaleScreen({
 
 function CartPanel({
   cart,
-  mesaSelection,
+  consumptionSelection,
   total,
   itemCount,
   onSetQuantity,
@@ -721,7 +737,7 @@ function CartPanel({
   bare = false,
 }: {
   cart: CartLine[];
-  mesaSelection: TableSelection | null;
+  consumptionSelection: ConsumptionSelection | null;
   total: number;
   itemCount: number;
   onSetQuantity: (key: string, quantityInput: string) => void;
@@ -732,7 +748,7 @@ function CartPanel({
   onRequestClear: () => void;
   bare?: boolean;
 }) {
-  const isEmpty = cart.length === 0 && !mesaSelection;
+  const isEmpty = cart.length === 0 && !consumptionSelection;
 
   const content = (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -753,20 +769,20 @@ function CartPanel({
         data-testid="pdv-add-table-desktop"
       >
         <Table2 className="h-4 w-4" aria-hidden />
-        {mesaSelection ? "Alterar consumo de mesa" : "+ Adicionar consumo de mesa"}
+        {consumptionSelection ? "Alterar consumo" : "+ Adicionar consumo de mesa ou retirada"}
       </Button>
 
-      {mesaSelection && (
+      {consumptionSelection && (
         <div className="flex items-center justify-between gap-2 rounded-card border border-wine/30 bg-wine/5 p-2.5">
           <div>
             <div data-testid="pdv-cart-table-chip" className="text-sm font-medium text-ink">
-              Mesa {mesaSelection.tableNumber}
+              {consumptionSelection.label}
             </div>
             <div className="tabular text-xs text-muted">
-              {formatBRLNumber(mesaSelection.totalCents / 100)}
+              {formatBRLNumber(consumptionSelection.totalCents / 100)}
             </div>
           </div>
-          <IconButton label="Remover consumo de mesa" icon={Trash2} onClick={onRemoveTable} />
+          <IconButton label="Remover consumo selecionado" icon={Trash2} onClick={onRemoveTable} />
         </div>
       )}
 

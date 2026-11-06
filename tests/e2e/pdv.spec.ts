@@ -179,15 +179,18 @@ test.describe("Módulo 17 — PDV e Pagamento Combinado (ADR 0010)", () => {
         .first(),
     ).toBeVisible({ timeout: NAV_TIMEOUT });
 
-    // PDV: "+ Adicionar consumo de mesa" — seleciona a mesa recém-aberta,
-    // paga o item inteiro (seleção, nada gravado ainda).
+    // PDV: "+ Adicionar consumo de mesa ou retirada" — seleciona a mesa
+    // recém-aberta, paga o item inteiro (seleção, nada gravado ainda).
     await page.goto("/pdv");
-    // Dois botões "+ Adicionar consumo de mesa" existem no DOM ao mesmo
-    // tempo (um só pra celular, outro só pro painel fixo do desktop — CSS
-    // alterna qual aparece, os dois continuam no documento) — testid
-    // evita a ambiguidade de "getByRole" achar os dois.
+    // Dois botões "+ Adicionar consumo de mesa ou retirada" existem no
+    // DOM ao mesmo tempo (um só pra celular, outro só pro painel fixo do
+    // desktop — CSS alterna qual aparece, os dois continuam no
+    // documento) — testid evita a ambiguidade de "getByRole" achar os
+    // dois.
     await page.getByTestId("pdv-add-table-desktop").click();
-    await expect(page.getByRole("heading", { name: "Adicionar consumo de mesa" })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: "Adicionar consumo de mesa ou retirada" }),
+    ).toBeVisible({
       timeout: NAV_TIMEOUT,
     });
     await page.getByRole("button", { name: new RegExp(`Mesa ${tableNumber}`) }).click();

@@ -107,12 +107,18 @@ export async function sellPdvAction(
   return { error: null, success: true };
 }
 
-// Pagamento Combinado (ADR 0010, docs/architecture/decisions/0010-pagamento-combinado-mesa-pdv.md):
-// "+ Adicionar consumo de mesa" dentro do PDV. A perna da mesa sempre vem
-// como UMA linha de pagamento (uma forma só) cobrindo toda a seleção —
-// dividir o valor da mesa entre várias formas fica para uma extensão
-// futura (decisão: manter o caso comum simples primeiro); a perna da
-// loja já aceita múltiplas formas, igual a sellPdvAction.
+// Pagamento Combinado (ADR 0010, docs/architecture/decisions/0010-pagamento-combinado-mesa-pdv.md;
+// ampliado pra retirada em 2026-11-06, pedido do usuário: cliente que já
+// tinha uma retirada aberta volta ao balcão e compra mais alguma coisa).
+// "+ Adicionar consumo de mesa ou retirada" dentro do PDV. A perna da
+// mesa/retirada sempre vem como UMA linha de pagamento (uma forma só)
+// cobrindo toda a seleção — dividir o valor entre várias formas fica
+// para uma extensão futura (decisão: manter o caso comum simples
+// primeiro); a perna da loja já aceita múltiplas formas, igual a
+// sellPdvAction. Nomes de campo "table*" mantidos de propósito — nunca
+// validaram contra `type: "TABLE"`, sempre trataram isto como "qualquer
+// ServiceSession em aberto" (ver registerCombinedCheckout, camada de
+// aplicação).
 export async function registerCombinedCheckoutAction(
   restaurantId: string,
   _prevState: FormState,
@@ -123,7 +129,10 @@ export async function registerCombinedCheckoutAction(
   const combinedIdempotencyKey = String(formData.get("combinedIdempotencyKey") ?? "");
   const orderIdempotencyKey = String(formData.get("orderIdempotencyKey") ?? "");
   const tableSessionId = String(formData.get("tableSessionId") ?? "");
-  const tableId = String(formData.get("tableId") ?? "");
+  // "/mesas/{tableId}" ou "/retiradas/{sessionId}", conforme o tipo da
+  // sessão escolhida (table-consumption-picker.tsx) — única forma de
+  // revalidar a tela certa sem o server action precisar saber o tipo.
+  const redirectPath = String(formData.get("redirectPath") ?? "");
   const tablePaymentMethodId = String(formData.get("tablePaymentMethodId") ?? "");
   const tablePaymentIdempotencyKey = String(formData.get("tablePaymentIdempotencyKey") ?? "");
   if (
@@ -150,7 +159,7 @@ export async function registerCombinedCheckoutAction(
   if (payments.length === 0)
     return { error: "Informe ao menos uma forma de pagamento para a loja." };
   if (!Array.isArray(tableAllocations) || tableAllocations.length === 0) {
-    return { error: "Selecione ao menos um item da mesa." };
+    return { error: "Selecione ao menos um item do consumo selecionado." };
   }
 
   try {
@@ -202,9 +211,10 @@ export async function registerCombinedCheckoutAction(
 
   revalidatePath("/pdv");
   revalidatePath("/mesas");
-  if (tableId) {
-    revalidatePath(`/mesas/${tableId}`);
-    revalidatePath(`/mesas/${tableId}/pagamentos`);
+  revalidatePath("/retiradas");
+  if (redirectPath) {
+    revalidatePath(redirectPath);
+    revalidatePath(`${redirectPath}/pagamentos`);
   }
   return { error: null, success: true };
 }
