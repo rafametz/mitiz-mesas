@@ -19,7 +19,10 @@ test("login com credenciais válidas entra e permite sair", async ({ page }) => 
 
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(email!);
-  await page.getByLabel("Senha").fill(password!);
+  // exact: true — desde a repaginação do login (Fase 13, 2026-11-05), o
+  // botão de mostrar/ocultar senha tem aria-label "Mostrar senha"/
+  // "Ocultar senha", que combina com "Senha" por substring.
+  await page.getByLabel("Senha", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Entrar" }).click();
 
   // Timeout maior aqui de propósito: o round-trip real (Server Action ->
@@ -45,7 +48,7 @@ test("login com senha errada mostra mensagem de erro", async ({ page }) => {
 
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(email!);
-  await page.getByLabel("Senha").fill("senha-incorreta-123");
+  await page.getByLabel("Senha", { exact: true }).fill("senha-incorreta-123");
   await page.getByRole("button", { name: "Entrar" }).click();
 
   // getByRole("alert") também casa com o route-announcer interno do

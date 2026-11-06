@@ -11,7 +11,7 @@ const NAV_TIMEOUT = 30000;
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(email!);
-  await page.getByLabel("Senha").fill(password!);
+  await page.getByLabel("Senha", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Entrar" }).click();
   // Usuário de teste é Administrador — cai direto em /admin/mesas
   // (getPostLoginPath), não mais em "/".
