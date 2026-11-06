@@ -545,9 +545,16 @@ export function PdvSaleScreen({
           {/* Cantos arredondados e rolagem separados — mesmo motivo do
               diálogo "Receber" abaixo (relato do usuário, 2026-11-06):
               overflow-y-auto e rounded-* no mesmo elemento deixa a barra
-              de rolagem "quadrar" o canto onde ela aparece. */}
-          <div className="flex max-h-[85vh] flex-col overflow-hidden rounded-t-panel bg-bg shadow-panel">
-            <div className="relative min-h-0 flex-1 overflow-y-auto p-4 pb-6">
+              de rolagem "quadrar" o canto onde ela aparece. `relative`
+              aqui (não no elemento de dentro) é essencial — sem ele, esta
+              folha some atrás do botão `absolute` do fundo escurecido
+              acima (um elemento posicionado sempre pinta por cima de um
+              não-posicionado com z-index:auto, mesmo vindo depois no
+              DOM): achado ao mover `relative` sem querer pro elemento
+              errado nesta mesma correção, relatado pelo usuário como "a
+              cor do carrinho ficou esquisita, misturada com o fundo". */}
+          <div className="relative flex max-h-[85vh] flex-col overflow-hidden rounded-t-panel bg-bg shadow-panel">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-6">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-ink">Venda</h2>
                 <IconButton
