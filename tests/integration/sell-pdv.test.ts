@@ -153,6 +153,27 @@ describe("sellPdv", () => {
     expect(discount.appliedById).toBe(userId);
   });
 
+  it("motivo do desconto é opcional — em branco grava um texto padrão (pedido do usuário, 2026-11-06)", async () => {
+    const orderIdempotencyKey = `pdv-desconto-sem-motivo-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      items: [{ productId: picanhaId, quantity: 1 }], // 110
+      discount: { value: 5 }, // sem reason
+      payments: [
+        { paymentMethodId: pixMethodId, amount: 105, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const discount = await prisma.discount.findFirstOrThrow({
+      where: { serviceSessionId: order.serviceSessionId },
+    });
+    expect(discount.amountApplied.toString()).toBe("5");
+    expect(discount.reason).toBe("Sem motivo informado");
+  });
+
   it("desconto quase total ainda fecha certo — amountApplied nunca passa do subtotal", async () => {
     // Desconto maior que o subtotal zeraria o total e nenhum pagamento
     // seria aceito (registerPaymentInTx rejeita valor acima do saldo,

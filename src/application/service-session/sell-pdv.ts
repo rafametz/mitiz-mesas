@@ -43,16 +43,14 @@ export const pdvSaleSchema = z.object({
   // centavos" ou cliente que comprou bastante) — sempre valor fixo em R$,
   // nunca percentual (diferente do desconto de mesa/fechamento, que tem
   // os dois tipos; aqui só existe o caso que o usuário descreveu). Motivo
-  // obrigatório, mesma regra 14 do CLAUDE.md que já vale pro desconto de
-  // mesa.
+  // opcional (pedido do usuário, 2026-11-06: diferente do desconto de
+  // mesa/regra 14 do CLAUDE.md, aqui o caixa não pode ficar travado sem
+  // escrever nada) — em branco vira um texto padrão fixo na gravação
+  // (sellPdvInTx), nunca string vazia (Discount.reason não aceita null).
   discount: z
     .object({
       value: z.coerce.number().positive("Informe um valor de desconto maior que zero."),
-      reason: z
-        .string()
-        .trim()
-        .min(3, "Informe o motivo do desconto (mínimo 3 caracteres).")
-        .max(300),
+      reason: z.string().trim().max(300).optional(),
     })
     .optional(),
 });
@@ -138,6 +136,10 @@ export async function sellPdvInTx(
     // Nunca deixa o desconto passar do subtotal, mesmo digitado errado
     // (regra 20/21 — nunca gerar saldo negativo por causa disso).
     const amountApplied = clampDecimal(rawValue, ZERO, subtotal);
+    // Motivo opcional (pedido do usuário, 2026-11-06) — Discount.reason
+    // não aceita null no schema, então em branco vira um texto padrão em
+    // vez de string vazia (fica estranho na tela de auditoria).
+    const reason = data.discount.reason?.trim() || "Sem motivo informado";
 
     const discount = await tx.discount.create({
       data: {
@@ -145,7 +147,7 @@ export async function sellPdvInTx(
         type: "FIXED_AMOUNT",
         value: rawValue,
         amountApplied,
-        reason: data.discount.reason,
+        reason,
         appliedById: actorUserId,
       },
     });
@@ -161,7 +163,7 @@ export async function sellPdvInTx(
         type: "FIXED_AMOUNT",
         value: rawValue.toString(),
         amountApplied: amountApplied.toString(),
-        reason: data.discount.reason,
+        reason,
       },
     });
 

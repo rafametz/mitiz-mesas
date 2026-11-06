@@ -45,14 +45,12 @@ export const registerCombinedCheckoutSchema = z.object({
     // formato de pdvSaleSchema (sell-pdv.ts), repassado direto pra
     // sellPdvInTx abaixo. Nunca se aplica à perna da mesa/retirada, que
     // já tem seu próprio mecanismo de desconto na tela de fechamento.
+    // Motivo opcional — sellPdvInTx grava um texto padrão quando em
+    // branco (Discount.reason não aceita null).
     discount: z
       .object({
         value: z.coerce.number().positive("Informe um valor de desconto maior que zero."),
-        reason: z
-          .string()
-          .trim()
-          .min(3, "Informe o motivo do desconto (mínimo 3 caracteres).")
-          .max(300),
+        reason: z.string().trim().max(300).optional(),
       })
       .optional(),
   }),

@@ -97,7 +97,12 @@ export function ConsumptionPicker({
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-end bg-ink/40 p-0 sm:justify-center sm:p-4">
-      <div className="flex max-h-[90vh] w-full flex-col gap-4 overflow-y-auto rounded-t-panel bg-bg p-5 shadow-panel sm:max-w-lg sm:rounded-panel">
+      {/* Cantos arredondados e rolagem separados (relato do usuário,
+          2026-11-06): overflow-y-auto e rounded-* no mesmo elemento
+          deixa a barra de rolagem "quadrar" o canto onde ela aparece —
+          mesmo ajuste em pdv-sale-screen.tsx. */}
+      <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-panel bg-bg shadow-panel sm:max-w-lg sm:rounded-panel">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {selected && (
@@ -188,6 +193,7 @@ export function ConsumptionPicker({
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );

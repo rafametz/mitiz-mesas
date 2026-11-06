@@ -309,7 +309,6 @@ export function PdvSaleScreen({
   // sempre exige ao menos uma. Mensagem clara em vez de deixar tentar e
   // falhar no fim.
   const fullyDiscounted = lojaTotalCents > 0 && lojaTargetCents === 0;
-  const discountReasonReady = discountCentsClamped === 0 || discountReason.trim().length >= 3;
 
   function openCheckout() {
     if (cart.length === 0 && !consumptionSelection) return;
@@ -374,7 +373,7 @@ export function PdvSaleScreen({
   const lojaLegReady =
     lojaTotalCents === 0
       ? paymentsPayload.length === 0
-      : !fullyDiscounted && remainingCents === 0 && discountReasonReady;
+      : !fullyDiscounted && remainingCents === 0;
   const canConfirm = lojaLegReady && tableLegReady && (cart.length > 0 || Boolean(consumptionSelection));
 
   function handleSubmit(formData: FormData) {
@@ -384,11 +383,9 @@ export function PdvSaleScreen({
           ? "Selecione a forma de pagamento do consumo selecionado."
           : fullyDiscounted
             ? "O desconto cobre a venda inteira. Reduza o valor pra confirmar."
-            : !discountReasonReady
-              ? "Informe o motivo do desconto (mínimo 3 caracteres)."
-              : remainingCents > 0
-                ? `Ainda falta receber ${formatCents(remainingCents)} da loja.`
-                : "A soma das formas de pagamento da loja não pode passar do total.",
+            : remainingCents > 0
+              ? `Ainda falta receber ${formatCents(remainingCents)} da loja.`
+              : "A soma das formas de pagamento da loja não pode passar do total.",
       );
       return;
     }
@@ -545,28 +542,34 @@ export function PdvSaleScreen({
             onClick={() => setCartSheetOpen(false)}
             className="absolute inset-0 bg-ink/40"
           />
-          <div className="relative max-h-[85vh] overflow-y-auto rounded-t-panel bg-bg p-4 pb-6 shadow-panel">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-ink">Venda</h2>
-              <IconButton
-                label="Fechar carrinho"
-                icon={X}
-                onClick={() => setCartSheetOpen(false)}
+          {/* Cantos arredondados e rolagem separados — mesmo motivo do
+              diálogo "Receber" abaixo (relato do usuário, 2026-11-06):
+              overflow-y-auto e rounded-* no mesmo elemento deixa a barra
+              de rolagem "quadrar" o canto onde ela aparece. */}
+          <div className="flex max-h-[85vh] flex-col overflow-hidden rounded-t-panel bg-bg shadow-panel">
+            <div className="relative min-h-0 flex-1 overflow-y-auto p-4 pb-6">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-ink">Venda</h2>
+                <IconButton
+                  label="Fechar carrinho"
+                  icon={X}
+                  onClick={() => setCartSheetOpen(false)}
+                />
+              </div>
+              <CartPanel
+                cart={cart}
+                consumptionSelection={consumptionSelection}
+                total={grandTotal}
+                itemCount={itemCount}
+                onSetQuantity={setLineQuantity}
+                onRemove={removeLine}
+                onCheckout={openCheckout}
+                onAddTable={() => setTablePickerOpen(true)}
+                onRemoveTable={() => setConsumptionSelection(null)}
+                onRequestClear={requestClear}
+                bare
               />
             </div>
-            <CartPanel
-              cart={cart}
-              consumptionSelection={consumptionSelection}
-              total={grandTotal}
-              itemCount={itemCount}
-              onSetQuantity={setLineQuantity}
-              onRemove={removeLine}
-              onCheckout={openCheckout}
-              onAddTable={() => setTablePickerOpen(true)}
-              onRemoveTable={() => setConsumptionSelection(null)}
-              onRequestClear={requestClear}
-              bare
-            />
           </div>
         </div>
       )}
@@ -594,7 +597,15 @@ export function PdvSaleScreen({
 
       {checkoutOpen && (
         <div className="fixed inset-0 z-40 flex flex-col items-center justify-end bg-ink/40 p-0 sm:justify-center sm:p-4">
-          <div className="flex max-h-[90vh] w-full flex-col gap-4 overflow-y-auto rounded-t-panel bg-bg p-5 shadow-panel sm:max-w-md sm:rounded-panel">
+          {/* Cantos arredondados e rolagem em elementos separados (relato
+              do usuário, 2026-11-06: lado direito ficava reto, lado
+              esquerdo curvo) — com overflow-y-auto e rounded-* no MESMO
+              elemento, a barra de rolagem nativa "quadra" o canto onde
+              ela aparece, em vez de respeitar a borda arredondada. O de
+              fora só corta (overflow-hidden) e arredonda; quem rola é o
+              de dentro, sem borda própria. */}
+          <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-panel bg-bg shadow-panel sm:max-w-md sm:rounded-panel">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-ink">Receber</h2>
               <IconButton
@@ -673,8 +684,7 @@ export function PdvSaleScreen({
                         value={discountReason}
                         onChange={(e) => setDiscountReason(e.target.value)}
                         maxLength={300}
-                        required
-                        hint="Mínimo 3 caracteres. Vai pra auditoria, igual ao desconto de mesa."
+                        hint="Vai pra auditoria, igual ao desconto de mesa."
                       />
                       <p className="tabular text-xs text-muted">
                         Subtotal {formatCents(lojaTotalCents)} − desconto{" "}
@@ -754,13 +764,11 @@ export function PdvSaleScreen({
                 ? "Selecione a forma de pagamento do consumo selecionado."
                 : fullyDiscounted
                   ? "O desconto cobre a venda inteira. Reduza o valor pra confirmar."
-                  : !discountReasonReady
-                    ? "Informe o motivo do desconto."
-                    : canConfirm
-                      ? "Valor confere com o total da venda."
-                      : remainingCents > 0
-                        ? `Falta receber ${formatCents(remainingCents)} da loja.`
-                        : `Soma da loja maior que o total. Ajuste os valores.`}
+                  : canConfirm
+                    ? "Valor confere com o total da venda."
+                    : remainingCents > 0
+                      ? `Falta receber ${formatCents(remainingCents)} da loja.`
+                      : `Soma da loja maior que o total. Ajuste os valores.`}
             </div>
 
             <form action={(formData) => handleSubmit(formData)} className="flex flex-col gap-2">
@@ -815,6 +823,7 @@ export function PdvSaleScreen({
                 Confirmar venda
               </SubmitButton>
             </form>
+          </div>
           </div>
         </div>
       )}
