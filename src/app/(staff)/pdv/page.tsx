@@ -122,7 +122,17 @@ export default async function PdvPage() {
               return {
                 sessionId: session.id,
                 kind: session.type === "TABLE" ? ("table" as const) : ("pickup" as const),
-                label: formatSessionLabel(session, session.table?.number),
+                // Retirada concatena o nome do cliente (relato do
+                // usuário, 2026-11-06): no seletor do PDV, "Retirada
+                // #N" sozinho não ajuda a identificar qual é qual —
+                // formatSessionLabel (compartilhado com produção/
+                // histórico/impressão) continua só com o número lá,
+                // o nome é um acréscimo só aqui, onde faz diferença
+                // escolher a retirada certa entre várias abertas.
+                label:
+                  session.type === "PICKUP" && session.customerName
+                    ? `${formatSessionLabel(session)} · ${session.customerName}`
+                    : formatSessionLabel(session, session.table?.number),
                 redirectPath,
                 balance: session.balanceAmount.toString(),
                 guestCount: session.guestCount,

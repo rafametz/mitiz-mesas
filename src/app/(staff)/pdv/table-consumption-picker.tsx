@@ -131,10 +131,10 @@ export function ConsumptionPicker({
                       onClick={() => selectOption(option)}
                       className="flex w-full items-center justify-between gap-2 rounded-card border border-line bg-surface p-3.5 text-left transition-colors hover:border-wine/40 active:bg-wine/5"
                     >
-                      <span className="flex items-center gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
                         <Icon className="h-4 w-4 shrink-0 text-muted" aria-hidden />
-                        <span>
-                          <span className="block text-sm font-semibold text-ink">
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-ink">
                             {option.label}
                           </span>
                           {option.kind === "table" && (
@@ -144,7 +144,7 @@ export function ConsumptionPicker({
                           )}
                         </span>
                       </span>
-                      <span className="tabular text-sm font-semibold text-gold-dark">
+                      <span className="tabular shrink-0 text-sm font-semibold text-gold-dark">
                         {Number(option.balance).toLocaleString("pt-BR", {
                           style: "currency",
                           currency: "BRL",
