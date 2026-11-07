@@ -25,6 +25,12 @@ const cartSchema = z.array(
     // pra sellPdv/registerCombinedCheckout, que revalidam de verdade
     // (sessão PDV + produto `unit = "KG"`) dentro de createOrderInTx.
     weightQuantity: z.number().positive().max(999.999).optional(),
+    // Preço promocional por kg no lançamento (pedido do usuário,
+    // 2026-11-08) — exige DISCOUNTS_APPLY, checado logo abaixo (mesma
+    // permissão do desconto da venda inteira); createOrderInTx garante
+    // de novo que nunca passa do preço de tabela.
+    weightUnitPriceOverride: z.number().positive().optional(),
+    weightUnitPriceOverrideReason: z.string().trim().max(300).optional(),
   }),
 );
 const paymentsSchema = z.array(
@@ -78,6 +84,15 @@ function parseDiscount(formData: FormData): DiscountInput {
   return { value, reason: String(formData.get("discountReason") ?? "").trim() };
 }
 
+// Preço promocional por kg no lançamento (pedido do usuário, 2026-11-08)
+// é uma forma de desconto — mesma permissão do desconto da venda inteira
+// (DISCOUNTS_APPLY), checada aqui porque createOrderInTx não tem acesso
+// às permissões do usuário, só à regra de dado (nunca passar do preço de
+// tabela).
+function hasWeightPriceOverride(items: z.infer<typeof cartSchema>): boolean {
+  return items.some((item) => item.weightUnitPriceOverride !== undefined);
+}
+
 // Carrinho e formas de pagamento montados no cliente (nada gravado até
 // aqui) e enviados como JSON em campos escondidos — mesmo padrão já usado
 // em mesas/[id]/pedidos (cartJson) e mesas/[id]/pagamentos (allocationsJson),
@@ -109,8 +124,12 @@ export async function sellPdvAction(
   const discount = parseDiscount(formData);
   // Mesma permissão que já trava o desconto de mesa (DISCOUNTS_APPLY) —
   // só checada quando tem desconto de verdade, pra não exigir nada a
-  // mais de quem nunca usa este campo.
-  if (discount && !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)) {
+  // mais de quem nunca usa este campo. Preço promocional por kg é a
+  // mesma permissão (também é desconto).
+  if (
+    (discount || hasWeightPriceOverride(items)) &&
+    !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)
+  ) {
     return { error: "Você não tem permissão para aplicar desconto." };
   }
 
@@ -192,7 +211,10 @@ export async function registerCombinedCheckoutAction(
   }
 
   const discount = parseDiscount(formData);
-  if (discount && !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)) {
+  if (
+    (discount || hasWeightPriceOverride(items)) &&
+    !hasPermission(user.permissions, PERMISSIONS.DISCOUNTS_APPLY)
+  ) {
     return { error: "Você não tem permissão para aplicar desconto." };
   }
 

@@ -246,6 +246,138 @@ describe("sellPdv", () => {
     expect(session.status).toBe("CLOSED");
   });
 
+  it("aplica preço promocional por kg no lançamento, com auditoria (pedido do usuário, 2026-11-08)", async () => {
+    const orderIdempotencyKey = `pdv-promo-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      // Tabela 59,90/kg, promoção 49,90/kg → 49,90 × 0,500 = 24,95.
+      items: [
+        {
+          productId: picanhaKgId,
+          quantity: 1,
+          weightQuantity: 0.5,
+          weightUnitPriceOverride: 49.9,
+          weightUnitPriceOverrideReason: "Promoção do dia",
+        },
+      ],
+      payments: [
+        { paymentMethodId: pixMethodId, amount: 24.95, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(item.weightQuantity?.toString()).toBe("0.5");
+    expect(item.weightUnitPriceAtOrder?.toString()).toBe("49.9");
+    expect(item.unitPrice.toString()).toBe("24.95");
+
+    const auditLog = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: "OrderItem", entityId: item.id, action: "order_item.weight_price_override" },
+    });
+    expect(auditLog.userId).toBe(userId);
+    const metadata = auditLog.metadata as Record<string, string>;
+    expect(metadata.catalogUnitPrice).toBe("59.9");
+    expect(metadata.overrideUnitPrice).toBe("49.9");
+    expect(metadata.reason).toBe("Promoção do dia");
+  });
+
+  it("casa a auditoria com o item certo quando dois itens do mesmo produto têm preços promocionais diferentes no mesmo pedido", async () => {
+    const orderIdempotencyKey = `pdv-promo-dupla-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      items: [
+        {
+          productId: picanhaKgId,
+          quantity: 1,
+          weightQuantity: 0.3,
+          weightUnitPriceOverride: 45,
+          weightUnitPriceOverrideReason: "Corte A",
+        },
+        {
+          productId: picanhaKgId,
+          quantity: 1,
+          weightQuantity: 0.4,
+          weightUnitPriceOverride: 50,
+          weightUnitPriceOverrideReason: "Corte B",
+        },
+      ],
+      payments: [
+        // 45×0.3=13.5, 50×0.4=20 → 33.5
+        { paymentMethodId: pixMethodId, amount: 33.5, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const items = await prisma.orderItem.findMany({
+      where: { orderId: order.id },
+      orderBy: { weightQuantity: "asc" },
+    });
+    expect(items).toHaveLength(2);
+
+    for (const item of items) {
+      const auditLog = await prisma.auditLog.findFirstOrThrow({
+        where: {
+          entityType: "OrderItem",
+          entityId: item.id,
+          action: "order_item.weight_price_override",
+        },
+      });
+      const metadata = auditLog.metadata as Record<string, string>;
+      // A auditoria do item precisa bater com o PRÓPRIO item (peso e preço
+      // gravados nele), não com o irmão — prova que o índice usado pra
+      // casar data.items com order.items (create-order.ts) não embaralhou
+      // os dois.
+      expect(metadata.weightQuantity).toBe(item.weightQuantity?.toString());
+      expect(metadata.overrideUnitPrice).toBe(item.weightUnitPriceAtOrder?.toString());
+    }
+  });
+
+  it("rejeita preço promocional maior que o preço de tabela", async () => {
+    const orderIdempotencyKey = `pdv-promo-invalida-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await expect(
+      sellPdv(userId, {
+        restaurantId,
+        waiterId: userId,
+        orderIdempotencyKey,
+        items: [
+          { productId: picanhaKgId, quantity: 1, weightQuantity: 0.5, weightUnitPriceOverride: 69.9 },
+        ],
+        payments: [
+          { paymentMethodId: pixMethodId, amount: 34.95, idempotencyKey: `${orderIdempotencyKey}-pix` },
+        ],
+      }),
+    ).rejects.toThrow(CreateOrderError);
+
+    const session = await prisma.serviceSession.findFirst({
+      where: { orders: { some: { idempotencyKey: orderIdempotencyKey } } },
+    });
+    if (session) createdSessionIds.push(session.id);
+  });
+
+  it("rejeita preço promocional em item sem peso", async () => {
+    const orderIdempotencyKey = `pdv-promo-sem-peso-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await expect(
+      sellPdv(userId, {
+        restaurantId,
+        waiterId: userId,
+        orderIdempotencyKey,
+        items: [{ productId: picanhaId, quantity: 1, weightUnitPriceOverride: 90 }],
+        payments: [
+          { paymentMethodId: pixMethodId, amount: 90, idempotencyKey: `${orderIdempotencyKey}-pix` },
+        ],
+      }),
+    ).rejects.toThrow(CreateOrderError);
+
+    const session = await prisma.serviceSession.findFirst({
+      where: { orders: { some: { idempotencyKey: orderIdempotencyKey } } },
+    });
+    if (session) createdSessionIds.push(session.id);
+  });
+
   it("rejeita peso num produto que não é vendido por quilo", async () => {
     const orderIdempotencyKey = `pdv-peso-invalido-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await expect(

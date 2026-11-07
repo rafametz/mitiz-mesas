@@ -1536,6 +1536,41 @@ consumo de uma mesa aberta como parte do recebimento.
       certo; rejeita peso em produto que não é "KG") + 1 de integração em
       `create-order.test.ts` (rejeita peso numa mesa). `tsc --noEmit`,
       lint e build limpos.
+  - ✅ **Passo 7.3 — preço promocional por kg no lançamento** (pedido do
+    usuário 2026-11-08: "às vezes tenho uma carne que é R$99,90 o quilo,
+    só que naquele dia tem uma promoção... queria aplicar esse desconto
+    no lançamento, sem calcular na mão"). Analisadas duas abordagens com
+    o usuário (desconto no lançamento vs. promoção programada por data no
+    produto) — escolhida a primeira, mais simples, como vem.
+    - `createOrderInTx` ganha `weightUnitPriceOverride` opcional por item
+      (só junto com `weightQuantity`), validado contra o preço de tabela
+      do produto (nunca pode ser maior — é ferramenta de desconto, não
+      editor de preço livre). `unitPrice`/`weightUnitPriceAtOrder` passam
+      a refletir o preço efetivamente cobrado (promocional, quando
+      informado); `recalculateSessionTotals` já soma a partir de
+      `OrderItem.unitPrice` direto do banco, então o subtotal da comanda
+      reflete o desconto sozinho, sem precisar de um `Discount` à parte.
+      Auditoria por item (`order_item.weight_price_override`, uma linha
+      por item que usou o override, nunca um resumo só).
+    - Permissão: mesma `DISCOUNTS_APPLY` do desconto da venda inteira,
+      checada em `actions.ts` (createOrderInTx não tem acesso a
+      permissão, só à regra de dado).
+    - PDV: ícone de "preço" na linha de peso do carrinho (cobre item
+      escaneado ou digitado na mão, um lugar só pra ajustar) abre
+      `WeightPriceOverrideDialog` — mesma máscara de dígito do campo de
+      dinheiro (`MaskedMoneyInput`). Preço de tabela riscado + novo preço
+      aparecem na linha quando aplicado.
+    - **Testes**: 3 de integração novos em `sell-pdv.test.ts` (aplica
+      preço promocional com auditoria; rejeita preço maior que o de
+      tabela; rejeita preço promocional em item sem peso) + 1 específico
+      de correlação (dois itens do mesmo produto com preços promocionais
+      diferentes no mesmo pedido — prova que o índice usado pra casar
+      `data.items` com `order.items` em `createOrderInTx` não embaralha
+      a auditoria entre eles). `tsc --noEmit`, lint, build e os 269 testes
+      unitários limpos; suíte de integração do PDV rodou devagar por
+      lentidão pontual do banco no momento (confirmada numa consulta
+      trivial separada), não por bug — passou 100% com um timeout maior,
+      sem alterar o timeout padrão.
 
 ## Ordem de execução recomendada
 

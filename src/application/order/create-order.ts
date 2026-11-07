@@ -3,6 +3,7 @@ import { z } from "zod";
 import { MeatPoint, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toDecimal } from "@/lib/money";
+import { writeAuditLog } from "@/application/audit/write-audit-log";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
 import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
@@ -27,6 +28,17 @@ const orderItemSchema = z.object({
     .positive("Peso deve ser maior que zero")
     .max(999.999)
     .optional(),
+  // Preço promocional por kg no momento do lançamento (pedido do usuário
+  // 2026-11-08: "às vezes tem uma carne que é R$99,90 o quilo, só que
+  // naquele dia tem uma promoção... eu gostaria de aplicar esse desconto
+  // no lançamento") — só junto com weightQuantity, nunca maior que o
+  // preço de tabela do produto (é uma ferramenta de desconto, não um
+  // editor de preço livre). Igual ao desconto da venda inteira
+  // (sell-pdv.ts), exige DISCOUNTS_APPLY (checado em actions.ts, não
+  // aqui — esta camada não tem o usuário/permissões, só a regra de dado)
+  // e motivo opcional.
+  weightUnitPriceOverride: z.coerce.number().positive().optional(),
+  weightUnitPriceOverrideReason: z.string().trim().max(300).optional(),
   guestId: z
     .string()
     .min(1)
@@ -135,6 +147,17 @@ export async function createOrderInTx(
         throw new CreateOrderError("Peso aceita no máximo 3 casas decimais.");
       }
     }
+
+    if (item.weightUnitPriceOverride !== undefined) {
+      if (item.weightQuantity === undefined) {
+        throw new CreateOrderError("Preço promocional só se aplica a item vendido por peso.");
+      }
+      if (toDecimal(item.weightUnitPriceOverride).greaterThan(product.price)) {
+        throw new CreateOrderError(
+          `O preço promocional de "${product.name}" não pode ser maior que o preço de tabela (R$ ${product.price.toFixed(2)}/kg).`,
+        );
+      }
+    }
   }
 
   const allModifierIds = [...new Set(data.items.flatMap((i) => i.modifierIds))];
@@ -213,14 +236,19 @@ export async function createOrderInTx(
           const product = productsById.get(item.productId)!;
           // Peso (PDV, produto `unit = "KG"`, validado acima): quantity
           // sempre 1, unitPrice vira o TOTAL congelado daquela pesagem
-          // (peso × preço/kg no momento do lançamento) — preserva o
-          // invariante unitPrice × quantity = total da linha em todo o
+          // (peso × preço/kg efetivo no momento do lançamento) — preserva
+          // o invariante unitPrice × quantity = total da linha em todo o
           // resto do sistema. weightUnitPriceAtOrder guarda o preço por
-          // kg só pra exibir no recibo/ticket.
+          // kg efetivamente cobrado (de tabela, ou o promocional quando
+          // informado) só pra exibir no recibo/ticket.
           const weightQuantity =
             item.weightQuantity !== undefined ? toDecimal(item.weightQuantity) : null;
+          const weightUnitPrice =
+            item.weightUnitPriceOverride !== undefined
+              ? toDecimal(item.weightUnitPriceOverride)
+              : product.price;
           const unitPrice = weightQuantity
-            ? product.price.times(weightQuantity).toDecimalPlaces(2)
+            ? weightUnitPrice.times(weightQuantity).toDecimalPlaces(2)
             : product.price;
           return {
             productId: item.productId,
@@ -230,7 +258,7 @@ export async function createOrderInTx(
             unitPrice,
             quantity: item.quantity,
             weightQuantity,
-            weightUnitPriceAtOrder: weightQuantity ? product.price : null,
+            weightUnitPriceAtOrder: weightQuantity ? weightUnitPrice : null,
             meatPoint: item.meatPoint,
             notes: item.notes,
             status: "SENT",
@@ -250,6 +278,36 @@ export async function createOrderInTx(
     },
     include: orderInclude,
   });
+
+  // Auditoria do preço promocional (regra 14 — desconto registra tipo,
+  // valor, motivo e usuário) — um registro por item que usou
+  // weightUnitPriceOverride, nunca um resumo só. order.items preserva a
+  // mesma ordem de data.items (nested create do Prisma cria e devolve na
+  // ordem do array), daí o índice casar os dois sem precisar comparar
+  // productId (que pode repetir se o mesmo produto foi pesado mais de
+  // uma vez no mesmo pedido).
+  for (const [index, item] of data.items.entries()) {
+    if (item.weightUnitPriceOverride === undefined) continue;
+    const product = productsById.get(item.productId)!;
+    const createdItem = order.items[index]!;
+    const reason = item.weightUnitPriceOverrideReason?.trim() || "Sem motivo informado";
+    await writeAuditLog(tx, {
+      restaurantId: session.restaurantId,
+      userId: data.waiterId,
+      tableId: null,
+      action: "order_item.weight_price_override",
+      entityType: "OrderItem",
+      entityId: createdItem.id,
+      metadata: {
+        productId: product.id,
+        productName: product.name,
+        weightQuantity: item.weightQuantity?.toString(),
+        catalogUnitPrice: product.price.toString(),
+        overrideUnitPrice: item.weightUnitPriceOverride.toString(),
+        reason,
+      },
+    });
+  }
 
   await recalculateSessionTotals(tx, data.serviceSessionId, session);
 

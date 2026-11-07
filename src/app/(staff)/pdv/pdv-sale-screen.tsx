@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingBag, ShoppingCart, Table2, Trash2, X } from "lucide-react";
+import { Plus, ShoppingBag, ShoppingCart, Table2, Tag, Trash2, X } from "lucide-react";
 import { SelectField, TextField } from "@/components/form/field";
 import { MaskedMoneyInput } from "@/components/form/masked-money-input";
 import { QuantityStepper } from "@/components/form/quantity-stepper";
@@ -26,6 +26,7 @@ import {
   type ConsumptionSelection,
 } from "./table-consumption-picker";
 import { WeightPromptDialog } from "./weight-prompt-dialog";
+import { WeightPriceOverrideDialog } from "./weight-price-override-dialog";
 
 type ProductOption = {
   id: string;
@@ -48,11 +49,20 @@ type CartLine = {
   // Preço por unidade (R$/un) OU por quilo (R$/kg) quando isWeight — nos
   // dois casos, unitPrice × quantity já é o total da linha, então todo o
   // resto do carrinho (soma, formatação) funciona sem precisar saber qual
-  // dos dois é.
+  // dos dois é. Pode ser menor que catalogUnitPrice quando a linha tem
+  // preço promocional aplicado (WeightPriceOverrideDialog, só pra peso).
   unitPrice: number;
+  // Preço de tabela no momento em que o item entrou no carrinho — nunca
+  // muda depois; é o teto do diálogo de preço promocional (nunca deixa
+  // aplicar um preço maior que o de tabela) e a referência pra saber se a
+  // linha está com desconto (unitPrice < catalogUnitPrice).
+  catalogUnitPrice: number;
   // Contagem de unidades OU peso em kg quando isWeight.
   quantity: number;
   isWeight: boolean;
+  // Motivo do preço promocional (opcional) — só preenchido quando
+  // unitPrice < catalogUnitPrice; vai pra auditoria no servidor.
+  weightPriceOverrideReason?: string;
 };
 
 function roundTo3(value: number): number {
@@ -172,6 +182,9 @@ export function PdvSaleScreen({
   // Produto "KG" tocado na grade, aguardando o peso ser digitado
   // (WeightPromptDialog) — null = nenhum diálogo de peso aberto.
   const [weightPromptProduct, setWeightPromptProduct] = useState<ProductOption | null>(null);
+  // Linha de peso com o diálogo de preço promocional aberto
+  // (WeightPriceOverrideDialog) — null = nenhum diálogo de preço aberto.
+  const [priceOverrideLineKey, setPriceOverrideLineKey] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -255,11 +268,25 @@ export function PdvSaleScreen({
           productId: product.id,
           productName: product.name,
           unitPrice: Number(product.price),
+          catalogUnitPrice: Number(product.price),
           quantity,
           isWeight,
         },
       ];
     });
+  }
+
+  // Preço promocional por kg (pedido do usuário, 2026-11-08) — aplica na
+  // linha já existente, sem recriar o item nem mexer no peso.
+  function applyWeightPriceOverride(key: string, priceCents: number, reason: string) {
+    setCart((prev) =>
+      prev.map((line) =>
+        line.key === key
+          ? { ...line, unitPrice: priceCents / 100, weightPriceOverrideReason: reason }
+          : line,
+      ),
+    );
+    setPriceOverrideLineKey(null);
   }
 
   // Só pra linha normal (contagem) — linha por peso não usa o
@@ -463,7 +490,21 @@ export function PdvSaleScreen({
     .filter((p) => p.amount > 0);
   const cartPayload = cart.map((line) =>
     line.isWeight
-      ? { productId: line.productId, quantity: 1, weightQuantity: line.quantity }
+      ? {
+          productId: line.productId,
+          quantity: 1,
+          weightQuantity: line.quantity,
+          // Preço promocional (pedido do usuário, 2026-11-08) — só manda
+          // quando a linha de fato está abaixo do preço de tabela
+          // (aplicou o diálogo); createOrderInTx revalida de novo que
+          // nunca passa do preço de tabela.
+          ...(line.unitPrice < line.catalogUnitPrice
+            ? {
+                weightUnitPriceOverride: line.unitPrice,
+                weightUnitPriceOverrideReason: line.weightPriceOverrideReason,
+              }
+            : {}),
+        }
       : { productId: line.productId, quantity: line.quantity },
   );
   const tableAllocationsPayload = consumptionSelection?.entries.map((entry) => entry.payload) ?? [];
@@ -611,6 +652,7 @@ export function PdvSaleScreen({
             itemCount={itemCount}
             onSetQuantity={setLineQuantity}
             onRemove={removeLine}
+            onEditWeightPrice={(key) => setPriceOverrideLineKey(key)}
             onCheckout={openCheckout}
             onAddTable={() => setTablePickerOpen(true)}
             onRemoveTable={() => setConsumptionSelection(null)}
@@ -671,6 +713,7 @@ export function PdvSaleScreen({
                 itemCount={itemCount}
                 onSetQuantity={setLineQuantity}
                 onRemove={removeLine}
+                onEditWeightPrice={(key) => setPriceOverrideLineKey(key)}
                 onCheckout={openCheckout}
                 onAddTable={() => setTablePickerOpen(true)}
                 onRemoveTable={() => setConsumptionSelection(null)}
@@ -701,6 +744,23 @@ export function PdvSaleScreen({
           onClose={() => setWeightPromptProduct(null)}
         />
       )}
+
+      {priceOverrideLineKey &&
+        (() => {
+          const line = cart.find((l) => l.key === priceOverrideLineKey);
+          if (!line) return null;
+          return (
+            <WeightPriceOverrideDialog
+              productName={line.productName}
+              catalogPriceCents={Math.round(line.catalogUnitPrice * 100)}
+              initialPriceCents={Math.round(line.unitPrice * 100)}
+              onConfirm={(priceCents, reason) =>
+                applyWeightPriceOverride(line.key, priceCents, reason)
+              }
+              onClose={() => setPriceOverrideLineKey(null)}
+            />
+          );
+        })()}
 
       <ConfirmDialog
         open={clearConfirmOpen}
@@ -957,6 +1017,7 @@ function CartPanel({
   itemCount,
   onSetQuantity,
   onRemove,
+  onEditWeightPrice,
   onCheckout,
   onAddTable,
   onRemoveTable,
@@ -969,6 +1030,7 @@ function CartPanel({
   itemCount: number;
   onSetQuantity: (key: string, quantityInput: string) => void;
   onRemove: (key: string) => void;
+  onEditWeightPrice: (key: string) => void;
   onCheckout: () => void;
   onAddTable: () => void;
   onRemoveTable: () => void;
@@ -1022,35 +1084,60 @@ function CartPanel({
               key={line.key}
               className="flex flex-col gap-2 rounded-card border border-line p-2.5"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-ink">{line.productName}</div>
-                  <div className="tabular text-xs text-muted">
-                    {formatBRLNumber(line.unitPrice)} {line.isWeight ? "/kg" : "cada"}
-                  </div>
-                </div>
-                <IconButton
-                  label={`Remover ${line.productName}`}
-                  icon={Trash2}
-                  onClick={() => onRemove(line.key)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                {line.isWeight ? (
-                  <span className="tabular rounded-control-sm bg-ink/5 px-3 py-2 text-sm font-medium text-ink">
-                    {formatWeightKg(line.quantity)}
-                  </span>
-                ) : (
-                  <QuantityStepper
-                    value={String(line.quantity)}
-                    onChange={(next) => onSetQuantity(line.key, next)}
-                    ariaLabel={`Quantidade de ${line.productName}`}
-                  />
-                )}
-                <span className="tabular text-sm font-semibold text-ink">
-                  {formatBRLNumber(line.unitPrice * line.quantity)}
-                </span>
-              </div>
+              {(() => {
+                // Preço promocional aplicado (pedido do usuário,
+                // 2026-11-08) — só possível em linha de peso.
+                const hasPriceOverride = line.isWeight && line.unitPrice < line.catalogUnitPrice;
+                return (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-ink">
+                          {line.productName}
+                        </div>
+                        <div className="tabular text-xs text-muted">
+                          {hasPriceOverride && (
+                            <span className="mr-1 line-through">
+                              {formatBRLNumber(line.catalogUnitPrice)}
+                            </span>
+                          )}
+                          {formatBRLNumber(line.unitPrice)} {line.isWeight ? "/kg" : "cada"}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {line.isWeight && (
+                          <IconButton
+                            label={`Alterar preço por quilo de ${line.productName}`}
+                            icon={Tag}
+                            onClick={() => onEditWeightPrice(line.key)}
+                          />
+                        )}
+                        <IconButton
+                          label={`Remover ${line.productName}`}
+                          icon={Trash2}
+                          onClick={() => onRemove(line.key)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      {line.isWeight ? (
+                        <span className="tabular rounded-control-sm bg-ink/5 px-3 py-2 text-sm font-medium text-ink">
+                          {formatWeightKg(line.quantity)}
+                        </span>
+                      ) : (
+                        <QuantityStepper
+                          value={String(line.quantity)}
+                          onChange={(next) => onSetQuantity(line.key, next)}
+                          ariaLabel={`Quantidade de ${line.productName}`}
+                        />
+                      )}
+                      <span className="tabular text-sm font-semibold text-ink">
+                        {formatBRLNumber(line.unitPrice * line.quantity)}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
             </li>
           ))}
         </ul>
