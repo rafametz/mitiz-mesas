@@ -30,7 +30,19 @@ export const metadata: Metadata = {
   description: "Gerenciamento de mesas, comandas e produção da MITIZ Boutique de Carnes.",
   // manifest.webmanifest é gerado sozinho a partir de src/app/manifest.ts
   // (convenção do App Router) — o Next já injeta o <link rel="manifest">.
+  //
+  // `icon` precisa estar explícito aqui (não basta o arquivo
+  // src/app/icon.svg existir) — definir `icons` manualmente, mesmo que só
+  // para `apple`, desativa a detecção automática do Next para os outros
+  // tamanhos; sem isto, nenhum <link rel="icon"> chegava a existir na
+  // página (relato do usuário, 2026-11-08: aba do navegador sem a marca
+  // MITIZ, caindo no ícone genérico). Reaproveita o mesmo PNG (dourado
+  // sobre fundo grafite) já usado como ícone do app instalável em
+  // manifest.ts, em vez do icon.svg cru (sem fundo/cor própria, pensado
+  // pra herdar cor via CSS onde é embutido como componente — ficaria
+  // quase invisível numa aba de navegador escura).
   icons: {
+    icon: "/icons/icon-192.png",
     apple: "/icons/apple-touch-icon.png",
   },
   // "Instalável como app" (pedido do usuário) — capable:true é o que faz
