@@ -309,6 +309,18 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     mesmo racional de `ROAST_RESERVATION`). Verificado: `tsc --noEmit`,
     lint, build, 242 testes unitários e 96 de integração (13 arquivos)
     limpos.
+17. ✅ Configuração da balança do PDV (PDV por quilo, Fase 2 do roadmap
+    MITIZ Gestão, 1ª etapa — pedido do usuário, 2026-11-07) —
+    `prisma/migrations/20261107120000_scale_barcode_config`: nova tabela
+    `scale_barcode_configs`, singleton por restaurante (`restaurantId`
+    único), com o layout de código de barras gerado por balança (padrão
+    "peso/valor embutido") que o usuário já usa em outro programa: dígito
+    de prefixo, tamanho total, faixa de dígitos do código do produto,
+    faixa de dígitos do peso ou valor, se o trecho é peso ou valor já
+    calculado, e quantas casas decimais. Tela em
+    `/admin/configuracoes`. Só a configuração nesta etapa — a leitura do
+    código em si no PDV fica para uma etapa seguinte. RLS habilitado já na
+    migration que cria a tabela.
 
 ## 7. Fluxo de migration usado na prática
 

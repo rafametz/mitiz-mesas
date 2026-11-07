@@ -244,6 +244,7 @@ model Restaurant {
 
   productImportBatches ProductImportBatch[]
   combinedCheckouts    CombinedCheckout[]
+  scaleBarcodeConfig   ScaleBarcodeConfig?
 
   @@map("restaurants")
 }
@@ -389,6 +390,62 @@ model Printer {
 
   @@unique([restaurantId, name])
   @@map("printers")
+}
+
+// ---------------------------------------------------------------------------
+// Configuração do PDV (balança, leitor de código de barras)
+// ---------------------------------------------------------------------------
+
+// Leitura de código de barras gerado por balança, formato "peso/valor
+// embutido" (tela /admin/configuracoes, pedido do usuário 2026-11-07:
+// "preciso ir lá no admin, uma tela de configuração do PDV... pode criar
+// exatamente conforme essa configuração... é o que eu uso hoje no outro
+// programa, e ele já funciona certinho"). Primeira etapa do PDV por quilo —
+// só a configuração aqui; a leitura/decodificação em si do código no PDV
+// vem numa etapa seguinte. Singleton por restaurante (MVP é single-tenant,
+// ver getCurrentRestaurant) — por isso restaurantId é @unique em vez de só
+// indexado.
+model ScaleBarcodeConfig {
+  id           String @id @default(cuid())
+  restaurantId String @unique
+
+  // Desligado, o PDV trata todo código lido como SKU/EAN comum
+  // (Product.barcode/sku), igual hoje — nada muda até o admin ligar aqui.
+  enabled Boolean @default(false)
+
+  // Dígito (0-9) que identifica que o código veio da balança — ex.: "2"
+  // marca todo código começando em 2 como peso/valor embutido, sempre na
+  // posição 1 do código. Tamanho total esperado do código (ex.: 13, padrão
+  // EAN-13 usado pelas balanças comuns).
+  prefixDigit Int
+  totalLength Int
+
+  // Faixa de dígitos (1-indexados, inclusive) onde mora o código do
+  // produto dentro do código de barras.
+  productCodeStart Int
+  productCodeEnd   Int
+
+  // Faixa de dígitos (1-indexados, inclusive) onde mora o peso ou o valor
+  // do produto, quantas casas decimais esse trecho representa (ex.:
+  // dígitos "00350" com 3 casas = 0,350 kg) e se o trecho é peso (PDV
+  // multiplica pelo preço/kg do produto) ou valor já calculado pela
+  // balança (PDV usa direto, sem multiplicar).
+  valueStart    Int
+  valueEnd      Int
+  valueType     ScaleBarcodeValueType @default(WEIGHT)
+  decimalPlaces Int                   @default(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("scale_barcode_configs")
+}
+
+enum ScaleBarcodeValueType {
+  WEIGHT
+  PRICE
 }
 
 // ---------------------------------------------------------------------------

@@ -1457,6 +1457,38 @@ consumo de uma mesa aberta como parte do recebimento.
   rodadas completas consecutivas.
 - 🔜 Passo 6 — validação com o usuário contra uma venda real de balcão e
   contra um Pagamento Combinado real.
+- Passo 7 — PDV por quilo (venda por peso, deixada de fora da v1 de
+  propósito — ver decisão do usuário 2026-10-15 no topo deste módulo).
+  Pedido do usuário 2026-11-07: "preciso ir lá no admin, uma tela de
+  configuração do PDV, que tenha esse menu com essas configurações, que é
+  a configuração do código de barra... tem o código do produto ali
+  embutido nele, e tem as casas que vai pegar o peso do produto". Primeira
+  etapa já implementada; a leitura do código em si no PDV fica para uma
+  etapa seguinte, não perder essa divisão.
+  - ✅ **Passo 7.1 — tela de configuração da balança**
+    (`/admin/configuracoes`, `prisma/migrations/20261107120000_scale_barcode_config`):
+    nova tabela `scale_barcode_configs`, singleton por restaurante, com o
+    layout de código de barras "peso/valor embutido" que o usuário já usa
+    em outro programa (dígito de prefixo, tamanho total, faixa de dígitos
+    do código do produto, faixa de dígitos do peso ou valor, se o trecho é
+    peso ou valor já calculado, casas decimais). Validação pura em
+    `src/domain/pdv/scale-barcode-config.ts` (testável sem banco); upsert
+    + auditoria (`scale_barcode_config.saved`) em
+    `src/application/pdv/scale-barcode-config.ts`. Item novo "Configurações"
+    na sidebar do admin (CLAUDE.md §10 já listava essa tela entre as
+    telas de Administração esperadas, ainda não existia). **Testes**: 9
+    unitários novos (`scale-barcode-config.test.ts`) + 2 de integração
+    (upsert/auditoria e rejeição de configuração inválida), rodados contra
+    o banco real após a migration aplicada. `tsc --noEmit`, lint e build
+    limpos; migration escrita manualmente seguindo o fluxo da seção 7 de
+    `docs/database/schema.md` (shadow DB do `prisma migrate dev` não
+    funciona contra o pooler do Supabase) e aplicada com `npx prisma
+    migrate deploy`.
+  - 🔜 Passo 7.2 — leitura/decodificação do código de barras no PDV
+    (aplicar `ScaleBarcodeConfig` de verdade: ler o código, extrair
+    código do produto e peso/valor, calcular o item do carrinho).
+  - 🔜 Passo 7.3 — cadastro do produto ganha preço por quilo (produto
+    vendido por peso, ligado ao `Product.unit = "KG"` já existente).
 
 ## Ordem de execução recomendada
 

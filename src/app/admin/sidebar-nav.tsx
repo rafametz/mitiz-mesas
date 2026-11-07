@@ -9,6 +9,7 @@ import {
   Drumstick,
   Plug,
   Printer,
+  Settings,
   ShoppingBag,
   Tags,
   Table2,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/admin/usuarios", label: "Usuários", icon: Users },
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/admin/integracoes/vhsys", label: "Integrações", icon: Plug },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 export function SidebarNav() {
