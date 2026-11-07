@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Search } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getCurrentRestaurant } from "@/application/restaurant/get-current-restaurant";
 import { Button } from "@/components/ui/button";
@@ -8,9 +7,9 @@ import { PageHeader } from "@/components/ui/card";
 import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Pagination } from "@/components/ui/pagination";
-import { inputBaseClass } from "@/components/ui/input";
 import { formatBRL } from "@/lib/money";
 import { toggleAvailability } from "./actions";
+import { ProductSearchField } from "./product-search-field";
 
 // Em branco quando não há valor opcional — distingue claramente de "0"
 // (um estoque de verdade zerado é um dado, "sem controle" é outro).
@@ -93,28 +92,7 @@ export default async function ProdutosPage({
         action={<Button href="/admin/produtos/novo">+ Novo produto</Button>}
       />
 
-      <form className="flex max-w-sm items-end gap-2">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="q" className="text-sm font-medium text-ink">
-            Buscar por nome, código ou código de barras
-          </label>
-          <input
-            id="q"
-            name="q"
-            type="search"
-            defaultValue={query ?? ""}
-            placeholder="Ex.: picanha, AEA0001, 7898..."
-            className={inputBaseClass}
-          />
-        </div>
-        <button
-          type="submit"
-          aria-label="Buscar"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-control-sm border border-line text-muted hover:bg-ink/5 hover:text-ink"
-        >
-          <Search className="h-4 w-4" />
-        </button>
-      </form>
+      <ProductSearchField initialQuery={query ?? ""} />
 
       <Table>
         <thead>

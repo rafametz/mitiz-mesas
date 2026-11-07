@@ -12,6 +12,7 @@ import { inputBaseClass } from "@/components/ui/input";
 // como teclado — digita rápido e manda Enter; quem usa este campo decide
 // o que fazer com esse Enter (ex.: casar código de barras exato).
 export function SearchField({
+  id,
   value,
   onChange,
   onKeyDown,
@@ -20,6 +21,11 @@ export function SearchField({
   autoFocus,
   className = "",
 }: {
+  // Opcional — só quando quem chama também renderiza um <label htmlFor>
+  // visível por fora (ex.: admin/produtos), associando os dois. Sem isto,
+  // `ariaLabel` sozinho já nomeia o campo pra leitor de tela (uso original,
+  // PDV).
+  id?: string;
   value: string;
   onChange: (next: string) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -35,6 +41,7 @@ export function SearchField({
         aria-hidden
       />
       <input
+        id={id}
         type="text"
         inputMode="search"
         autoComplete="off"
