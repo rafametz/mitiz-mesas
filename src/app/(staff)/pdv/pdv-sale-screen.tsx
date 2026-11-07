@@ -14,12 +14,18 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { useToast } from "@/components/ui/toast";
+import {
+  decodeScaleBarcode,
+  matchesEmbeddedProductCode,
+  type ScaleBarcodeLayout,
+} from "@/domain/pdv/scale-barcode-decode";
 import { registerCombinedCheckoutAction, sellPdvAction, type FormState } from "./actions";
 import {
   ConsumptionPicker,
   type ConsumptionOption,
   type ConsumptionSelection,
 } from "./table-consumption-picker";
+import { WeightPromptDialog } from "./weight-prompt-dialog";
 
 type ProductOption = {
   id: string;
@@ -27,6 +33,10 @@ type ProductOption = {
   price: string;
   sku: string | null;
   barcode: string | null;
+  // "UN" (padrão) ou "KG" — produto por quilo (pedido do usuário,
+  // 2026-11-07): price vira preço por kg, e só este tipo de produto aceita
+  // peso (leitura de balança ou digitado na mão via WeightPromptDialog).
+  unit: string;
   categoryId: string;
   categoryName: string;
 };
@@ -35,9 +45,23 @@ type CartLine = {
   key: string;
   productId: string;
   productName: string;
+  // Preço por unidade (R$/un) OU por quilo (R$/kg) quando isWeight — nos
+  // dois casos, unitPrice × quantity já é o total da linha, então todo o
+  // resto do carrinho (soma, formatação) funciona sem precisar saber qual
+  // dos dois é.
   unitPrice: number;
+  // Contagem de unidades OU peso em kg quando isWeight.
   quantity: number;
+  isWeight: boolean;
 };
+
+function roundTo3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function formatWeightKg(kg: number): string {
+  return `${kg.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
+}
 // Um único campo "Valor recebido" por forma de pagamento (pedido do
 // usuário, 2026-11-06 — antes eram dois campos, "Valor" e "Recebido em
 // dinheiro", mesmo em cartão/PIX onde o segundo nunca fazia sentido).
@@ -102,11 +126,16 @@ export function PdvSaleScreen({
   products,
   paymentMethods,
   consumptionOptions,
+  scaleBarcodeLayout,
 }: {
   restaurantId: string;
   products: ProductOption[];
   paymentMethods: PaymentMethodOption[];
   consumptionOptions: ConsumptionOption[];
+  // null = leitura de balança desligada em /admin/configuracoes (ou nunca
+  // configurada) — scan sempre cai no casamento comum por SKU/código de
+  // barras inteiro, igual antes desta etapa existir.
+  scaleBarcodeLayout: ScaleBarcodeLayout | null;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -140,6 +169,9 @@ export function PdvSaleScreen({
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  // Produto "KG" tocado na grade, aguardando o peso ser digitado
+  // (WeightPromptDialog) — null = nenhum diálogo de peso aberto.
+  const [weightPromptProduct, setWeightPromptProduct] = useState<ProductOption | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -197,12 +229,23 @@ export function PdvSaleScreen({
     });
   }, [products, categoryId, normalizedSearch, shouldShowProducts]);
 
-  function addToCart(product: ProductOption, quantity = 1) {
+  // `isWeight`: produto por quilo (WeightPromptDialog ou scan decodificado
+  // da balança) — `quantity` entra como peso em kg, não contagem.
+  // Reaproveita o mesmo produto já no carrinho somando o peso (duas
+  // pesagens da mesma picanha numa venda só viram uma linha de 0,770kg),
+  // igual ao que já acontecia somando contagem de produto normal.
+  function addToCart(product: ProductOption, quantity = 1, opts?: { isWeight?: boolean }) {
+    const isWeight = opts?.isWeight ?? false;
     setCart((prev) => {
       const existing = prev.find((line) => line.productId === product.id);
       if (existing) {
         return prev.map((line) =>
-          line.key === existing.key ? { ...line, quantity: line.quantity + quantity } : line,
+          line.key === existing.key
+            ? {
+                ...line,
+                quantity: isWeight ? roundTo3(line.quantity + quantity) : line.quantity + quantity,
+              }
+            : line,
         );
       }
       return [
@@ -213,11 +256,16 @@ export function PdvSaleScreen({
           productName: product.name,
           unitPrice: Number(product.price),
           quantity,
+          isWeight,
         },
       ];
     });
   }
 
+  // Só pra linha normal (contagem) — linha por peso não usa o
+  // QuantityStepper (ver CartPanel), corrigir o peso é remover e
+  // escanear/digitar de novo, mais confiável do que editar dígito a
+  // dígito num campo pensado pra contagem inteira.
   function setLineQuantity(key: string, quantityInput: string) {
     const quantity = Math.trunc(Number(quantityInput || 0));
     setCart((prev) =>
@@ -253,12 +301,58 @@ export function PdvSaleScreen({
   // rápido e manda Enter. Casamento exato em código de barras ou SKU
   // adiciona direto ao carrinho, sem precisar tocar no card (pedido
   // original: "busca por nome/código/código de barras").
+  //
+  // Leitura da balança (pedido do usuário, 2026-11-07): tentada primeiro,
+  // só quando a config está ligada (scaleBarcodeLayout não nulo) — o
+  // código embutido (trecho interno do código de barras inteiro) nunca
+  // bate por acaso com um SKU/código de barras comum, então decodificou
+  // com sucesso nunca cai no caminho de baixo, decodificou mas não achou
+  // o produto também não cai (evita somar "1 unidade" de um produto por
+  // quilo sem peso nenhum).
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
-    const query = search.trim().toLowerCase();
-    if (!query) return;
+    const raw = search.trim();
+    if (!raw) return;
+
+    if (scaleBarcodeLayout) {
+      const decoded = decodeScaleBarcode(raw, scaleBarcodeLayout);
+      if (decoded) {
+        event.preventDefault();
+        const product = products.find(
+          (p) => p.unit === "KG" && matchesEmbeddedProductCode(p.sku, decoded.productCode),
+        );
+        if (!product) {
+          showToast("Produto da balança não encontrado. Confira o SKU cadastrado.");
+          return;
+        }
+        const pricePerKg = Number(product.price);
+        const decodedValue = Number(decoded.value.toString());
+        const weightKg =
+          decoded.valueType === "WEIGHT"
+            ? decodedValue
+            : pricePerKg > 0
+              ? decodedValue / pricePerKg
+              : 0;
+        if (weightKg <= 0) {
+          showToast(`"${product.name}" não tem preço cadastrado para calcular o peso.`);
+          return;
+        }
+        addToCart(product, roundTo3(weightKg), { isWeight: true });
+        setSearch("");
+        showToast(`${product.name} adicionado (${formatWeightKg(roundTo3(weightKg))}).`);
+        return;
+      }
+    }
+
+    const query = raw.toLowerCase();
+    // Produto "KG" nunca entra pelo casamento exato comum — sem peso, uma
+    // unidade ao preço por quilo confundiria o valor da venda; produto por
+    // quilo só entra via leitura da balança (acima) ou pelo diálogo de
+    // peso manual (toque no card).
     const exact = products.find(
-      (product) => product.barcode?.toLowerCase() === query || product.sku?.toLowerCase() === query,
+      (product) =>
+        product.unit !== "KG" &&
+        (product.barcode?.toLowerCase() === query || product.sku?.toLowerCase() === query),
     );
     if (exact) {
       event.preventDefault();
@@ -367,7 +461,11 @@ export function PdvSaleScreen({
       };
     })
     .filter((p) => p.amount > 0);
-  const cartPayload = cart.map((line) => ({ productId: line.productId, quantity: line.quantity }));
+  const cartPayload = cart.map((line) =>
+    line.isWeight
+      ? { productId: line.productId, quantity: 1, weightQuantity: line.quantity }
+      : { productId: line.productId, quantity: line.quantity },
+  );
   const tableAllocationsPayload = consumptionSelection?.entries.map((entry) => entry.payload) ?? [];
 
   const lojaLegReady =
@@ -479,13 +577,16 @@ export function PdvSaleScreen({
               <button
                 key={product.id}
                 type="button"
-                onClick={() => addToCart(product)}
+                onClick={() =>
+                  product.unit === "KG" ? setWeightPromptProduct(product) : addToCart(product)
+                }
                 className="group flex min-h-[84px] flex-col items-start justify-between gap-1 rounded-card border border-line bg-surface p-3 text-left transition-colors hover:border-wine/40 active:bg-wine/5"
               >
                 <span className="line-clamp-2 text-sm font-medium text-ink">{product.name}</span>
                 <span className="flex w-full items-center justify-between">
                   <span className="tabular text-sm font-semibold text-gold-dark">
                     {formatBRLNumber(Number(product.price))}
+                    {product.unit === "KG" ? "/kg" : ""}
                   </span>
                   <Plus
                     className="h-4 w-4 text-muted transition-colors group-hover:text-wine"
@@ -587,6 +688,17 @@ export function PdvSaleScreen({
           initialSelection={consumptionSelection}
           onConfirm={handleConsumptionConfirm}
           onClose={() => setTablePickerOpen(false)}
+        />
+      )}
+
+      {weightPromptProduct && (
+        <WeightPromptDialog
+          productName={weightPromptProduct.name}
+          onConfirm={(weightKg) => {
+            addToCart(weightPromptProduct, weightKg, { isWeight: true });
+            setWeightPromptProduct(null);
+          }}
+          onClose={() => setWeightPromptProduct(null)}
         />
       )}
 
@@ -914,7 +1026,7 @@ function CartPanel({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-ink">{line.productName}</div>
                   <div className="tabular text-xs text-muted">
-                    {formatBRLNumber(line.unitPrice)} cada
+                    {formatBRLNumber(line.unitPrice)} {line.isWeight ? "/kg" : "cada"}
                   </div>
                 </div>
                 <IconButton
@@ -924,11 +1036,17 @@ function CartPanel({
                 />
               </div>
               <div className="flex items-center justify-between gap-2">
-                <QuantityStepper
-                  value={String(line.quantity)}
-                  onChange={(next) => onSetQuantity(line.key, next)}
-                  ariaLabel={`Quantidade de ${line.productName}`}
-                />
+                {line.isWeight ? (
+                  <span className="tabular rounded-control-sm bg-ink/5 px-3 py-2 text-sm font-medium text-ink">
+                    {formatWeightKg(line.quantity)}
+                  </span>
+                ) : (
+                  <QuantityStepper
+                    value={String(line.quantity)}
+                    onChange={(next) => onSetQuantity(line.key, next)}
+                    ariaLabel={`Quantidade de ${line.productName}`}
+                  />
+                )}
                 <span className="tabular text-sm font-semibold text-ink">
                   {formatBRLNumber(line.unitPrice * line.quantity)}
                 </span>

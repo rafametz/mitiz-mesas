@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { MeatPoint, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { toDecimal } from "@/lib/money";
 import { recalculateSessionTotals } from "@/application/service-session/recalculate-totals";
 import { sessionRealtimeChannels } from "@/application/service-session/session-realtime";
 import { createPrintJobsForOrder } from "@/application/printing/create-print-jobs";
@@ -15,6 +16,17 @@ export class CreateOrderError extends Error {}
 const orderItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.coerce.number().int().min(1, "Quantidade mínima é 1").max(50),
+  // Venda por peso no PDV (balança, pedido do usuário 2026-11-07) — kg,
+  // até 3 casas decimais. Ausente = item comum, comportamento de sempre.
+  // Validado de verdade (sessão PDV + produto `unit = "KG"` + quantity
+  // sempre 1 quando presente) dentro de createOrderInTx, nunca só aqui —
+  // mesa e retirada nunca enviam isto, continuam com quantidade inteira
+  // fixa (decisão explícita do usuário: peso é só no PDV).
+  weightQuantity: z.coerce
+    .number()
+    .positive("Peso deve ser maior que zero")
+    .max(999.999)
+    .optional(),
   guestId: z
     .string()
     .min(1)
@@ -108,6 +120,21 @@ export async function createOrderInTx(
     if (!product.active || !product.available) {
       throw new CreateOrderError(`"${product.name}" não está disponível no momento.`);
     }
+
+    if (item.weightQuantity !== undefined) {
+      if (session.type !== "PDV") {
+        throw new CreateOrderError("Venda por peso só é permitida no PDV.");
+      }
+      if (product.unit !== "KG") {
+        throw new CreateOrderError(`"${product.name}" não é vendido por peso.`);
+      }
+      if (item.quantity !== 1) {
+        throw new CreateOrderError("Item vendido por peso deve ter quantidade 1.");
+      }
+      if (toDecimal(item.weightQuantity).decimalPlaces() > 3) {
+        throw new CreateOrderError("Peso aceita no máximo 3 casas decimais.");
+      }
+    }
   }
 
   const allModifierIds = [...new Set(data.items.flatMap((i) => i.modifierIds))];
@@ -184,13 +211,26 @@ export async function createOrderInTx(
       items: {
         create: data.items.map((item) => {
           const product = productsById.get(item.productId)!;
+          // Peso (PDV, produto `unit = "KG"`, validado acima): quantity
+          // sempre 1, unitPrice vira o TOTAL congelado daquela pesagem
+          // (peso × preço/kg no momento do lançamento) — preserva o
+          // invariante unitPrice × quantity = total da linha em todo o
+          // resto do sistema. weightUnitPriceAtOrder guarda o preço por
+          // kg só pra exibir no recibo/ticket.
+          const weightQuantity =
+            item.weightQuantity !== undefined ? toDecimal(item.weightQuantity) : null;
+          const unitPrice = weightQuantity
+            ? product.price.times(weightQuantity).toDecimalPlaces(2)
+            : product.price;
           return {
             productId: item.productId,
             sectorId: product.defaultSectorId,
             guestId: item.guestId,
             productNameAtOrder: product.name,
-            unitPrice: product.price,
+            unitPrice,
             quantity: item.quantity,
+            weightQuantity,
+            weightUnitPriceAtOrder: weightQuantity ? product.price : null,
             meatPoint: item.meatPoint,
             notes: item.notes,
             status: "SENT",

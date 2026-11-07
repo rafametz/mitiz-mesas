@@ -855,6 +855,23 @@ model OrderItem {
   notes              String?
   status             OrderItemStatus @default(DRAFT)
 
+  // Venda por peso (balança do PDV, pedido do usuário 2026-11-07) — nulo
+  // para todo item comum (vendido por unidade); só PDV + produto
+  // `unit = "KG"` pode preenchê-los (validado em createOrderInTx, nunca só
+  // no cliente — regra 24). Mesa e retirada continuam sempre com
+  // `quantity` inteiro, decisão explícita do usuário — por isso o peso
+  // nunca entra em `quantity` em si: quando `weightQuantity` está
+  // preenchido, `quantity` é sempre 1 (uma pesagem = uma linha) e
+  // `unitPrice` já é o TOTAL congelado daquela pesagem (peso ×
+  // preço/kg do produto no momento do lançamento), preservando em TODO o
+  // sistema (fechamento, pagamento, divisão, relatório) o invariante
+  // `unitPrice × quantity = total da linha` sem exigir que cada um desses
+  // pontos entenda peso. `weightUnitPriceAtOrder` guarda o preço por kg
+  // congelado só para exibir no recibo/ticket ("0,350 kg x R$ 59,90/kg"),
+  // nunca usado em cálculo de saldo/total.
+  weightQuantity         Decimal? @db.Decimal(10, 3)
+  weightUnitPriceAtOrder Decimal? @db.Decimal(10, 2)
+
   // Pagamento por itens (2026-08-15, revisado 2026-08-18): "Dividir item" /
   // "Redistribuir" estampa os dois campos juntos, sempre na mesma ação —
   // openShareParts é em quantas partes, openShareBaseAmount é o valor TOTAL

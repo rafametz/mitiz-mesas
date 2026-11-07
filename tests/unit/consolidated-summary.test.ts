@@ -92,4 +92,33 @@ describe("buildConsolidatedSummary", () => {
     expect(summary.lines).toHaveLength(0);
     expect(summary.total.toString()).toBe("0");
   });
+
+  it("soma o peso de duas pesagens do mesmo produto por quilo (venda por peso, 2026-11-07)", () => {
+    const summary = buildConsolidatedSummary([
+      item({
+        productId: "prod-picanha-kg",
+        productNameAtOrder: "Picanha a quilo",
+        quantity: 1,
+        unitPrice: "20.97",
+        weightQuantity: "0.350",
+      }),
+      item({
+        productId: "prod-picanha-kg",
+        productNameAtOrder: "Picanha a quilo",
+        quantity: 1,
+        unitPrice: "25.16",
+        weightQuantity: "0.420",
+      }),
+    ]);
+
+    expect(summary.lines).toHaveLength(1);
+    expect(summary.lines[0]!.quantity).toBe(2);
+    expect(summary.lines[0]!.weightQuantity?.toString()).toBe("0.77");
+    expect(summary.lines[0]!.lineTotal.toString()).toBe("46.13");
+  });
+
+  it("item sem peso mantém weightQuantity nulo na linha", () => {
+    const summary = buildConsolidatedSummary([item()]);
+    expect(summary.lines[0]!.weightQuantity).toBeNull();
+  });
 });

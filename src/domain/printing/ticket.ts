@@ -12,6 +12,13 @@ import { z } from "zod";
 export const ticketItemSchema = z.object({
   productName: z.string(),
   quantity: z.number().int().positive(),
+  // Venda por peso no PDV (balança, 2026-11-07) — kg, já arredondado pra
+  // exibição; `.nullish()` (não `.nullable()`) porque todo ticket impresso
+  // antes deste campo existir não tem a chave no `contentSnapshot`, e
+  // reparsear um job antigo (reimpressão, fila pendente) não pode quebrar
+  // só por isso (mesmo racional de tableNumber/pickup abaixo). Presente
+  // só quando o item veio de uma pesagem — mesa e retirada nunca mandam.
+  weightQuantity: z.number().positive().nullish(),
   meatPointLabel: z.string().nullable(),
   modifiers: z.array(z.string()),
   notes: z.string().nullable(),

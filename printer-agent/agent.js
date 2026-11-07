@@ -67,6 +67,13 @@ function formatDateTimeBR(iso) {
   return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
 
+// Venda por peso no PDV (balança, 2026-11-07) — ticket de produção mostra
+// o peso lançado em vez da contagem ("1x"), que não diria nada útil pra
+// quem está cortando/pesando a carne.
+function formatWeightKg(kg) {
+  return `${kg.toFixed(3).replace(".", ",")} kg`;
+}
+
 // Módulo Retiradas (2026-08-14): "Mesa: X" vira "RETIRADA #N" + dados do
 // cliente quando o atendimento não tem mesa — usado tanto no ticket de
 // pedido quanto no resumo da comanda (mesmo formato de content.pickup nos
@@ -285,7 +292,11 @@ function renderTicket(content) {
 
   for (const item of content.items) {
     printer.bold(true);
-    printer.println(`${item.quantity}x ${item.productName}`);
+    printer.println(
+      item.weightQuantity
+        ? `${formatWeightKg(item.weightQuantity)} ${item.productName}`
+        : `${item.quantity}x ${item.productName}`,
+    );
     printer.bold(false);
     if (item.meatPointLabel) printer.println(`  Ponto: ${item.meatPointLabel}`);
     if (item.modifiers && item.modifiers.length > 0) {

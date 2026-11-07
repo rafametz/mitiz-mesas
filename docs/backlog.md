@@ -1484,11 +1484,58 @@ consumo de uma mesa aberta como parte do recebimento.
     `docs/database/schema.md` (shadow DB do `prisma migrate dev` não
     funciona contra o pooler do Supabase) e aplicada com `npx prisma
     migrate deploy`.
-  - 🔜 Passo 7.2 — leitura/decodificação do código de barras no PDV
-    (aplicar `ScaleBarcodeConfig` de verdade: ler o código, extrair
-    código do produto e peso/valor, calcular o item do carrinho).
-  - 🔜 Passo 7.3 — cadastro do produto ganha preço por quilo (produto
-    vendido por peso, ligado ao `Product.unit = "KG"` já existente).
+  - ✅ **Passo 7.2 — leitura da balança no PDV e venda por peso**
+    (pedido do usuário 2026-11-07: "a leitura no PDV, nesse código de
+    barra... produtos com pesos com 3 casas decimais... apenas na parte do
+    PDV; mesas e retirada continuam sendo fixo o valor inteiro").
+    `Product.unit = "KG"` já existia (ADR 0009) — este passo liga as
+    pontas: cadastro, configuração da balança (Passo 7.1) e o carrinho do
+    PDV.
+    - Schema aditivo (`prisma/migrations/20261107140000_order_item_weight`):
+      `OrderItem.weightQuantity` (`Decimal(10,3)`, kg) e
+      `weightUnitPriceAtOrder` (`Decimal(10,2)`, preço/kg congelado só pra
+      exibição) — os dois nulos pra todo item comum. Quando preenchidos,
+      `quantity` continua sempre 1 (uma pesagem = uma linha) e `unitPrice`
+      vira o TOTAL congelado daquela pesagem (peso × preço/kg no momento
+      do lançamento) — preserva em TODO o sistema (fechamento, pagamento,
+      divisão, relatório, cancelamento) o invariante `unitPrice ×
+      quantity = total da linha` sem exigir que nenhum desses pontos
+      entenda peso. Decisão central que manteve o raio de impacto baixo:
+      nenhum desses módulos precisou mudar.
+    - `src/domain/pdv/scale-barcode-decode.ts` (puro, sem I/O):
+      `decodeScaleBarcode` extrai código do produto e peso/valor do código
+      de barras lido conforme o `ScaleBarcodeConfig`; `matchesEmbeddedProductCode`
+      casa esse código com `Product.sku` (igualdade exata, com
+      fallback numérico ignorando zero à esquerda — decisão do usuário:
+      reaproveitar o SKU já cadastrado, sem campo novo).
+    - `createOrderInTx` (`src/application/order/create-order.ts`) ganhou
+      `weightQuantity` opcional por item, validado de verdade (nunca só
+      no cliente — regra 24): só aceito quando `session.type === "PDV"`
+      e `product.unit === "KG"`, sempre com `quantity === 1`, até 3 casas
+      decimais. Mesa e retirada continuam exatamente como antes —
+      `weightQuantity` nunca presente nesses fluxos, nenhuma linha de
+      código deles mudou.
+    - PDV (`pdv-sale-screen.tsx`): leitor de código de barras tenta
+      decodificar como balança primeiro (só quando a configuração está
+      ligada); decodificou e achou o produto → soma peso direto ao
+      carrinho (duas pesagens do mesmo produto somam, igual já acontecia
+      com contagem). Produto "KG" tocado na grade sem leitura disponível
+      abre `WeightPromptDialog` (peso digitado na mão, decisão do usuário:
+      fallback sempre disponível, não só por leitor). Carrinho mostra peso
+      em vez do stepper de quantidade pra essas linhas (editar = remover e
+      pesar de novo).
+    - Impressão: ticket de produção mostra peso em vez de "1x" quando a
+      linha veio de uma pesagem (`ticket.ts`, `create-print-jobs.ts`,
+      `printer-agent/agent.js`); recibo de venda do PDV idem
+      (`consolidated-summary.ts` ganhou `weightQuantity` opcional,
+      somado por grupo — mesa/retirada/conferência da mesa nunca passam
+      essa chave, comportamento deles inalterado).
+    - **Testes**: 10 unitários novos (`scale-barcode-decode.test.ts`) + 2
+      novos em `consolidated-summary.test.ts` (soma de peso, linha sem
+      peso) + 2 de integração em `sell-pdv.test.ts` (venda por peso calcula
+      certo; rejeita peso em produto que não é "KG") + 1 de integração em
+      `create-order.test.ts` (rejeita peso numa mesa). `tsc --noEmit`,
+      lint e build limpos.
 
 ## Ordem de execução recomendada
 

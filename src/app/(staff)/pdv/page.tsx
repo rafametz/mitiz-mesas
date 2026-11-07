@@ -5,6 +5,7 @@ import { PERMISSIONS } from "@/domain/auth/permissions";
 import { PageHeader } from "@/components/ui/card";
 import { buildPayableLines } from "@/domain/payment/item-allocation";
 import { formatSessionLabel } from "@/domain/service-session/labels";
+import { getScaleBarcodeConfig } from "@/application/pdv/scale-barcode-config";
 import { ZERO } from "@/lib/money";
 import { AtendimentoTabs } from "../atendimento-tabs";
 import { toClientPayableLines } from "../mesas/[id]/pagamentos/payment-selection-lines";
@@ -19,7 +20,7 @@ export default async function PdvPage() {
   await requirePermission(PERMISSIONS.PDV_SELL);
   const restaurant = await getCurrentRestaurant();
 
-  const [products, paymentMethods, consumptionSessions] = await Promise.all([
+  const [products, paymentMethods, consumptionSessions, scaleBarcodeConfig] = await Promise.all([
     prisma.product.findMany({
       where: { restaurantId: restaurant.id, active: true, available: true },
       include: { category: true },
@@ -63,6 +64,7 @@ export default async function PdvPage() {
       },
       orderBy: [{ table: { number: "asc" } }, { pickupNumber: "asc" }],
     }),
+    getScaleBarcodeConfig(restaurant.id),
   ]);
 
   return (
@@ -83,10 +85,29 @@ export default async function PdvPage() {
             price: product.price.toString(),
             sku: product.sku,
             barcode: product.barcode,
+            unit: product.unit,
             categoryId: product.categoryId,
             categoryName: product.category.name,
           }))}
           paymentMethods={paymentMethods.map((method) => ({ id: method.id, name: method.name }))}
+          // null quando nunca configurado ou desligado (checkbox "Ler
+          // código de barras gerado por balança" em /admin/configuracoes)
+          // — nesse caso o PDV cai sempre no casamento comum por
+          // SKU/código de barras inteiro, igual antes desta etapa existir.
+          scaleBarcodeLayout={
+            scaleBarcodeConfig?.enabled
+              ? {
+                  prefixDigit: scaleBarcodeConfig.prefixDigit,
+                  totalLength: scaleBarcodeConfig.totalLength,
+                  productCodeStart: scaleBarcodeConfig.productCodeStart,
+                  productCodeEnd: scaleBarcodeConfig.productCodeEnd,
+                  valueStart: scaleBarcodeConfig.valueStart,
+                  valueEnd: scaleBarcodeConfig.valueEnd,
+                  valueType: scaleBarcodeConfig.valueType,
+                  decimalPlaces: scaleBarcodeConfig.decimalPlaces,
+                }
+              : null
+          }
           consumptionOptions={consumptionSessions
             .map((session) => {
               const items = session.orders.flatMap((order) => order.items);

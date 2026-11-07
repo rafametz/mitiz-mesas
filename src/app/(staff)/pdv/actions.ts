@@ -18,7 +18,14 @@ import { runAfterResponse } from "@/lib/run-after-response";
 export type FormState = { error: string | null; success?: boolean };
 
 const cartSchema = z.array(
-  z.object({ productId: z.string().min(1), quantity: z.number().int().min(1) }),
+  z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().min(1),
+    // Venda por peso (balança do PDV, 2026-11-07) — kg, repassado direto
+    // pra sellPdv/registerCombinedCheckout, que revalidam de verdade
+    // (sessão PDV + produto `unit = "KG"`) dentro de createOrderInTx.
+    weightQuantity: z.number().positive().max(999.999).optional(),
+  }),
 );
 const paymentsSchema = z.array(
   z.object({

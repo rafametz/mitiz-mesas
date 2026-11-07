@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { sellPdv, SellPdvError } from "@/application/service-session/sell-pdv";
+import { CreateOrderError } from "@/application/order/create-order";
 
 // Teste de integração — venda de balcão pura do PDV (Módulo 17, Passo 3 do
 // backlog): sem consumo de mesa envolvido (ver register-combined-checkout
@@ -10,6 +11,7 @@ describe("sellPdv", () => {
   let restaurantId: string;
   let userId: string;
   let picanhaId: string;
+  let picanhaKgId: string;
   let pixMethodId: string;
   let dinheiroMethodId: string;
   const createdSessionIds: string[] = [];
@@ -43,6 +45,21 @@ describe("sellPdv", () => {
       })
     ).id;
 
+    // Produto por quilo (pedido do usuário, 2026-11-07) — price é preço
+    // por kg; unit "KG" é o que libera weightQuantity em createOrderInTx.
+    picanhaKgId = (
+      await prisma.product.create({
+        data: {
+          restaurantId,
+          categoryId,
+          defaultSectorId: sectorId,
+          name: `Picanha a quilo pdv ${suffix}`,
+          price: "59.90",
+          unit: "KG",
+        },
+      })
+    ).id;
+
     pixMethodId = (
       await prisma.paymentMethod.findFirstOrThrow({ where: { restaurantId, name: "PIX" } })
     ).id;
@@ -60,10 +77,10 @@ describe("sellPdv", () => {
     await prisma.printJob.deleteMany({
       where: { order: { serviceSessionId: { in: createdSessionIds } } },
     });
-    await prisma.orderItem.deleteMany({ where: { productId: picanhaId } });
+    await prisma.orderItem.deleteMany({ where: { productId: { in: [picanhaId, picanhaKgId] } } });
     await prisma.order.deleteMany({ where: { serviceSessionId: { in: createdSessionIds } } });
     await prisma.serviceSession.deleteMany({ where: { id: { in: createdSessionIds } } });
-    await prisma.product.deleteMany({ where: { id: picanhaId } });
+    await prisma.product.deleteMany({ where: { id: { in: [picanhaId, picanhaKgId] } } });
     await prisma.category.deleteMany({ where: { id: categoryId } });
     await prisma.productionSector.deleteMany({ where: { id: sectorId } });
     await prisma.$disconnect();
@@ -201,6 +218,52 @@ describe("sellPdv", () => {
     expect(session.discountAmount.toString()).toBe("109.5");
     expect(session.totalAmount.toString()).toBe("0.5");
     expect(session.balanceAmount.toString()).toBe("0");
+  });
+
+  it("vende por peso (produto KG) — unitPrice vira o total da pesagem, weightQuantity grava o peso (pedido do usuário, 2026-11-07)", async () => {
+    const orderIdempotencyKey = `pdv-peso-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const order = await sellPdv(userId, {
+      restaurantId,
+      waiterId: userId,
+      orderIdempotencyKey,
+      items: [{ productId: picanhaKgId, quantity: 1, weightQuantity: 0.35 }], // 59,90/kg × 0,350kg = 20,965 → 20,97 (arredonda)
+      payments: [
+        { paymentMethodId: pixMethodId, amount: 20.97, idempotencyKey: `${orderIdempotencyKey}-pix` },
+      ],
+    });
+    createdSessionIds.push(order.serviceSessionId);
+
+    const item = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(item.quantity).toBe(1);
+    expect(item.weightQuantity?.toString()).toBe("0.35");
+    expect(item.weightUnitPriceAtOrder?.toString()).toBe("59.9");
+    expect(item.unitPrice.toString()).toBe("20.97");
+
+    const session = await prisma.serviceSession.findUniqueOrThrow({
+      where: { id: order.serviceSessionId },
+    });
+    expect(session.totalAmount.toString()).toBe("20.97");
+    expect(session.status).toBe("CLOSED");
+  });
+
+  it("rejeita peso num produto que não é vendido por quilo", async () => {
+    const orderIdempotencyKey = `pdv-peso-invalido-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await expect(
+      sellPdv(userId, {
+        restaurantId,
+        waiterId: userId,
+        orderIdempotencyKey,
+        items: [{ productId: picanhaId, quantity: 1, weightQuantity: 0.35 }], // picanhaId é "UN"
+        payments: [
+          { paymentMethodId: pixMethodId, amount: 38.5, idempotencyKey: `${orderIdempotencyKey}-pix` },
+        ],
+      }),
+    ).rejects.toThrow(CreateOrderError);
+
+    const session = await prisma.serviceSession.findFirst({
+      where: { orders: { some: { idempotencyKey: orderIdempotencyKey } } },
+    });
+    if (session) createdSessionIds.push(session.id);
   });
 
   it("rejeita quando o pagamento não cobre o valor total da venda", async () => {

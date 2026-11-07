@@ -157,6 +157,31 @@ describe("createOrder", () => {
     await prisma.product.delete({ where: { id: unavailable.id } });
   });
 
+  it("rejeita peso numa mesa (venda por peso só é permitida no PDV, pedido do usuário 2026-11-07)", async () => {
+    const session = await openFreshTable();
+    const kgProduct = await prisma.product.create({
+      data: {
+        restaurantId,
+        categoryId,
+        defaultSectorId: sectorId,
+        name: `Produto por quilo ${Date.now()}`,
+        price: "50.00",
+        unit: "KG",
+      },
+    });
+
+    await expect(
+      createOrder({
+        serviceSessionId: session.id,
+        waiterId,
+        idempotencyKey: `key-${Date.now()}-${Math.random()}`,
+        items: [{ productId: kgProduct.id, quantity: 1, weightQuantity: 0.5 }],
+      }),
+    ).rejects.toThrow(CreateOrderError);
+
+    await prisma.product.delete({ where: { id: kgProduct.id } });
+  });
+
   it("alterar o preço do produto não muda o pedido já lançado (regra 9/10)", async () => {
     const session = await openFreshTable();
     const order = await createOrder({

@@ -321,6 +321,24 @@ predicado `table_id IS NOT NULL` exclui essas linhas do índice de propósito
     `/admin/configuracoes`. Só a configuração nesta etapa — a leitura do
     código em si no PDV fica para uma etapa seguinte. RLS habilitado já na
     migration que cria a tabela.
+18. ✅ Venda por peso no PDV (PDV por quilo, Fase 2 do roadmap MITIZ
+    Gestão, 2ª etapa — pedido do usuário, 2026-11-07: "a leitura no PDV,
+    nesse código de barra... produtos com pesos com 3 casas decimais...
+    apenas na parte do PDV; mesas e retirada continuam sendo fixo o valor
+    inteiro") — `prisma/migrations/20261107140000_order_item_weight`:
+    duas colunas aditivas em `order_items`, `weightQuantity`
+    (`Decimal(10,3)`, kg) e `weightUnitPriceAtOrder` (`Decimal(10,2)`,
+    preço/kg congelado só pra exibição), nulas em todo item comum. Quando
+    preenchidas (só PDV + `Product.unit = "KG"`, validado em
+    `createOrderInTx`), `quantity` continua sempre 1 e `unitPrice` vira o
+    total já calculado da pesagem — preserva `unitPrice × quantity =
+    total da linha` em todo o sistema sem exigir que fechamento,
+    pagamento, divisão ou relatório entendam peso. Mesa e retirada nunca
+    preenchem essas colunas, nenhuma linha de código desses fluxos mudou.
+    Verificado: `tsc --noEmit`, lint, build, 10 testes unitários novos de
+    decodificação de código de barras + 2 de agregação de peso no resumo
+    consolidado + 3 de integração (venda por peso, rejeição em produto
+    sem `unit = "KG"`, rejeição numa mesa) todos passando.
 
 ## 7. Fluxo de migration usado na prática
 

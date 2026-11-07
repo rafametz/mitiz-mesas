@@ -68,6 +68,7 @@ export async function createPdvSaleReceiptPrintJob(
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         status: item.status,
+        weightQuantity: item.weightQuantity,
         modifiers: item.modifiers.map((m) => ({
           modifierNameAtOrder: m.modifierNameAtOrder,
           priceDeltaAtOrder: m.priceDeltaAtOrder,
@@ -80,7 +81,11 @@ export async function createPdvSaleReceiptPrintJob(
   const lojaOrigin: PdvSaleReceiptOrigin = {
     label: "Loja",
     items: consolidated.lines.map((line) => ({
-      label: `${line.quantity}x ${line.label}`,
+      // Venda por peso (balança, 2026-11-07): mostra o peso lançado em vez
+      // da contagem ("1x"), que não diria nada sobre o que foi vendido.
+      label: line.weightQuantity
+        ? `${line.weightQuantity.toFixed(3).replace(".", ",")} kg ${line.label}`
+        : `${line.quantity}x ${line.label}`,
       amount: formatBRL(line.lineTotal),
     })),
     subtotal: formatBRL(pdvSession.totalAmount),

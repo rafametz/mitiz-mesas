@@ -67,6 +67,7 @@ export async function createPrintJobsForOrder(
       const ticketItems: TicketItem[] = sectorItems.map((item) => ({
         productName: item.productNameAtOrder,
         quantity: item.quantity,
+        weightQuantity: item.weightQuantity ? Number(item.weightQuantity) : null,
         meatPointLabel:
           item.meatPoint && item.meatPoint !== "NAO_SE_APLICA"
             ? MEAT_POINT_LABELS[item.meatPoint]
