@@ -68,7 +68,7 @@ export default async function PdvPage() {
   ]);
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-4 p-4 pt-6 lg:gap-5">
+    <main className="mx-auto flex max-w-7xl flex-col gap-4 p-4 pt-6 lg:gap-5">
       <AtendimentoTabs active="pdv" canSellPdv />
       <PageHeader title="PDV" subtitle="Venda de balcão" />
 

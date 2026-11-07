@@ -643,7 +643,7 @@ export function PdvSaleScreen({
       {/* Carrinho — painel fixo à direita no desktop, barra flutuante +
           folha deslizante no celular (CLAUDE.md seção 11: evitar modal
           longo, manter total sempre visível). */}
-      <div className="hidden lg:block lg:w-[420px] lg:shrink-0">
+      <div className="hidden lg:block lg:w-[480px] lg:shrink-0">
         <div className="lg:sticky lg:top-4 lg:flex lg:max-h-[calc(100vh-2rem)] lg:flex-col">
           <CartPanel
             cart={cart}
@@ -1078,11 +1078,11 @@ function CartPanel({
       {isEmpty ? (
         <EmptyState icon={ShoppingCart} title="Toque num produto para adicionar à venda." />
       ) : (
-        <ul className="flex min-h-0 flex-col gap-2 overflow-y-auto lg:flex-1">
+        <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto lg:flex-1">
           {cart.map((line) => (
             <li
               key={line.key}
-              className="flex flex-col gap-2 rounded-card border border-line p-2.5"
+              className="flex flex-col gap-1.5 rounded-card border border-line p-2"
             >
               {(() => {
                 // Preço promocional aplicado (pedido do usuário,
