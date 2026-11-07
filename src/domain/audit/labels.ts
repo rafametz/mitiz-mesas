@@ -8,6 +8,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "discount.applied": "Desconto aplicado",
   "discount.voided": "Desconto anulado",
   "order_item.weight_price_override": "Preço por quilo alterado no lançamento",
+  "pdv_sale.reversed": "Venda do PDV estornada",
   "service_charge.applied": "Taxa de serviço aplicada",
   "service_charge.waived": "Taxa de serviço retirada",
   "service_session.closing_requested": "Fechamento solicitado",

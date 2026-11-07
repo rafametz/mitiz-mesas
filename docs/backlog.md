@@ -1571,6 +1571,55 @@ consumo de uma mesa aberta como parte do recebimento.
       lentidão pontual do banco no momento (confirmada numa consulta
       trivial separada), não por bug — passou 100% com um timeout maior,
       sem alterar o timeout padrão.
+  - ✅ **Passo 7.4 — gestão de vendas do PDV e estorno** (pedido do usuário
+    2026-11-08: "uma tela de meio que gestão das vendas feitas em PDV, que
+    liste todas as vendas, tenha filtro de data... um resumo da venda...
+    entrar e ver os valores... e que tem uma possibilidade também de
+    estornar"). Duas decisões confirmadas com o usuário antes de
+    implementar: (1) estornar cancela os itens E estorna o(s) pagamento(s)
+    — fica tudo zerado, nada apagado; (2) sem mexer em estoque por ora
+    (nenhuma venda hoje desconta estoque automaticamente, fora do MVP —
+    CLAUDE.md seção 4; fica pra uma frente separada se vier a ser
+    necessário).
+    - Nova aba "Vendas PDV" em `/historico` (mesma permissão de
+      Histórico/Auditoria, `AUDIT_VIEW` — Admin e Caixa; fora de `/admin`
+      pelo mesmo motivo de `historico/page.tsx`, Garçom/Produção não têm
+      essa permissão). Listagem com atalhos de período (semana atual, mês
+      atual, mês anterior — `src/domain/pdv/sales-date-presets.ts`, puro)
+      + período personalizado, resumo (total vendido, quantidade,
+      estornadas, ticket médio) e paginação (reaproveita `Pagination`,
+      Fase de paginação de produtos). `totalAmount` zerado é o sinal de
+      venda estornada — nenhuma venda legítima fecha em R$0,00 (sell-pdv
+      sempre exige pagamento positivo), então não precisa de coluna
+      própria.
+    - `reversePdvSale` (`src/application/pdv/reverse-sale.ts`): cancela
+      todos os itens ativos + estorna todos os pagamentos ativos numa
+      transação só, recalcula tudo zerado (subtotal/desconto/taxa/total/
+      pago/saldo = 0), audita por item/pagamento + um log de resumo da
+      venda. Deliberadamente não reaproveita `cancelOrderItem`
+      (bloqueia item já "Entregue", regra que faz sentido pra mesa mas
+      não pra balcão já fechado) nem `voidPayment` (abre a própria
+      transação, incompatível com fazer as duas coisas atomicamente).
+      Permissão `PAYMENTS_REGISTER` (mesma do estorno de pagamento de
+      mesa, decisão do usuário).
+    - Tela de detalhe (`/historico/vendas-pdv/[sessionId]`): itens
+      (peso/quantidade, cancelados ficam riscados), pagamentos (estornados
+      mostram motivo/quem/quando), "Total original" somado de TODOS os
+      itens independente de status (item cancelado nunca é apagado, regra
+      7) e botão "Estornar venda" (`ReasonConfirmForm`, componente já
+      existente reaproveitado sem alteração).
+    - **Bug encontrado e corrigido durante os testes**: `reversePdvSale`
+      devolvia o objeto de sessão carregado no INÍCIO da transação, antes
+      do recálculo — quem chamasse a função recebia de volta os valores
+      antigos (ex.: subtotal pré-estorno) mesmo com o banco já
+      corretamente zerado. Corrigido relendo a sessão depois de
+      `recalculateSessionTotals`, dentro da mesma transação.
+    - **Testes**: 7 unitários novos (`sales-date-presets.test.ts`,
+      inclusive virada de ano e ano bissexto) + 4 de integração novos
+      (`reverse-pdv-sale.test.ts`: zera a venda com auditoria; rejeita
+      estornar duas vezes; rejeita atendimento que não é do PDV; rejeita
+      motivo vazio/curto). `tsc --noEmit`, lint, build e os 276 testes
+      unitários limpos.
 
 ## Ordem de execução recomendada
 

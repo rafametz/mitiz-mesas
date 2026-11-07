@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const TABS = [
   { key: "atendimentos", href: "/historico", label: "Atendimentos" },
+  { key: "vendas-pdv", href: "/historico/vendas-pdv", label: "Vendas PDV" },
   { key: "auditoria", href: "/historico/auditoria", label: "Auditoria" },
 ] as const;
 
