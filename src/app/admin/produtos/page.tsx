@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/card";
 import { CardList, CardListField, CardListRow, Table, Td, Th, Tr } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Pagination } from "@/components/ui/pagination";
 import { inputBaseClass } from "@/components/ui/input";
 import { formatBRL } from "@/lib/money";
 import { toggleAvailability } from "./actions";
@@ -14,6 +15,10 @@ import { toggleAvailability } from "./actions";
 // Em branco quando não há valor opcional — distingue claramente de "0"
 // (um estoque de verdade zerado é um dado, "sem controle" é outro).
 const EMPTY = "—";
+
+// Relato do usuário 2026-11-07: tela lenta pra carregar, sem paginação
+// trazia o catálogo inteiro de uma vez só. 50 por página, pedido explícito.
+const PAGE_SIZE = 50;
 
 // Estoque negativo é sinal de inconsistência (venda sem baixa correta,
 // contagem desatualizada) — precisa chamar atenção, não aparecer igual a
@@ -33,11 +38,13 @@ function StockQuantity({ quantity, unit }: { quantity: Prisma.Decimal; unit: str
 export default async function ProdutosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   const restaurant = await getCurrentRestaurant();
-  const { q } = await searchParams;
+  const { q, page: pageParam } = await searchParams;
   const query = q?.trim();
+  const requestedPage = Number(pageParam);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
   // Busca por nome, código interno ou código de barras (ADR 0009, seção 5 —
   // preparação para o futuro PDV com leitor de código de barras, sem
@@ -56,11 +63,27 @@ export default async function ProdutosPage({
       : {}),
   };
 
+  const totalProducts = await prisma.product.count({ where });
+  const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
+  // Página pedida além do fim (ex.: busca que encolheu a lista) volta pra
+  // última página válida em vez de mostrar uma tela vazia sem explicação.
+  const safePage = Math.min(page, totalPages);
+
   const products = await prisma.product.findMany({
     where,
     include: { category: true, defaultSector: true },
     orderBy: { name: "asc" },
+    skip: (safePage - 1) * PAGE_SIZE,
+    take: PAGE_SIZE,
   });
+
+  function buildPageHref(targetPage: number) {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    if (targetPage > 1) params.set("page", String(targetPage));
+    const qs = params.toString();
+    return qs ? `/admin/produtos?${qs}` : "/admin/produtos";
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -212,6 +235,16 @@ export default async function ProdutosPage({
           </p>
         )}
       </CardList>
+
+      {totalProducts > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted">
+            Mostrando {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, totalProducts)}{" "}
+            de {totalProducts} produto{totalProducts === 1 ? "" : "s"}
+          </p>
+          <Pagination page={safePage} totalPages={totalPages} buildHref={buildPageHref} />
+        </div>
+      )}
     </div>
   );
 }
