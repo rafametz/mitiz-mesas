@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { centsToDigits, digitsToCents, formatDigits } from "@/lib/money-mask";
+import { digitsToUnits, formatDigits, unitsToDigits } from "@/lib/money-mask";
 import { inputBaseClass } from "@/components/ui/input";
 
 // Decimal(10,2) no banco — mesmo teto de MoneyField (money-field.tsx).
@@ -31,14 +31,14 @@ export function MaskedMoneyInput({
   autoFocus?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [digits, setDigits] = useState(() => centsToDigits(valueCents));
+  const [digits, setDigits] = useState(() => unitsToDigits(valueCents));
 
   // Sincroniza quando o valor muda por fora (ex.: prefill automático ao
   // trocar forma de pagamento, ou limpar ao cancelar a venda) — só
   // quando realmente diverge, pra não brigar com o que a pessoa está
   // digitando no meio do caminho.
   useEffect(() => {
-    if (digitsToCents(digits) !== valueCents) setDigits(centsToDigits(valueCents));
+    if (digitsToUnits(digits) !== valueCents) setDigits(unitsToDigits(valueCents));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueCents]);
 
@@ -83,7 +83,7 @@ export function MaskedMoneyInput({
         onChange={(event) => {
           const onlyDigits = event.target.value.replace(/\D/g, "").slice(0, MAX_DIGITS);
           setDigits(onlyDigits);
-          onChangeCents(digitsToCents(onlyDigits));
+          onChangeCents(digitsToUnits(onlyDigits));
         }}
         onFocus={moveCaretToEnd}
         onMouseUp={moveCaretToEnd}
